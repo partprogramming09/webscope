@@ -1,0 +1,67 @@
+package main
+
+import (
+	"context"
+	"errors"
+	"strings"
+	"testing"
+
+	"github.com/modelcontextprotocol/go-sdk/mcp"
+)
+
+func connect(t *testing.T, s *source) *mcp.ClientSession {
+	t.Helper()
+	st, ct := mcp.NewInMemoryTransports()
+	if _, err := newServer(s).Connect(context.Background(), st, nil); err != nil {
+		t.Fatal(err)
+	}
+	cs, err := mcp.NewClient(&mcp.Implementation{Name: "test", Version: "1"}, nil).Connect(context.Background(), ct, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { cs.Close() })
+	return cs
+}
+
+func TestOnlyTheQueryToolIsOffered(t *testing.T) {
+	res, err := connect(t, &source{}).ListTools(context.Background(), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(res.Tools) != 1 || res.Tools[0].Name != "query" {
+		t.Fatalf("tools = %v", res.Tools)
+	}
+	if res.Tools[0].Annotations == nil || !res.Tools[0].Annotations.ReadOnlyHint {
+		t.Error("the tool is not marked read-only")
+	}
+}
+
+func call(t *testing.T, cs *mcp.ClientSession, sqlText string) (string, bool) {
+	t.Helper()
+	res, err := cs.CallTool(context.Background(), &mcp.CallToolParams{Name: "query", Arguments: map[string]any{"sql": sqlText}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return res.Content[0].(*mcp.TextContent).Text, res.IsError
+}
+
+func TestAnAnswerIsPlainTextAndAFailureIsMarkedAndNamesTheNextStep(t *testing.T) {
+	cs := connect(t, fixture(t))
+	if text, isErr := call(t, cs, "SELECT id FROM items WHERE id = 1"); isErr || text != "id\n1\n(1 rows)" {
+		t.Errorf("answer = %q, isError = %v", text, isErr)
+	}
+	text, isErr := call(t, cs, "DELETE FROM items")
+	if !isErr || !strings.HasPrefix(text, "Failed: ") || !strings.Contains(text, "Next: ") {
+		t.Errorf("failure = %q, isError = %v", text, isErr)
+	}
+}
+
+func TestFailureTextHasNoDoubledPeriodWhenTheErrorEndsInOne(t *testing.T) {
+	got := failure(errors.New("Error 1792 (25006): Cannot execute statement in a READ ONLY transaction."))
+	if strings.Contains(got, "..") {
+		t.Fatalf("doubled period in %q", got)
+	}
+	if !strings.HasPrefix(got, "Failed: Error 1792") || !strings.Contains(got, "transaction. Next: ") {
+		t.Fatalf("unexpected text %q", got)
+	}
+}
