@@ -13,7 +13,7 @@ import (
 )
 
 const (
-	version      = "0.1.0"
+	version      = "0.2.0"
 	instructions = `query(sql): one read-only statement (SELECT, SHOW, DESCRIBE, EXPLAIN, WITH). The answer is TSV with a header; \N is NULL; rows and cells are capped, so refine with WHERE or fewer columns. If a tool fails, report it as is.`
 )
 
@@ -41,11 +41,19 @@ func newServer(s *source) *mcp.Server {
 	return srv
 }
 
+// tenantLookup is the query that finds a tenant's database: WEBSCOPE_TENANT_QUERY or Hyn Tenancy's.
+func tenantLookup() string {
+	if q := os.Getenv("WEBSCOPE_TENANT_QUERY"); q != "" {
+		return q
+	}
+	return hynTenantQuery
+}
+
 func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer stop()
 	fmt.Fprintf(os.Stderr, "webscope %s\n", version)
-	if err := newServer(&source{url: os.Getenv("WEBSCOPE_DB_URL")}).Run(ctx, &mcp.StdioTransport{}); err != nil && ctx.Err() == nil {
+	if err := newServer(&source{url: os.Getenv("WEBSCOPE_DB_URL"), tenantQuery: tenantLookup()}).Run(ctx, &mcp.StdioTransport{}); err != nil && ctx.Err() == nil {
 		fmt.Fprintln(os.Stderr, "webscope:", err)
 		os.Exit(1)
 	}

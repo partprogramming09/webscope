@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"net/url"
+	"path/filepath"
 	"strings"
 	"sync"
 	"time"
@@ -25,28 +26,38 @@ const (
 
 // source is the database named by WEBSCOPE_DB_URL, opened the first time a query needs it.
 type source struct {
-	url    string
-	mu     sync.Mutex
-	db     *sql.DB
-	driver string
+	url         string
+	tenantQuery string
+	mu          sync.Mutex
+	dbs         map[string]*sql.DB // by database name; "" is the one in the URL
+	driver      string
 }
 
 type queryArgs struct {
-	SQL   string `json:"sql" jsonschema:"one read-only statement: SELECT, SHOW, DESCRIBE, EXPLAIN or WITH"`
-	Limit int    `json:"limit,omitempty" jsonschema:"rows to show, default 50, at most 500"`
+	SQL    string `json:"sql" jsonschema:"one read-only statement"`
+	Tenant string `json:"tenant,omitempty" jsonschema:"tenant fqdn; omit for the URL's database"`
+	Limit  int    `json:"limit,omitempty" jsonschema:"rows, default 50, max 500"`
 }
 
-func (s *source) conn() (*sql.DB, string, error) {
+// hynTenantQuery is the default way to find a tenant's database: Hyn Tenancy keeps it in websites.uuid. WEBSCOPE_TENANT_QUERY replaces it.
+const hynTenantQuery = `SELECT w.uuid, w.managed_by_database_connection FROM hostnames h JOIN websites w ON w.id = h.website_id WHERE h.fqdn = ? AND h.deleted_at IS NULL AND w.deleted_at IS NULL`
+
+// conn returns the connection to database, opened the first time; "" is the database in the URL.
+func (s *source) conn(database string) (*sql.DB, string, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if s.db == nil {
-		db, driver, err := openDB(s.url)
-		if err != nil {
-			return nil, "", err
-		}
-		s.db, s.driver = db, driver
+	if db, ok := s.dbs[database]; ok {
+		return db, s.driver, nil
 	}
-	return s.db, s.driver, nil
+	db, driver, err := openDB(s.url, database)
+	if err != nil {
+		return nil, "", err
+	}
+	if s.dbs == nil {
+		s.dbs = map[string]*sql.DB{}
+	}
+	s.dbs[database], s.driver = db, driver
+	return db, driver, nil
 }
 
 // answer checks the statement, runs it and returns the text for the agent; no error text carries the password of the URL.
@@ -57,9 +68,18 @@ func (s *source) answer(ctx context.Context, in queryArgs) (string, error) {
 	if err != nil {
 		return fail(err)
 	}
-	db, driver, err := s.conn()
+	db, driver, err := s.conn("")
 	if err != nil {
 		return fail(err)
+	}
+	if in.Tenant != "" {
+		name, err := tenantDatabase(ctx, db, driver, s.tenantQuery, in.Tenant)
+		if err != nil {
+			return fail(err)
+		}
+		if db, driver, err = s.conn(name); err != nil {
+			return fail(err)
+		}
 	}
 	out, err := runQuery(ctx, db, driver, stmt, rowLimit(in.Limit))
 	if err != nil {
@@ -68,8 +88,9 @@ func (s *source) answer(ctx context.Context, in queryArgs) (string, error) {
 	return out, nil
 }
 
-// openDB opens mysql://user:password@host:port/db or sqlite:///path/to/file.db. The SQLite file is opened with query_only on.
-func openDB(raw string) (*sql.DB, string, error) {
+// openDB opens mysql://user:password@host:port/db or sqlite:///path/to/file.db. The SQLite file is opened with query_only on. A non-empty
+// database replaces the one in the URL: the MySQL database name, or the SQLite file <database>.db in the same folder.
+func openDB(raw, database string) (*sql.DB, string, error) {
 	if raw == "" {
 		return nil, "", errors.New("WEBSCOPE_DB_URL is not set")
 	}
@@ -83,6 +104,9 @@ func openDB(raw string) (*sql.DB, string, error) {
 		cfg.User = u.User.Username()
 		cfg.Passwd, _ = u.User.Password()
 		cfg.Net, cfg.Addr, cfg.DBName = "tcp", u.Host, strings.TrimPrefix(u.Path, "/")
+		if database != "" {
+			cfg.DBName = database
+		}
 		cfg.Timeout, cfg.ReadTimeout = 5*time.Second, queryTimeout
 		c, err := mysql.NewConnector(cfg)
 		if err != nil {
@@ -90,7 +114,11 @@ func openDB(raw string) (*sql.DB, string, error) {
 		}
 		return sql.OpenDB(c), "mysql", nil
 	case "sqlite":
-		db, err := sql.Open("sqlite", "file:"+u.Host+u.Path+"?_pragma=query_only(1)")
+		path := u.Host + u.Path
+		if database != "" {
+			path = filepath.Join(filepath.Dir(path), database+".db")
+		}
+		db, err := sql.Open("sqlite", "file:"+path+"?_pragma=query_only(1)")
 		return db, "sqlite", err
 	}
 	return nil, "", fmt.Errorf("unsupported database URL scheme %q: use mysql or sqlite", u.Scheme)
