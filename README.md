@@ -4,14 +4,14 @@ Four MCP tools for AI agents that spend few tokens. `query`: read-only SQL, answ
 
 ## Build and register (Claude Code)
 
-    go build -o webscope .        # Go 1.27 or newer
+    go build -o webscope .        # Go 1.27.3 or newer (go.mod)
     claude mcp add webscope -e WEBSCOPE_DB_URL='mysql://user:pass@127.0.0.1:3306/dbname' -- /absolute/path/to/webscope
 
 `WEBSCOPE_DB_URL` is `mysql://user:password@host:port/db` or `sqlite:///path/file.db`. Percent-encode special characters in the password. `WEBSCOPE_BACKEND` is the folder with the project's PHP (the `code` tool needs it; `WEBSCOPE_FRONT` is the folder of the Vue front, used by `map` and `map_back`: its `src/modules` is read if it exists).
 
 ## The tool
 
-`query(sql, limit?)`: one statement that starts with SELECT, SHOW, DESCRIBE, EXPLAIN or WITH. Two layers keep it read-only: a statement check (one statement, no `INTO`, no `/*! */` comments) and a read-only session (MySQL `READ ONLY` transaction, SQLite `query_only`). Answers stop at 50 rows (at most 500), 200 characters per cell and 8000 bytes, and say when something was left out.
+`query(sql, limit?)`: one statement that starts with SELECT, SHOW, DESCRIBE, EXPLAIN or WITH. Two layers keep it read-only: a statement check (one statement, no `INTO`, no `/*! */` comments) and a read-only session (MySQL `READ ONLY` transaction, SQLite `query_only`). Answers stop at 50 rows (at most 500), 200 characters per cell and 8000 bytes, and say when something was left out. The statement is read under the rules of MySQL and of SQLite at once and must be one safe read under both, so a quote escaped with a backslash (`'it\'s'`) is refused: double it (`'it''s'`). `LOAD_FILE` and `GET_LOCK` are refused too. A SQLite file is opened read-only (`mode=ro`): a path that does not exist is an error and is not created.
 
 With `tenant` (an fqdn) the query runs in that tenant's database, found in the central database of `WEBSCOPE_DB_URL` with Hyn Tenancy's `hostnames` and `websites` tables. `WEBSCOPE_TENANT_QUERY` replaces that lookup: one `?`, the database name in the first column.
 
@@ -46,6 +46,10 @@ In Acme (development), `fields app_cotizaciones` gives the 42 columns of the tab
 In Acme (development), `map crm/quotes` gives 2 routes and 53 calls, the same as a `grep` of the module (53 lines with a call), including the calls whose URL is on the next line. `map_back crm/quotes` finds 47 endpoints and their controllers with the line of each method.
 
 `snap {name, sql, key?, tenant?}` keeps in memory the result of a read-only query, by a key column (the first by default; up to 2000 rows and 20 snapshots), and `snap_diff {name}` repeats the query and shows only what changed: `new KEY: col=value`, `deleted KEY` and, for a changed row, each column as `before → after` (NULL is `\N`, an empty text `''`, a value is cut at 40 characters). It answers "what did this action really write", for example the child rows that saving a quote leaves. The snapshots are lost when the server restarts, and a text value that is exactly `\N` reads as NULL. Against Acme (development), a snapshot of the 54 quotes followed by a diff with nothing done says `54 rows before, 54 now: no changes`.
+
+## Known limits
+
+`consumers`, `fields` and `map_back` read at most 20000 `.php` files of 2 MB each, and they stop there without saying so. `map` reads a generic up to its first `>`, so a type with `=>` inside is not recognized. `fields` counts the values of every column with one scan of the table: fine for the tables of an application, slow on a table of millions of rows. `snap` keeps a value of up to 4096 bytes whole and a longer one cut plus its hash, so a change anywhere in it still shows. `check` shows a text that differs only in spaces as `space~`, not as equal. A tool that fails with a bug answers `Failed: internal error` and the server keeps running. The code is searched by text, not parsed: every answer of `code` is an estimate.
 
 ## Not in this version
 

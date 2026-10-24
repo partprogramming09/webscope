@@ -63,3 +63,31 @@ func TestCheckSQLReturnsTheStatementWithoutTrailingSemicolons(t *testing.T) {
 		t.Fatalf("got %q, %v; want %q", got, err, "SELECT 1")
 	}
 }
+
+func TestTheGuardReadsAStatementUnderTheRulesOfBothEngines(t *testing.T) {
+	for _, q := range []string{
+		"SELECT 1 AS [a']; COMMIT; PRAGMA query_only=0; DELETE FROM t; SELECT 1 AS [b']", // SQLite: a quote inside [identifier]
+		"SELECT 'a\\'; DELETE FROM t; SELECT 'b\\'",                                      // SQLite: no backslash escape, so these are three statements
+		"SELECT [unterminated",
+	} {
+		if out, err := checkSQL(q); err == nil {
+			t.Errorf("%q was let through as %q", q, out)
+		}
+	}
+	for _, q := range []string{"SELECT '[x]' AS a, \"[y]\" AS b", "SELECT 'it''s' ; ", "SELECT json_extract(j, '$[0]') FROM t"} {
+		if _, err := checkSQL(q); err != nil {
+			t.Errorf("%q is one read and was refused: %v", q, err)
+		}
+	}
+}
+
+func TestIntoStuckToAnAtSignIsStillInto(t *testing.T) {
+	for _, q := range []string{"SELECT 1 INTO@x", "select 1 into@@session.x", "SELECT 1 FROM t INTO OUTFILE'/tmp/x'", "SELECT 1 INTO/**/DUMPFILE'/tmp/x'"} {
+		if out, err := checkSQL(q); err == nil {
+			t.Errorf("%q was let through as %q", q, out)
+		}
+	}
+	if _, err := checkSQL("SELECT @a, @@version, 'INTO' AS w"); err != nil {
+		t.Errorf("variables and the word in a string are reads: %v", err)
+	}
+}

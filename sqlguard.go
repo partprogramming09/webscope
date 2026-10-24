@@ -14,7 +14,20 @@ var allowed = map[string]bool{"SELECT": true, "SHOW": true, "DESCRIBE": true, "D
 // outside quotes and comments. It is the first of two layers: the database session is read-only as well (see runQuery), which also stops a
 // write that starts with WITH, since this check cannot tell it apart from a read.
 func checkSQL(stmt string) (string, error) {
-	code, err := mask(stmt)
+	// The text is read under the rules of both engines (MySQL escapes with a backslash, SQLite has [bracket] identifiers and no backslash escape):
+	// it must be one safe read under each, because the guard does not know which engine will run it.
+	out, err := checkDialect(stmt, false)
+	if err != nil {
+		return "", err
+	}
+	if _, err := checkDialect(stmt, true); err != nil {
+		return "", err
+	}
+	return out, nil
+}
+
+func checkDialect(stmt string, sqlite bool) (string, error) {
+	code, err := mask(stmt, sqlite)
 	if err != nil {
 		return "", err
 	}
@@ -33,10 +46,13 @@ func checkSQL(stmt string) (string, error) {
 		return "", fmt.Errorf("the statement must start with SELECT, SHOW, DESCRIBE, DESC, EXPLAIN or WITH, not %q", first)
 	}
 	for _, w := range strings.FieldsFunc(code, func(r rune) bool {
-		return !unicode.IsLetter(r) && !unicode.IsDigit(r) && r != '_' && r != '$' && r != '@'
+		return !unicode.IsLetter(r) && !unicode.IsDigit(r) && r != '_' && r != '$' // '@' separates: INTO@x is INTO followed by a variable
 	}) {
 		if strings.EqualFold(w, "INTO") {
 			return "", errors.New("INTO writes files or variables")
+		}
+		if strings.EqualFold(w, "LOAD_FILE") || strings.EqualFold(w, "GET_LOCK") {
+			return "", fmt.Errorf("%s reads a file of the server or takes a lock that others wait for", strings.ToUpper(w))
 		}
 	}
 	return strings.TrimSpace(stmt), nil
@@ -57,8 +73,8 @@ func firstWord(code string) string {
 
 // mask returns s with the inside of quoted text and the comments replaced by spaces, byte for byte, so a ';' or a verb in a string or comment
 // is not read as code. It refuses an unterminated quote or comment, and the executable comments /*! ... */ that MySQL runs as code.
-// shortcut: backslash escapes follow MySQL's default mode; where a server treats them otherwise a statement is refused, not let through.
-func mask(s string) (string, error) {
+// With sqlite the rules are SQLite's: [bracket] identifiers, and no backslash escapes. checkSQL reads a statement under both.
+func mask(s string, sqlite bool) (string, error) {
 	b := []byte(s)
 	blank := func(from, to int) {
 		for k := from; k < to; k++ {
@@ -71,7 +87,7 @@ func mask(s string) (string, error) {
 		case c == '\'' || c == '"' || c == '`':
 			j := i + 1
 			for ; j < len(b); j++ {
-				if b[j] == '\\' && c != '`' {
+				if b[j] == '\\' && c != '`' && !sqlite {
 					j++
 					continue
 				}
@@ -85,6 +101,16 @@ func mask(s string) (string, error) {
 			}
 			if j >= len(b) {
 				return "", errors.New("unterminated quote")
+			}
+			blank(i+1, j)
+			i = j + 1
+		case c == '[' && sqlite: // a SQLite identifier: nothing inside it is code
+			j := i + 1
+			for j < len(b) && b[j] != ']' {
+				j++
+			}
+			if j >= len(b) {
+				return "", errors.New("unterminated [identifier]")
 			}
 			blank(i+1, j)
 			i = j + 1

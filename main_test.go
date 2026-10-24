@@ -79,3 +79,15 @@ func TestFailureTextHasNoDoubledPeriodWhenTheErrorEndsInOne(t *testing.T) {
 		t.Fatalf("unexpected text %q", got)
 	}
 }
+
+func TestAToolThatPanicsAnswersAnErrorInsteadOfTakingTheServerDown(t *testing.T) {
+	h := guarded(func(context.Context, *mcp.CallToolRequest, struct{}) (*mcp.CallToolResult, any, error) {
+		var s []int
+		_ = s[len(s)-1]
+		return nil, nil, nil
+	})
+	res, _, err := h(context.Background(), nil, struct{}{})
+	if err != nil || res == nil || !res.IsError || !strings.Contains(res.Content[0].(*mcp.TextContent).Text, "Failed") {
+		t.Errorf("%+v, %v", res, err)
+	}
+}

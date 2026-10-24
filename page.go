@@ -85,7 +85,15 @@ func (p *pageTool) origin() string {
 	if err != nil || u.Host == "" {
 		return ""
 	}
-	return u.Scheme + "://" + u.Host
+	// As the browser writes the Origin header: lowercase, and without the port that is the default of the scheme.
+	scheme, host, port := strings.ToLower(u.Scheme), strings.ToLower(u.Hostname()), u.Port()
+	if strings.Contains(host, ":") {
+		host = "[" + host + "]"
+	}
+	if port == "" || (scheme == "http" && port == "80") || (scheme == "https" && port == "443") {
+		return scheme + "://" + host
+	}
+	return scheme + "://" + host + ":" + port
 }
 
 // snippet is the JavaScript for action. The arguments enter as JSON (json.Marshal escapes <, > and line separators), never as text.
@@ -142,7 +150,7 @@ func (p *pageTool) start() (string, error) {
 	if err != nil {
 		return "", err
 	}
-	srv := &http.Server{Handler: p.handler(), ReadHeaderTimeout: 5 * time.Second}
+	srv := &http.Server{Handler: p.handler(), ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 15 * time.Second}
 	go srv.Serve(ln)
 	go func() { <-p.life.Done(); srv.Close() }()
 	p.base = "http://" + ln.Addr().String()
@@ -232,14 +240,20 @@ func (p *pageTool) payloads(args map[string]any) string {
 	list := p.caps[max(0, len(p.caps)-n):]
 	var b strings.Builder
 	fmt.Fprintf(&b, "%d requests captured (showing last %d)\n", len(p.caps), len(list))
-	for _, c := range list {
-		fmt.Fprintf(&b, "%s %s %d\n", c.M, c.U, c.S)
+	for i, c := range list {
+		// The method and the URL come from the page under test: one line each, and short.
+		e := fmt.Sprintf("%s %s %d\n", clip(oneLine(c.M), 10), clip(oneLine(c.U), 300), c.S)
 		if c.Req != "" {
-			fmt.Fprintf(&b, "  sent: %s\n", oneLine(clip(c.Req, showClip)))
+			e += fmt.Sprintf("  sent: %s\n", oneLine(clip(c.Req, showClip)))
 		}
 		if c.Res != "" {
-			fmt.Fprintf(&b, "  got: %s\n", oneLine(clip(c.Res, showClip)))
+			e += fmt.Sprintf("  got: %s\n", oneLine(clip(c.Res, showClip)))
 		}
+		if b.Len()+len(e) > maxBytes {
+			fmt.Fprintf(&b, "(… %d more requests not shown: ask for fewer with limit)", len(list)-i)
+			return b.String()
+		}
+		b.WriteString(e)
 	}
 	return strings.TrimRight(b.String(), "\n")
 }

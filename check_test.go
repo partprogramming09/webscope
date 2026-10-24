@@ -199,3 +199,37 @@ func TestCheckAnswerFitsTheBudgetEvenWhenEverythingDiffers(t *testing.T) {
 		t.Errorf("a value must be cut at 40 characters: %q", out)
 	}
 }
+
+func TestCheckSaysWhenOnlyTheSpacesDiffer(t *testing.T) {
+	c, p := checkSetup(t)
+	sent(p, "POST", "/api/quotes", `{"notes":"  a  \t  b "}`, "")
+	db := writeDBFor(t, c)
+	if _, err := db.Exec("UPDATE quotes SET notes = 'a b' WHERE id = '059'"); err != nil {
+		t.Fatal(err)
+	}
+	out, err := run(t, c, args("059", map[string]string{"notes": "notes"}))
+	if err != nil || strings.Contains(out, "1 equal") || !strings.Contains(out, "1 space~") {
+		t.Errorf("a text that the app trimmed or collapsed is not equal: %q, %v", out, err)
+	}
+}
+
+func TestCheckComparesOnlyASaveThatSucceededAndAReadThatCameAfterIt(t *testing.T) {
+	c, p := checkSetup(t)
+	p.caps = append(p.caps, capture{M: "POST", U: "http://demo.localhost:8001/api/quotes", S: 422, Req: `{"notes":"x"}`})
+	if _, err := run(t, c, args("059", map[string]string{"notes": "notes"})); err == nil || !strings.Contains(err.Error(), "422") {
+		t.Errorf("a save that answered 422 saved nothing: %v", err)
+	}
+	p.caps = nil
+	sent(p, "GET", "/api/quotes/059", "", `{"quote":{"notes":"old"}}`) // a read from BEFORE the save
+	sent(p, "POST", "/api/quotes", `{"notes":"x"}`, "")
+	a := args("059", map[string]string{"notes": "notes"})
+	a.After, a.At = "GET /api/quotes/059", "quote"
+	if _, err := run(t, c, a); err == nil || !strings.Contains(err.Error(), "after") {
+		t.Errorf("a read that came before the save must not be used as what the screen read after it: %v", err)
+	}
+	p.caps = nil
+	sent(p, "POST", "/api/quotes-extra", `{"notes":"x"}`, "")
+	if _, err := run(t, c, args("059", map[string]string{"notes": "notes"})); err == nil {
+		t.Error("POST /api/quotes must not match /api/quotes-extra")
+	}
+}

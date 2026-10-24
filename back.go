@@ -155,13 +155,23 @@ func fileRoutes(files []string, all lines) []backRoute {
 	return routes
 }
 
-// fileOf is the PHP file of the class `App\…\Name`, or "" if it does not exist or is not a plain file.
+// fileOf is the PHP file of the class `App\…\Name`, or "" if it does not exist, is not a plain file, is too big, is a .env, is under a folder
+// the walk skips, or once its symbolic links are resolved is not under root (root is already the real path of the backend).
 func fileOf(root, cls string) string {
-	p := filepath.Join(root, strings.ReplaceAll(strings.Replace(cls, `App\`, "app/", 1), `\`, "/")+".php")
-	if fi, err := os.Lstat(p); err != nil || !fi.Mode().IsRegular() {
+	rel := strings.ReplaceAll(strings.Replace(cls, `App\`, "app/", 1), `\`, "/") + ".php"
+	for _, part := range strings.Split(rel, "/") {
+		if part == "" || part == ".." || skipDirs[part] {
+			return ""
+		}
+	}
+	real, err := filepath.EvalSymlinks(filepath.Join(root, rel))
+	if err != nil || !strings.HasPrefix(real, root+string(filepath.Separator)) || strings.HasPrefix(filepath.Base(real), ".env") {
 		return ""
 	}
-	return p
+	if fi, err := os.Stat(real); err != nil || !fi.Mode().IsRegular() || fi.Size() > maxPHPBytes {
+		return ""
+	}
+	return real
 }
 
 func importsOf(file, folder string) []string {
@@ -208,7 +218,7 @@ func (c *coder) mapBack(args map[string]any) (string, error) {
 			calls[k] = append(calls[k], filepath.ToSlash(filepath.Join(frontRel, where)))
 		}
 	}
-	out := []string{fmt.Sprintf("Backend of «%s»: from the frontend route to the endpoint (API address), controller, service and table. Next: read(controller, method).", query),
+	out := []string{fmt.Sprintf("Backend of «%s»: from the frontend route to the endpoint (API address), controller, service and table. Next: read(controller, method).", echo(query)),
 		"routes read from: files Routes/*.php (artisan is not run)"}
 	var chosen []backRoute
 	in := func(r backRoute) bool {
@@ -321,7 +331,7 @@ func (c *coder) mapBack(args map[string]any) (string, error) {
 		out = append(out, fmt.Sprintf("model %s -> table %s", relOf(f), t))
 	}
 	if len(chosen) == 0 && len(found) == 0 {
-		return fmt.Sprintf("no module or route contains «%s»", query), nil
+		return fmt.Sprintf("no module or route contains «%s»", echo(query)), nil
 	}
 	// The endpoints are the long part: when they do not fit, the last ones go and the services and tables stay.
 	room := maxBytes - len(strings.Join(head, "\n")) - len(strings.Join(out, "\n")) - 120

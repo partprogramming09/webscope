@@ -134,11 +134,16 @@ func classify(ls []string, n int) string {
 // tableFiles are the PHP files that name the table or the model that declares it ($table = 'name'), and the models.
 func tableFiles(table string, files []string, all lines) ([]string, []string) {
 	var models []string
-	for _, h := range grep(regexp.MustCompile(`\$table\s*=\s*'`+regexp.QuoteMeta(table)+`'`), files, all) {
-		models = append(models, strings.TrimSuffix(filepath.Base(h.file), ".php"))
+	for _, h := range grep(regexp.MustCompile(`\$table\s*=\s*['"]`+regexp.QuoteMeta(table)+`['"]`), files, all) {
+		if name := strings.TrimSuffix(filepath.Base(h.file), ".php"); name != "" {
+			models = append(models, name)
+		}
 	}
 	sort.Strings(models)
-	names := append([]string{regexp.QuoteMeta(table)}, models...)
+	names := []string{regexp.QuoteMeta(table)}
+	for _, m := range models {
+		names = append(names, regexp.QuoteMeta(m)) // a file name is not a pattern: "Foo (old.php" must not break the search
+	}
 	seen := map[string]bool{}
 	var used []string
 	for _, h := range grep(regexp.MustCompile(`\b(`+strings.Join(names, "|")+`)\b`), files, all) {

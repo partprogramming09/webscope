@@ -4,9 +4,11 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 // fixture writes a SQLite file with 122 rows in items and returns a source that opens it read-only.
@@ -135,5 +137,84 @@ func TestThePasswordNeverAppearsInAnError(t *testing.T) {
 	}
 	if got := redact("denied for s3cr3t-pw and again s3cr3t-pw", "s3cr3t-pw"); strings.Contains(got, "s3cr3t-pw") || got != "denied for *** and again ***" {
 		t.Fatalf("redact = %q", got)
+	}
+}
+
+// A statement the guard reads as one read can be several for SQLite: a quote inside [a'] (SQLite's bracket identifier) or a backslash before a quote
+// (SQLite has no backslash escapes) hides what follows from the mask. The database must refuse the write whatever the mask decides.
+func TestQueryRefusesStatementsThatHideAWriteFromTheMask(t *testing.T) {
+	for name, q := range map[string]string{
+		"bracket identifier":  "SELECT 1 AS [a']; COMMIT; PRAGMA query_only=0; DELETE FROM items; SELECT 1 AS [b']",
+		"backslash":           "SELECT 'a\\'; COMMIT; PRAGMA query_only=0; DELETE FROM items; SELECT 'b\\'",
+		"backslash no commit": "SELECT 'a\\'; DELETE FROM items; SELECT 'b\\'",
+	} {
+		s := fixture(t)
+		if _, err := ask(t, s, q, 0); err == nil {
+			t.Errorf("%s: the guard let %q through", name, q)
+		}
+		db, err := sql.Open("sqlite", strings.TrimPrefix(s.url, "sqlite://"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		var n int
+		db.QueryRow("SELECT count(*) FROM items").Scan(&n)
+		db.Close()
+		if n != 122 {
+			t.Errorf("%s: the table has %d rows, it had 122: a write got through", name, n)
+		}
+	}
+}
+
+func TestSQLiteIsOpenedReadOnlyAndAMissingFileIsNotCreated(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "nope.db")
+	if _, err := ask(t, &source{url: "sqlite://" + path}, "SELECT 1", 0); err == nil {
+		t.Error("a database that does not exist must be an error")
+	}
+	if _, err := os.Stat(path); err == nil {
+		t.Error("opening a path that does not exist created the file")
+	}
+}
+
+func TestQueryStopsAtMaxBytesEvenWithAFirstRowThatIsTooBig(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "wide.db")
+	db, err := sql.Open("sqlite", path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	cols, vals := make([]string, 100), make([]string, 100)
+	for i := range cols {
+		cols[i], vals[i] = fmt.Sprintf("c%03d TEXT", i), "'"+strings.Repeat("x", 300)+"'"
+	}
+	if _, err := db.Exec("CREATE TABLE w (" + strings.Join(cols, ",") + ")"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec("INSERT INTO w VALUES (" + strings.Join(vals, ",") + ")"); err != nil {
+		t.Fatal(err)
+	}
+	out, err := ask(t, &source{url: "sqlite://" + path}, "SELECT * FROM w", 0)
+	if err != nil || len(out) > maxBytes+200 || !strings.Contains(out, "cut at") {
+		t.Errorf("%d bytes, %v", len(out), err)
+	}
+}
+
+func TestTheGuardRefusesTheFunctionsThatReadServerFilesOrTakeNamedLocks(t *testing.T) {
+	for _, q := range []string{"SELECT LOAD_FILE('/etc/hosts')", "select load_file(0x2f)", "SELECT GET_LOCK('a', 1)", "SELECT get_lock('a',1)"} {
+		if _, err := checkSQL(q); err == nil {
+			t.Errorf("%q was let through", q)
+		}
+	}
+	if _, err := checkSQL("SELECT 'LOAD_FILE and GET_LOCK in a text' AS a"); err != nil {
+		t.Errorf("the words inside a string are text: %v", err)
+	}
+}
+
+func TestACellKeepsTheTimeZoneAndTheFractionOfATime(t *testing.T) {
+	got := rawCell(time.Date(2026, 1, 2, 3, 4, 5, 123456789, time.UTC))
+	if !strings.Contains(got, ".123456789") || !strings.Contains(got, "Z") {
+		t.Errorf("%q: a change of a fraction of a second or of the zone must be visible to snap", got)
+	}
+	if len(cell(strings.Repeat("ñ", 5_000_000))) > 4*maxCell {
+		t.Error("a huge cell must be cut before it is converted")
 	}
 }

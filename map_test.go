@@ -46,9 +46,13 @@ import { useQuotes } from '../composables/useQuotes'
 		t.Fatal(err)
 	}
 	write(back, "app/Modules/Crm/Quotes/Routes/api.php", "<?php\nuse App\\Modules\\Crm\\Quotes\\Controllers\\QuoteController;\nuse Illuminate\\Support\\Facades\\Route;\n\nRoute::get('quotes', [QuoteController::class, 'index']);\nRoute::put('quotes/approve/{quote}', [QuoteController::class, 'approve']);\nRoute::apiResource('items', QuoteController::class)->only(['show']);\n")
-	write(back, "app/Modules/Crm/Quotes/Controllers/QuoteController.php", "<?php\nnamespace App\\Modules\\Crm\\Quotes\\Controllers;\nuse App\\Modules\\Crm\\Quotes\\Services\\QuoteService;\nclass QuoteController {\n    public function index() {}\n    public function approve($quote) {}\n    public function show($id) {}\n}\n")
+	write(back, "app/Modules/Crm/Quotes/Controllers/QuoteController.php", "<?php\nnamespace App\\Modules\\Crm\\Quotes\\Controllers;\nuse App\\Modules\\Crm\\Quotes\\Services\\QuoteService;\nuse App\\Linked\\Models\\Leak;\nclass QuoteController {\n    public function index() {}\n    public function approve($quote) {}\n    public function show($id) {}\n}\n")
 	write(back, "app/Modules/Crm/Quotes/Services/QuoteService.php", "<?php\nuse App\\Modules\\Crm\\Quotes\\Models\\Quote;\nclass QuoteService {}\n")
 	write(back, "app/Modules/Crm/Quotes/Models/Quote.php", "<?php\nclass Quote { protected $table = 'app_cotizaciones'; }\n")
+	write(outside, "linked/Models/Leak.php", "<?php\nclass Leak { protected $table = 'OUTSIDE_VALUE'; }\n")
+	if err := os.Symlink(filepath.Join(outside, "linked"), filepath.Join(back, "app/Linked")); err != nil { // a folder inside the root that leads out of it
+		t.Fatal(err)
+	}
 	write(back, ".env", "SECRET_IN_BACK_ENV=1\n")
 	write(outside, "leak_ctrl.php", "<?php\nclass LeakController { public function index() {} } // SECRET_CTRL\n")
 	if err := os.Symlink(filepath.Join(outside, "leak_ctrl.php"), filepath.Join(back, "app/Modules/Crm/Quotes/Controllers/LeakController.php")); err != nil {
@@ -100,7 +104,7 @@ func TestMapBackCrossesTheFrontWithRoutesControllerServiceModelAndTable(t *testi
 		t.Fatal(err)
 	}
 	for _, want := range []string{"routes read from: files Routes/*.php", "## front crm/quotes", "route /crm/quotes -> @/modules/crm/quotes/views/QuoteIndex.vue",
-		"## backend", "api GET quotes -> QuoteController@index  app/Modules/Crm/Quotes/Controllers/QuoteController.php:5", "<- ", "useQuotes.ts:2",
+		"## backend", "api GET quotes -> QuoteController@index  app/Modules/Crm/Quotes/Controllers/QuoteController.php:6", "<- ", "useQuotes.ts:2",
 		"api PUT quotes/approve/{} -> QuoteController@approve", "service app/Modules/Crm/Quotes/Services/QuoteService.php",
 		"model app/Modules/Crm/Quotes/Models/Quote.php -> table app_cotizaciones"} {
 		if !strings.Contains(out, want) {
@@ -169,5 +173,21 @@ func TestMapBackKeepsTheTablesWhenThereAreMoreEndpointsThanFit(t *testing.T) {
 	}
 	if !strings.Contains(out, "api GET quotes -> QuoteController@index") {
 		t.Errorf("the first endpoints must still be there")
+	}
+}
+
+func TestMapBackNeverReadsAModelThroughALinkedFolderNorPanicsOnALongQuery(t *testing.T) {
+	c := mapSetup(t)
+	out, err := code(t, c, "map_back", map[string]any{"query": "quotes"})
+	if err != nil || strings.Contains(out, "OUTSIDE_VALUE") || strings.Contains(out, "Leak.php") {
+		t.Errorf("a model reached through a symbolic link to a folder outside the root: %q, %v", out, err)
+	}
+	long := strings.TrimSpace(strings.Repeat("quotes ", 1500))
+	out, err = code(t, c, "map_back", map[string]any{"query": long})
+	if err != nil || len(out) > maxBytes+300 {
+		t.Errorf("a query of %d bytes: %d bytes back, %v", len(long), len(out), err)
+	}
+	if out, err = code(t, c, "map", map[string]any{"module": long}); err != nil || len(out) > maxBytes+300 {
+		t.Errorf("map with a long module: %d bytes back, %v", len(out), err)
 	}
 }

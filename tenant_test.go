@@ -123,3 +123,13 @@ func TestTheToolOffersTheTenantArgumentAndStaysSmall(t *testing.T) {
 		t.Errorf("tools/list is %d bytes, the budget for this version is 1800", len(raw))
 	}
 }
+
+func TestAMalformedTenantLookupFailsWithAnErrorAndFindsNothing(t *testing.T) {
+	s, _ := tenants(t)
+	for name, q := range map[string]string{"no placeholder": "SELECT uuid FROM websites", "two placeholders": "SELECT uuid FROM websites WHERE id = ? OR id = ?", "not a select": "DELETE FROM websites WHERE id = ?"} {
+		s.tenantQuery = q
+		if out, err := askTenant(t, s, "one.test", "SELECT 1"); err == nil {
+			t.Errorf("%s: a lookup that does not take exactly one tenant must fail, got %q", name, out)
+		}
+	}
+}

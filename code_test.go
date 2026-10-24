@@ -284,3 +284,52 @@ func TestSnapRefusesAResultTooBigToKeepAndCutsAnAnswerThatIsTooBig(t *testing.T)
 		t.Errorf("a value must be cut at 40 characters:\n%s", out)
 	}
 }
+
+func TestAModelWithAnOddFileNameDoesNotBreakTheSearch(t *testing.T) {
+	c := codeSetup(t)
+	for rel, body := range map[string]string{"app/Models/Foo (old.php": "<?php\nclass Foo { protected $table = 'quotes'; }\n", "app/Models/Dq.php": "<?php\nclass Dq { protected $table = \"quotes\"; }\n", "app/Models/.php": "<?php\n$table = 'quotes';\n"} {
+		if err := os.WriteFile(filepath.Join(c.backend, rel), []byte(body), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	out, err := code(t, c, "consumers", map[string]any{"table": "quotes", "column": "estado"})
+	if err != nil || !strings.Contains(out, "Dq") || strings.Contains(out, "Other.php") {
+		t.Errorf("%q, %v", out, err)
+	}
+	if out, err = code(t, c, "fields", map[string]any{"table": "quotes"}); err != nil || !strings.Contains(out, "Dq") {
+		t.Errorf("%q, %v", out, err)
+	}
+}
+
+// writeDBFor is a writable connection to the SQLite file behind c.s, for the tests of other tools.
+func writeDBFor(t *testing.T, c *checker) *sql.DB {
+	t.Helper()
+	db, err := sql.Open("sqlite", strings.TrimPrefix(c.s.url, "sqlite://"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { db.Close() })
+	return db
+}
+
+func TestSnapSeesAChangeThatIsFarInsideAVeryLongValue(t *testing.T) {
+	c := codeSetup(t)
+	db := writeDB(t, c)
+	long := strings.Repeat("a", 20000)
+	if _, err := db.Exec("UPDATE quotes SET nota = ? WHERE id = '1'", long+"X"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := code(t, c, "snap", map[string]any{"name": "L", "sql": "SELECT id, nota FROM quotes WHERE id = '1'", "key": "id"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec("UPDATE quotes SET nota = ? WHERE id = '1'", long+"Y"); err != nil {
+		t.Fatal(err)
+	}
+	out, err := code(t, c, "snap_diff", map[string]any{"name": "L"})
+	if err != nil || !strings.Contains(out, "changed 1") {
+		t.Errorf("only the last character changed and snap kept a cut value: %q, %v", out, err)
+	}
+	if len(out) > 1000 {
+		t.Errorf("the answer is %d bytes", len(out))
+	}
+}

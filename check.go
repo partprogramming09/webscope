@@ -47,21 +47,25 @@ type checkArgs struct {
 // cutMark is what clip (here, in bytes) and page.js (in chars) leave at the end of a body they cut.
 var cutMark = regexp.MustCompile(`…\(\+\d+ (bytes|chars)\)$`)
 
-// find is the last captured request that matches "METHOD /path" (the path of the URL, or its end).
-func (c *checker) find(spec string) (capture, error) {
+// find is the last captured request, at index from or later, that matches "METHOD /path": the path of the URL, or its end after a "/".
+func (c *checker) find(spec string, from int) (capture, int, error) {
 	method, path, ok := strings.Cut(strings.TrimSpace(spec), " ")
 	if !ok || path == "" {
-		return capture{}, fmt.Errorf("%q is not METHOD /path", spec)
+		return capture{}, 0, fmt.Errorf("%q is not METHOD /path", spec)
 	}
+	path = "/" + strings.TrimPrefix(path, "/")
 	c.p.mu.Lock()
 	defer c.p.mu.Unlock()
-	for i := len(c.p.caps) - 1; i >= 0; i-- {
+	for i := len(c.p.caps) - 1; i >= from; i-- {
 		k := c.p.caps[i]
-		if u, err := url.Parse(k.U); err == nil && strings.EqualFold(k.M, method) && strings.HasSuffix(u.Path, path) {
-			return k, nil
+		if u, err := url.Parse(k.U); err == nil && strings.EqualFold(k.M, method) && (u.Path == path || strings.HasSuffix(u.Path, path)) {
+			return k, i, nil
 		}
 	}
-	return capture{}, fmt.Errorf("no captured request matches %q (%d captured, page(payloads) lists them)", spec, len(c.p.caps))
+	if from > 0 {
+		return capture{}, 0, fmt.Errorf("no captured request matches %q after the save (%d captured, page(payloads) lists them)", spec, len(c.p.caps))
+	}
+	return capture{}, 0, fmt.Errorf("no captured request matches %q (%d captured, page(payloads) lists them)", spec, len(c.p.caps))
 }
 
 // object is the JSON object of a captured body, at a path like "quote" or "data.0" when at is not empty.
@@ -220,9 +224,12 @@ func (c *checker) compare(ctx context.Context, in checkArgs) (string, error) {
 			return "", fmt.Errorf("the name %q is not valid: letters, digits and _ only", n)
 		}
 	}
-	req, err := c.find(in.Sent)
+	req, at, err := c.find(in.Sent, 0)
 	if err != nil {
 		return "", err
+	}
+	if req.S < 200 || req.S >= 300 {
+		return "", fmt.Errorf("the request %s answered %d: nothing was saved, so there is nothing to compare", in.Sent, req.S)
 	}
 	sent, err := object(req.Req, "", "sent body")
 	if err != nil {
@@ -230,9 +237,12 @@ func (c *checker) compare(ctx context.Context, in checkArgs) (string, error) {
 	}
 	var read map[string]any
 	if in.After != "" {
-		rd, err := c.find(in.After)
+		rd, _, err := c.find(in.After, at)
 		if err != nil {
 			return "", err
+		}
+		if rd.S < 200 || rd.S >= 300 {
+			return "", fmt.Errorf("the read %s answered %d: it shows nothing to compare", in.After, rd.S)
 		}
 		if read, err = object(rd.Res, in.At, "answer that was read"); err != nil {
 			return "", err
@@ -249,8 +259,8 @@ func (c *checker) compare(ctx context.Context, in checkArgs) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	var equal, soft, differ int
-	var emptied []string
+	var equal, soft, differ, spaces int
+	var emptied, spaced []string
 	var b strings.Builder
 	var picked []string
 	for _, k := range slices.Sorted(maps.Keys(in.Where)) {
@@ -306,7 +316,18 @@ func (c *checker) compare(ctx context.Context, in checkArgs) (string, error) {
 				}
 			}
 		}
+		spacesOnly := false
+		if same && kinds["text"] {
+			for _, k := range cells[1:] {
+				if !k.empty && k.text != cells[0].text {
+					spacesOnly = true
+				}
+			}
+		}
 		switch {
+		case spacesOnly:
+			spaces++
+			spaced = append(spaced, f)
 		case !same:
 			differ++
 			line := []string{f}
@@ -325,13 +346,16 @@ func (c *checker) compare(ctx context.Context, in checkArgs) (string, error) {
 			equal++
 		}
 	}
-	fmt.Fprintf(&b, "%s\n%d fields: %d equal, %d empty~, %d different", head, len(fields), equal, soft, differ)
+	fmt.Fprintf(&b, "%s\n%d fields: %d equal, %d empty~, %d space~, %d different", head, len(fields), equal, soft, spaces, differ)
 	if differ > 0 {
 		b.WriteString("\nfield\tsent\tstored")
 		if read != nil {
 			b.WriteString("\tread")
 		}
 		b.WriteString("\n" + strings.TrimRight(rows, "\n"))
+	}
+	if spaces > 0 {
+		b.WriteString("\nspace~ (the text is the same once the spaces are collapsed: the app trimmed or changed them): " + strings.Join(spaced, ", "))
 	}
 	if soft > 0 {
 		b.WriteString("\nempty~ (null, empty text or NULL, not the same): " + strings.Join(emptied, ", "))

@@ -37,25 +37,25 @@ func newServer(s *source, p *pageTool) *mcp.Server {
 		Name:        "query",
 		Description: "Read-only SQL on the project database. One statement. Answer: TSV with header, capped.",
 		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true},
-	}, s.query)
+	}, guarded(s.query))
 	mcp.AddTool(srv, &mcp.Tool{
 		Name:        "page",
 		Description: "Test a screen in Chrome (Claude in Chrome): returns text or JavaScript to run with javascript_tool. page(help) lists the actions.",
-	}, p.tool)
+	}, guarded(p.tool))
 	cd := &coder{s: s, backend: os.Getenv("WEBSCOPE_BACKEND"), front: os.Getenv("WEBSCOPE_FRONT")}
 	mcp.AddTool(srv, &mcp.Tool{
 		Name:        "code",
 		Description: "Read the project's code: fields, consumers, map, map_back.",
 		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true},
 		InputSchema: codeSchema,
-	}, cd.tool)
+	}, guarded(cd.tool))
 	ck := &checker{s: s, p: p}
 	mcp.AddTool(srv, &mcp.Tool{
 		Name:        "check",
 		Description: "Saved row vs what the screen sent and read back.",
 		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true},
 		InputSchema: checkSchema,
-	}, ck.tool)
+	}, guarded(ck.tool))
 	return srv
 }
 
@@ -76,5 +76,18 @@ func main() {
 	if err := newServer(&source{url: os.Getenv("WEBSCOPE_DB_URL"), tenantQuery: tenantLookup()}, page).Run(ctx, &mcp.StdioTransport{}); err != nil && ctx.Err() == nil {
 		fmt.Fprintln(os.Stderr, "webscope:", err)
 		os.Exit(1)
+	}
+}
+
+// guarded is the handler h that answers an error instead of panicking: a bug in one tool must not take the whole server down.
+func guarded[In, Out any](h mcp.ToolHandlerFor[In, Out]) mcp.ToolHandlerFor[In, Out] {
+	return func(ctx context.Context, req *mcp.CallToolRequest, in In) (res *mcp.CallToolResult, out Out, err error) {
+		defer func() {
+			if r := recover(); r != nil {
+				res = &mcp.CallToolResult{IsError: true, Content: []mcp.Content{&mcp.TextContent{Text: fmt.Sprintf("Failed: internal error (%v). Next: report it with the arguments you sent.", r)}}}
+				err = nil
+			}
+		}()
+		return h(ctx, req, in)
 	}
 }

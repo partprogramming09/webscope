@@ -9,6 +9,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"unicode/utf8"
 )
 
 var (
@@ -130,6 +131,10 @@ func capOut(s string) string {
 		return s
 	}
 	cut := strings.LastIndex(s[:maxBytes], "\n")
+	if cut < 0 { // no line break in the first maxBytes: cut at a character
+		for cut = maxBytes; cut > 0 && !utf8.RuneStart(s[cut]); cut-- {
+		}
+	}
 	return s[:cut] + fmt.Sprintf("\n(cut at %d bytes: ask for a narrower module)", maxBytes)
 }
 
@@ -148,7 +153,7 @@ func (c *coder) mapFront(args map[string]any) (string, error) {
 		return "", err
 	}
 	walk, _ := args["walkthrough"].(bool)
-	out := []string{fmt.Sprintf("Frontend of «%s»: routes (screens), api (calls to the backend), composables and stores. Next: map_back.", filter)}
+	out := []string{fmt.Sprintf("Frontend of «%s»: routes (screens), api (calls to the backend), composables and stores. Next: map_back.", echo(filter))}
 	for _, n := range names {
 		if !strings.Contains(n, filter) {
 			continue
@@ -177,7 +182,7 @@ func (c *coder) mapFront(args map[string]any) (string, error) {
 		}
 	}
 	if len(out) == 1 {
-		return fmt.Sprintf("no module contains «%s»", filter), nil
+		return fmt.Sprintf("no module contains «%s»", echo(filter)), nil
 	}
 	return capOut(strings.Join(out, "\n")), nil
 }
@@ -423,4 +428,12 @@ func firstNonEmpty(s ...string) string {
 		}
 	}
 	return ""
+}
+
+// echo is what the user typed, for an answer: at most 80 characters.
+func echo(s string) string {
+	if r := []rune(s); len(r) > 80 {
+		return string(r[:80]) + "…"
+	}
+	return s
 }

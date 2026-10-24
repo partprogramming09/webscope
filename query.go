@@ -122,7 +122,7 @@ func openDB(raw, database string) (*sql.DB, string, error) {
 		if database != "" {
 			path = filepath.Join(filepath.Dir(path), database+".db")
 		}
-		db, err := sql.Open("sqlite", "file:"+path+"?_pragma=query_only(1)")
+		db, err := sql.Open("sqlite", "file:"+path+"?mode=ro&_pragma=query_only(1)") // mode=ro: the file is never written or created
 		return db, "sqlite", err
 	}
 	return nil, "", fmt.Errorf("unsupported database URL scheme %q: use mysql or sqlite", u.Scheme)
@@ -177,7 +177,7 @@ func runQuery(ctx context.Context, db *sql.DB, driver, stmt string, limit int) (
 		return "", err
 	}
 	var b strings.Builder
-	b.WriteString(strings.Join(cols, "\t") + "\n")
+	b.WriteString(show(strings.Join(cols, "\t")[:min(len(strings.Join(cols, "\t")), maxBytes/2)]) + "\n")
 	vals, ptrs := make([]any, len(cols)), make([]any, len(cols))
 	for i := range vals {
 		ptrs[i] = &vals[i]
@@ -196,7 +196,15 @@ func runQuery(ctx context.Context, db *sql.DB, driver, stmt string, limit int) (
 			cells[i] = cell(v)
 		}
 		row := strings.Join(cells, "\t") + "\n"
-		if n > 0 && b.Len()+len(row) > maxBytes {
+		if b.Len()+len(row) > maxBytes {
+			if n == 0 { // the first row alone is too big: show its start rather than nothing, and never more than maxBytes
+				room := max(0, maxBytes-b.Len())
+				for room > 0 && !utf8.RuneStart(row[room]) {
+					room--
+				}
+				b.WriteString(row[:room] + "\n")
+				n++
+			}
 			cut = true
 			break
 		}
@@ -232,6 +240,13 @@ func cell(v any) string {
 		s = x.Format("2006-01-02 15:04:05")
 	default:
 		s = fmt.Sprint(x)
+	}
+	if len(s) > 4*maxCell { // cut before the conversion: a 60 MB value must not cost 240 MB of runes
+		n := 4 * maxCell
+		for n > 0 && !utf8.RuneStart(s[n]) {
+			n--
+		}
+		s = s[:n]
 	}
 	s = strings.NewReplacer("\t", " ", "\n", " ", "\r", " ").Replace(s)
 	if r := []rune(s); len(r) > maxCell {

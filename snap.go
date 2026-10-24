@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"crypto/sha256"
 	"database/sql"
 	"errors"
 	"fmt"
@@ -10,11 +11,13 @@ import (
 	"sort"
 	"strings"
 	"time"
+	"unicode/utf8"
 )
 
 const (
 	maxSnapRows  = 2000 // rows kept per snapshot
 	maxSnapshots = 20
+	maxSnapCell  = 4096 // bytes of a value kept whole
 )
 
 var snapName = regexp.MustCompile(`^[A-Za-z0-9_-]{1,40}$`)
@@ -32,11 +35,24 @@ func rawCell(v any) string {
 	case nil:
 		return `\N`
 	case []byte:
-		return string(x)
+		return capCell(string(x))
 	case time.Time:
-		return x.Format("2006-01-02 15:04:05")
+		return x.Format(time.RFC3339Nano)
 	}
-	return fmt.Sprint(v)
+	return capCell(fmt.Sprint(v))
+}
+
+// capCell keeps a value of up to maxSnapCell bytes as it is; a longer one is cut and ends with the hash of the whole, so a change anywhere in it
+// still changes what is kept while 2000 rows of LONGTEXT cannot fill the memory.
+func capCell(s string) string {
+	if len(s) <= maxSnapCell {
+		return s
+	}
+	n := maxSnapCell
+	for n > 0 && !utf8.RuneStart(s[n]) {
+		n--
+	}
+	return fmt.Sprintf("%s…#%x", s[:n], sha256.Sum256([]byte(s)))
 }
 
 // readAll runs a checked read-only statement and returns its columns and rows; more than maxSnapRows is an error, not a partial snapshot.
