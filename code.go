@@ -227,6 +227,7 @@ func (c *coder) consumers(args map[string]any) (string, error) {
 			m = "(no model; DB::table)"
 		}
 		fmt.Fprintf(&b, "model: %s · %d files use the table\n", m, len(used))
+		fmt.Fprintf(&b, "NOTE: only the files that name the table or the model were searched; a Resource that reads $this->COLUMN may not name them: column_only searches the whole backend (more noise)\n")
 	}
 	if len([]rune(col)) < 4 {
 		fmt.Fprintf(&b, "NOTE: '%s' is short; expect noise\n", col)

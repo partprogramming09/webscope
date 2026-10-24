@@ -376,3 +376,14 @@ func TestFileOfRefusesALinkInsideTheRootThatLeadsToASkippedFolder(t *testing.T) 
 		t.Error("a plain model must resolve")
 	}
 }
+
+func TestConsumersByTableSaysWhichFilesItSearchedAndHowToSearchAll(t *testing.T) {
+	out, err := code(t, codeSetup(t), "consumers", map[string]any{"table": "quotes", "column": "estado"})
+	if err != nil || !strings.Contains(out, "column_only") || !strings.Contains(out, "NOTE: only the files that name") {
+		t.Errorf("a file that reads $this->column without naming the table is not searched, and the answer must say so: %q, %v", out, err)
+	}
+	out, err = code(t, codeSetup(t), "consumers", map[string]any{"column_only": "estado"})
+	if err != nil || strings.Contains(out, "NOTE: only the files") {
+		t.Errorf("column_only searches everything, so it has no such note: %q, %v", out, err)
+	}
+}
