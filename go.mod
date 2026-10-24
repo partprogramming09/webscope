@@ -1,4 +1,4 @@
-module github.com/partprogramming09/webscope-core
+module github.com/partprogramming09/webscope
 
 go 1.27.3
 
