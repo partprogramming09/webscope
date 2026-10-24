@@ -36,7 +36,7 @@ func mapSetup(t *testing.T) *coder {
 import { useQuotes } from '../composables/useQuotes'
 </script>
 `)
-	write(front, m+"composables/useQuotes.ts", "export function useQuotes() {\n  api.get('/api/quotes?page=1')\n  api.get<Quote>(`/api/quotes/${id}`)\n  http.post(\"/api/quotes\", body)\n  api.put<{ ok: boolean }>(\n    `/api/quotes/${id}/lines`,\n    body\n  )\n}\n")
+	write(front, m+"composables/useQuotes.ts", "export function useQuotes() {\n  api.get('/api/quotes?page=1')\n  api.get<Quote>(`/api/quotes/${id}`)\n  http.post(\"/api/quotes\", body)\n  api.put<{ ok: boolean }>(\n    `/api/quotes/${id}/lines`,\n    body\n  )\n  api.get('/api/quotes/' + id)\n}\n")
 	write(front, m+"stores/quoteStore.ts", "export const useQuoteStore = defineStore('quote', {})\n")
 	write(front, m+"constants/QuoteStatus.ts", "export const QuoteStatus = {\n  ENPROCESO: 'ENPROCESO',\n  APROBADA: 'APROBADA',\n}\n")
 	write(front, "src/modules/crm/quotes/node_modules/dep/x.ts", "api.get('/api/SECRET_IN_NODE_MODULES')\n")
@@ -45,7 +45,7 @@ import { useQuotes } from '../composables/useQuotes'
 	if err := os.Symlink(outside, filepath.Join(front, "src/modules/crm/quotes/linkdir")); err != nil {
 		t.Fatal(err)
 	}
-	write(back, "app/Modules/Crm/Quotes/Routes/api.php", "<?php\nuse App\\Modules\\Crm\\Quotes\\Controllers\\QuoteController;\nuse Illuminate\\Support\\Facades\\Route;\n\nRoute::get('quotes', [QuoteController::class, 'index']);\nRoute::put('quotes/approve/{quote}', [QuoteController::class, 'approve']);\nRoute::apiResource('items', QuoteController::class)->only(['show']);\n")
+	write(back, "app/Modules/Crm/Quotes/Routes/api.php", "<?php\nuse App\\Modules\\Crm\\Quotes\\Controllers\\QuoteController;\nuse Illuminate\\Support\\Facades\\Route;\n\nRoute::get('quotes', [QuoteController::class, 'index']);\nRoute::put('quotes/approve/{quote}', [QuoteController::class, 'approve']);\nRoute::get('quotes/{quote}', [QuoteController::class, 'show']);\nRoute::apiResource('items', QuoteController::class)->only(['show']);\n")
 	write(back, "app/Modules/Crm/Quotes/Controllers/QuoteController.php", "<?php\nnamespace App\\Modules\\Crm\\Quotes\\Controllers;\nuse App\\Modules\\Crm\\Quotes\\Services\\QuoteService;\nuse App\\Linked\\Models\\Leak;\nclass QuoteController {\n    public function index() {}\n    public function approve($quote) {}\n    public function show($id) {}\n}\n")
 	write(back, "app/Modules/Crm/Quotes/Services/QuoteService.php", "<?php\nuse App\\Modules\\Crm\\Quotes\\Models\\Quote;\nclass QuoteService {}\n")
 	write(back, "app/Modules/Crm/Quotes/Models/Quote.php", "<?php\nclass Quote { protected $table = 'app_cotizaciones'; }\n")
@@ -87,7 +87,7 @@ func TestMapWalkthroughGivesActionsPermissionsLinksFieldsAndStatuses(t *testing.
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, want := range []string{"### crm/quotes/views/QuoteIndex.vue [useQuotes: GET×2 POST PUT]", "action 3 openCreate if can('quotes.create') «Nueva»",
+	for _, want := range []string{"### crm/quotes/views/QuoteIndex.vue [useQuotes: GET×3 POST PUT]", "action 3 openCreate if can('quotes.create') «Nueva»",
 		"permission 7 v-if=can('quotes.delete')", "link 4 '/crm/quotes/1'", "fields 5 client*, notes", "statuses ENPROCESO APROBADA  crm/quotes/constants/QuoteStatus.ts"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("lacks %q:\n%s", want, out)
@@ -189,5 +189,30 @@ func TestMapBackNeverReadsAModelThroughALinkedFolderNorPanicsOnALongQuery(t *tes
 	}
 	if out, err = code(t, c, "map", map[string]any{"module": long}); err != nil || len(out) > maxBytes+300 {
 		t.Errorf("map with a long module: %d bytes back, %v", len(out), err)
+	}
+}
+
+func TestACallThatAddsAnIdAfterASlashIsTheShowEndpointNotTheList(t *testing.T) {
+	out, err := code(t, mapSetup(t), "map_back", map[string]any{"query": "quotes"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var list, show string
+	for _, l := range strings.Split(out, "\n") {
+		switch {
+		case strings.HasPrefix(l, "api GET quotes -> QuoteController@index"):
+			list = l
+		case strings.HasPrefix(l, "api GET quotes/{} -> QuoteController@show"):
+			show = l
+		}
+	}
+	if list == "" || show == "" {
+		t.Fatalf("the list and the show endpoints must be there:\n%s", out)
+	}
+	if strings.Contains(list, "useQuotes.ts:9") {
+		t.Errorf("api.get('/api/quotes/' + id) is not the list call: %s", list)
+	}
+	if !strings.Contains(show, "useQuotes.ts:9") {
+		t.Errorf("it is the call of the show endpoint: %s", show)
 	}
 }

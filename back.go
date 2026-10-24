@@ -31,6 +31,16 @@ func normalize(uri string) string {
 	return strings.TrimPrefix(strings.Trim(paramRe.ReplaceAllString(uri, "{}"), "/"), "api/")
 }
 
+// callKey is the address of a front call as a route is written: parameters as {}, and a URL that ends in a slash (axios.get('quotes/' + id): an id is
+// added after it) means `quotes/{}`, not `quotes`.
+func callKey(url string) string {
+	n := normalize(url)
+	if base, _, _ := strings.Cut(url, "?"); n != "" && strings.HasSuffix(base, "/") {
+		n += "/{}"
+	}
+	return n
+}
+
 // stem is the singular of an English word, enough to match `services` with `service`.
 func stem(w string) string {
 	switch {
@@ -225,7 +235,7 @@ func (c *coder) mapBack(args map[string]any) (string, error) {
 		for _, call := range mods[n].calls {
 			head, where, _ := strings.Cut(call, "  ")
 			method, url, _ := strings.Cut(head, " ")
-			k := method + " " + normalize(url)
+			k := method + " " + callKey(url)
 			calls[k] = append(calls[k], filepath.ToSlash(filepath.Join(frontRel, where)))
 		}
 	}
@@ -255,7 +265,7 @@ func (c *coder) mapBack(args map[string]any) (string, error) {
 		for _, call := range mods[n].calls {
 			head, _, _ := strings.Cut(call, "  ")
 			_, url, _ := strings.Cut(head, " ")
-			requested[normalize(url)] = true
+			requested[callKey(url)] = true
 		}
 	}
 	covered := map[string]bool{}
