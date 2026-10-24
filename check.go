@@ -44,8 +44,8 @@ type checkArgs struct {
 	Tenant string            `json:"tenant,omitempty"`
 }
 
-// cutMark is what clip leaves at the end of a body it cut.
-var cutMark = regexp.MustCompile(`…\(\+\d+ bytes\)$`)
+// cutMark is what clip (here, in bytes) and page.js (in chars) leave at the end of a body they cut.
+var cutMark = regexp.MustCompile(`…\(\+\d+ (bytes|chars)\)$`)
 
 // find is the last captured request that matches "METHOD /path" (the path of the URL, or its end).
 func (c *checker) find(spec string) (capture, error) {

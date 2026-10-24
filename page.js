@@ -8,7 +8,7 @@
   cfg.t = new URL(src).searchParams.get('t');
   if (window.__ws) return;
   const CAP = 3000;
-  const SENT = 4000; // chars of each body reported: a keepalive fetch over 64 KiB is refused by Chrome
+  const SENT = 8000; // chars of each body reported (check compares them): request and answer together stay under the 64 KiB a keepalive fetch may carry, even at 3 bytes a character
 
   const norm = s => String(s == null ? '' : s).replace(/\s+/g, ' ').trim();
   const lower = s => norm(s).toLowerCase();

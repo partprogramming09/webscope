@@ -1,6 +1,6 @@
-# webscope 0.3
+# webscope 0.4
 
-Two MCP tools for AI agents that spend few tokens. `query`: read-only SQL, answered as short TSV (header, `\N` for NULL, rows and cells capped). `page`: test a screen in your Chrome through Claude in Chrome.
+Three MCP tools for AI agents that spend few tokens. `query`: read-only SQL, answered as short TSV (header, `\N` for NULL, rows and cells capped). `page`: test a screen in your Chrome through Claude in Chrome. `check`: compare one saved row with what the screen sent and read back.
 
 ## Build and register (Claude Code)
 
@@ -25,6 +25,14 @@ With `tenant` (an fqdn) the query runs in that tenant's database, found in the c
 
 Arguments enter the snippet as escaped JSON, never as text. Writes happen only through the screen, with your approval, on rows prefixed `ZZ_`. `fill` on a multiple menu adds the option, it does not replace the ones already chosen, and a field that depends on another (Acme's Servicio on Subtipo) needs its own call. Not covered: `v-combobox`, date pickers, menus of other libraries, file uploads, pages whose Content-Security-Policy blocks the helper (all unchecked against the real app). Tests need a Chrome (`WEBSCOPE_CHROME` to point at one); a missing Chrome fails them.
 
+## The check tool
+
+`check(sent, table, where, map, after?, at?, tenant?)` compares three things for one saved row: what the screen **sent** (a request `page` captured, e.g. `POST /api/quotes`, the last one that matches), what the database **stored** (the row `where` picks, `{column: value}`, in a read-only transaction) and what the screen **read** afterwards (`after`, another captured request such as `GET /api/quotes`, and `at`, the path of the object inside its answer: `quote`, `data.0`). `map` says which column holds each sent field: `{"sub_type": "SUBTIPO_OPER"}`. Nothing is guessed, because the names differ on each side.
+
+The answer is the counts (equal, `empty~`, different) and one line only for each field that differs, each value cut at 40 characters; a row is never shown whole. `007` is not `7`; a `null`, an empty text and a database NULL count as `empty~` (equivalent, but said so); a field missing from the answer is `(absent)`. A body that was cut when it was captured (`page` keeps 8000 characters of each, the server 16 KiB) is refused, not compared. `check` never writes: it reads captures and one row.
+
+In Acme (development), after saving a quote and deleting it from the screen, `check` shows a single difference: `status  ENPROCESO  BORRADO`. The delete is logical: the row stays, marked `BORRADO`, with its child rows.
+
 ## Not in this version
 
-Several tenants in one call, per-tenant database users, PostgreSQL, checks between front, API and back. The older, larger project is `webscope-publico`. Checked against MySQL 9.7.1 and SQLite. Test: `go test ./...`
+Several tenants in one call, per-tenant database users, PostgreSQL, a mapping of fields that is found by itself (`check` takes it from you). The older, larger project is `webscope-publico`. Checked against MySQL 9.7.1 and SQLite. Test: `go test ./...`

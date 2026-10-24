@@ -143,6 +143,13 @@ func TestCheckRefusesWhatItCannotCompareHonestly(t *testing.T) {
 		t.Errorf("a body that was cut must not be compared as if it were whole: %v", err)
 	}
 	sent(p, "POST", "/api/quotes", `{"notes":"x"}`, "")
+	sent(p, "GET", "/api/quotes", "", `{"data":[{"notes":"x"…(+612 chars)`) // the mark that page.js leaves when it cuts a body
+	cutRead := args("059", map[string]string{"notes": "notes"})
+	cutRead.After, cutRead.At = "GET /api/quotes", "data.0"
+	if _, err := run(t, c, cutRead); err == nil || !strings.Contains(err.Error(), "cut") {
+		t.Errorf("a body that page.js cut must be named as cut, not as not JSON: %v", err)
+	}
+	p.caps = p.caps[:len(p.caps)-1]
 	if _, err := run(t, c, args("999", fourFields)); err == nil || !strings.Contains(err.Error(), "no row") {
 		t.Errorf("no row: %v", err)
 	}

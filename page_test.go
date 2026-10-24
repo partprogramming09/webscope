@@ -327,6 +327,8 @@ func TestActionsRunInARealChrome(t *testing.T) {
 			posts = append(posts, string(b))
 			w.WriteHeader(201)
 			io.WriteString(w, `{"id":1}`)
+		case r.URL.Path == "/api/mid": // a list answer of Acme was about 4600 characters
+			io.WriteString(w, `{"data":[{"v":"`+strings.Repeat("m", 6000)+`"}]}`)
 		case r.URL.Path == "/api/big":
 			io.WriteString(w, strings.Repeat("x", 100_000))
 		case r.Method == "PUT":
@@ -386,6 +388,7 @@ func TestActionsRunInARealChrome(t *testing.T) {
 	add("fill", map[string]any{"fields": map[string]any{"Destino": "Uno"}})                                                             // 27
 	add("fill", map[string]any{"fields": map[string]any{"Cliente": "Demo"}})                                                            // 28: the autocomplete answers late and the last menu is still in the DOM
 	add("read", map[string]any{"selector": "#cl"})                                                                                      // 29
+	steps = append(steps, "fetch('/api/mid').then(r=>r.text()).then(t=>t.length)")                                                      // 30
 	raw, _ := json.Marshal(steps)
 	mu.Lock()
 	html_ = strings.Replace(fixturePage, "{{STEPS}}", string(raw), 1)
@@ -460,6 +463,13 @@ func TestActionsRunInARealChrome(t *testing.T) {
 	if err := json.Unmarshal([]byte(posts[0]), &sent); err != nil || sent["n"] != nasty || sent["c"] != "007" || sent["a"] != true || sent["k"] != "dos" {
 		t.Errorf("what the app received: %s (%v)", posts[0], err)
 	}
+	p2.mu.Lock() // the second load of step 19 points the page at p2: what the page sends after it goes there
+	for _, k := range p2.caps {
+		if strings.HasSuffix(k.U, "/api/mid") && (len(k.Res) != len(`{"data":[{"v":""}]}`)+6000 || strings.Contains(k.Res, "…(+")) {
+			t.Errorf("the answer of 6000 characters reached the server as %d bytes: the page cut it", len(k.Res))
+		}
+	}
+	p2.mu.Unlock()
 	seen, _ := askPage(t, p, "payloads", map[string]any{"limit": 50})
 	for _, want := range []string{"POST /api/orders 201", "POST /api/orders 503", "PUT /api/orders/1 500", `"c":"007"`, "GET /api/big 200"} {
 		if !strings.Contains(seen, want) {
