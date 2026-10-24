@@ -23,7 +23,7 @@ func connect(t *testing.T, s *source) *mcp.ClientSession {
 	return cs
 }
 
-func TestOnlyQueryPageAndCheckAreOffered(t *testing.T) {
+func TestOnlyQueryPageCheckAndCodeAreOffered(t *testing.T) {
 	res, err := connect(t, &source{}).ListTools(context.Background(), nil)
 	if err != nil {
 		t.Fatal(err)
@@ -32,7 +32,7 @@ func TestOnlyQueryPageAndCheckAreOffered(t *testing.T) {
 	for _, tool := range res.Tools {
 		tools[tool.Name] = tool
 	}
-	if len(tools) != 3 || tools["query"] == nil || tools["page"] == nil || tools["check"] == nil {
+	if len(tools) != 4 || tools["query"] == nil || tools["page"] == nil || tools["check"] == nil || tools["code"] == nil {
 		t.Fatalf("tools = %v", res.Tools)
 	}
 	if a := tools["query"].Annotations; a == nil || !a.ReadOnlyHint {
@@ -40,6 +40,9 @@ func TestOnlyQueryPageAndCheckAreOffered(t *testing.T) {
 	}
 	if a := tools["check"].Annotations; a == nil || !a.ReadOnlyHint {
 		t.Error("check is not marked read-only")
+	}
+	if a := tools["code"].Annotations; a == nil || !a.ReadOnlyHint {
+		t.Error("code is not marked read-only")
 	}
 	// page is not read-only: the snippets it hands out can fill and click in the app (writes go through the screen, ROADMAP rule 1).
 	if a := tools["page"].Annotations; a != nil && a.ReadOnlyHint {

@@ -116,7 +116,10 @@ func TestTheToolOffersTheTenantArgumentAndStaysSmall(t *testing.T) {
 	if !strings.Contains(string(raw), `"check"`) {
 		t.Errorf("the check tool is not listed: %s", raw)
 	}
-	if len(raw) > 1500 {
-		t.Errorf("tools/list is %d bytes, the budget for this version is 1500", len(raw))
+	if !strings.Contains(string(raw), `"code"`) {
+		t.Errorf("the code tool is not listed: %s", raw)
+	}
+	if len(raw) > 1800 {
+		t.Errorf("tools/list is %d bytes, the budget for this version is 1800", len(raw))
 	}
 }
