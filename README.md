@@ -20,10 +20,10 @@ With `tenant` (an fqdn) the query runs in that tenant's database, found in the c
 `page(action, args?)` does not drive the browser: it returns a short JavaScript snippet and you run it with Claude in Chrome's `javascript_tool`; the snippet returns the screen as compact text. Set `WEBSCOPE_APP_URL` to the app's address (`http://localhost:5173`).
 
 1. `page(load)`: one line that loads the helper. A local server on `127.0.0.1` (random port, random token per start, answers only the app's origin, caps what it receives) serves the helper and keeps the requests the page sends. Run it once per page load.
-2. `state` (URL, headings, fields, buttons, alerts, errors, table rows), `read`, `fill` (a whole form in one call), `click`, `press`, `simulate` (the next requests to a URL answer an HTTP error, for `fetch` and XMLHttpRequest), each returns a snippet.
+2. `state` (URL, headings, fields, buttons, alerts, errors, table rows), `read`, `fill` (a whole form in one call; it also chooses in Vuetify `v-select` and `v-autocomplete` menus, scrolling long lists, and fails with the rows it saw when the option is missing), `click`, `press`, `simulate` (the next requests to a URL answer an HTTP error, for `fetch` and XMLHttpRequest), each returns a snippet.
 3. `payloads`: the requests sent and their answers, answered by the tool itself. `help` lists the arguments.
 
-Arguments enter the snippet as escaped JSON, never as text. Writes happen only through the screen, with your approval, on rows prefixed `ZZ_`. Not covered: custom widgets that do not use native inputs (Vuetify selects and date pickers), file uploads, pages whose Content-Security-Policy blocks the helper (all unchecked against the real app). Tests need a Chrome (`WEBSCOPE_CHROME` to point at one); a missing Chrome fails them.
+Arguments enter the snippet as escaped JSON, never as text. Writes happen only through the screen, with your approval, on rows prefixed `ZZ_`. `fill` on a multiple menu adds the option, it does not replace the ones already chosen, and a field that depends on another (Acme's Servicio on Subtipo) needs its own call. Not covered: `v-combobox`, date pickers, menus of other libraries, file uploads, pages whose Content-Security-Policy blocks the helper (all unchecked against the real app). Tests need a Chrome (`WEBSCOPE_CHROME` to point at one); a missing Chrome fails them.
 
 ## Not in this version
 
