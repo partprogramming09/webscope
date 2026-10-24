@@ -47,6 +47,10 @@ In Acme (development), `map crm/quotes` gives 2 routes and 53 calls, the same as
 
 `snap {name, sql, key?, tenant?}` keeps in memory the result of a read-only query, by a key column (the first by default; up to 2000 rows and 20 snapshots), and `snap_diff {name}` repeats the query and shows only what changed: `new KEY: col=value`, `deleted KEY` and, for a changed row, each column as `before → after` (NULL is `\N`, an empty text `''`, a value is cut at 40 characters). It answers "what did this action really write", for example the child rows that saving a quote leaves. The snapshots are lost when the server restarts, and a text value that is exactly `\N` reads as NULL. Against Acme (development), a snapshot of the 54 quotes followed by a diff with nothing done says `54 rows before, 54 now: no changes`.
 
+## Docs
+
+`docs/module-testing.md` and `docs/patterns.md` are the procedure for testing a module and the list of patterns found, written for the old server and copied unchanged; `docs/old-to-new-tools.md` says which tool of this server replaces each tool they name, and which ones no longer exist.
+
 ## Known limits
 
 `consumers`, `fields` and `map_back` read at most 20000 `.php` files of 2 MB each, and they stop there without saying so. `map` reads a generic up to its first `>`, so a type with `=>` inside is not recognized. `fields` counts the values of every column with one scan of the table: fine for the tables of an application, slow on a table of millions of rows. `snap` keeps a value of up to 4096 bytes whole and a longer one cut plus its hash, so a change anywhere in it still shows. `check` shows a text that differs only in spaces as `space~`, not as equal. A tool that fails with a bug answers `Failed: internal error` and the server keeps running. The code is searched by text, not parsed: every answer of `code` is an estimate. The address of the app (`WEBSCOPE_APP_URL`) must be ASCII: a host with accents does not match the punycode that the browser sends, and `page` refuses it (it fails closed).
