@@ -137,13 +137,48 @@
 
   // ---- acting on the screen
   const findField = name => {
-    const n = lower(name), f = fields();
+    const n = lower(name), f = fields().sort((a, b) => !!b.closest('[role=dialog],.v-dialog') - !!a.closest('[role=dialog],.v-dialog'));
     return f.find(e => lower(labelOf(e)) === n) ||
       f.find(e => [e.name, e.id, e.placeholder].some(x => x && lower(x) === n)) ||
       f.find(e => lower(labelOf(e)).includes(n));
   };
-  const setValue = (e, v) => {
+  // Vuetify menus: v-select/v-autocomplete show the option text, keep a code in the input and render only the rows in view.
+  const MENU = '.v-select,.v-autocomplete,.v-combobox';
+  const sleep = ms => new Promise(r => setTimeout(r, ms));
+  const rows = () => all('.v-overlay-container .v-list-item');
+  const shown = e => { const c = all('.v-field *').filter(x => e.closest('.v-field').contains(x) && /__selection/.test(x.className)).map(textOf).filter(Boolean); return c.length ? c.join(', ') : e.value; };
+  const choose = async (e, v) => {
+    const field = e.closest('.v-field'), want = lower(v), late = !!e.closest('.v-autocomplete,.v-combobox');
+    for (let i = 0; i < 14 && rows().length; i++) await sleep(70); // the previous menu may still be leaving
+    ['pointerdown', 'mousedown', 'pointerup', 'mouseup', 'click'].forEach(t => field.dispatchEvent(new MouseEvent(t, { bubbles: true, cancelable: true, view: window })));
+    if (late) { // the search is the option text; the answer comes later
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set.call(e, String(v));
+      e.dispatchEvent(new Event('input', { bubbles: true }));
+    }
+    const match = () => { const r = rows(), eq = r.filter(i => lower(i.innerText) === want || lower(i.innerText.split('\n')[0]) === want), inc = r.filter(i => lower(i.innerText).includes(want)); return eq[0] || (inc.length === 1 && inc[0]); };
+    const seen = new Set();
+    let hit, list, end = 0;
+    for (let i = 0; i < 400 && !hit; i++) { // shortcut: 400 steps of 70 ms at most (a list of 4000 rows), then it gives up
+      await sleep(70);
+      rows().forEach(r => seen.add(norm(r.innerText)));
+      hit = match();
+      list = [...document.querySelectorAll('.v-overlay-container .v-list')].pop();
+      if (hit || i < (late ? 25 : 4)) continue; // an autocomplete asks the server: give it about two seconds
+      if (!list) { if (i > 30) break; continue; } // no menu appeared: two more seconds, then give up
+      if (list.scrollTop + list.clientHeight >= list.scrollHeight - 2) { if (++end > 2) break; } // the end of the list: look three more times, then give up
+      else list.scrollTop += list.clientHeight * 0.8;
+    }
+    if (!hit) { document.body.click(); throw new Error('no option "' + v + '" among ' + seen.size + ' seen: ' + [...seen].slice(0, 5).join(' | ')); }
+    const text = norm(hit.innerText);
+    if (!hit.classList.contains('v-list-item--active') || !e.closest('.v-select--multiple')) hit.click(); // multiple: choosing adds, so one already chosen is left alone
+    await sleep(300);
+    document.body.click();
+    await sleep(300);
+    return text;
+  };
+  const setValue = async (e, v) => {
     e.focus();
+    if (e.closest(MENU)) return choose(e, v);
     if (e.type === 'checkbox' || e.type === 'radio') {
       const want = v === true || /^(true|on|1|yes|si|sí)$/i.test(String(v));
       if (e.checked !== want) e.click();
@@ -161,20 +196,26 @@
     }
     e.blur();
   };
-  const fill = a => {
+  const fill = async a => {
     if (!a.fields || typeof a.fields !== 'object') return fail('fill needs fields {label: value}');
     let miss = false;
-    const out = Object.entries(a.fields).map(([k, v]) => {
+    const out = [];
+    for (const [k, v] of Object.entries(a.fields)) {
       const e = findField(k);
-      if (!e) { miss = true; return k + ': not found'; }
+      if (!e) { miss = true; out.push(k + ': not found'); continue; }
       try {
-        setValue(e, v);
+        const clicked = await setValue(e, v);
         const got = valueOf(e), want = typeof v === 'boolean' ? (v ? 'on' : 'off') : String(v);
-        if (e.type === 'checkbox' || e.type === 'radio' || e.tagName === 'SELECT' || got === want) return k + ': ok';
+        if (clicked) { // a menu: the readback is the text it shows, which holds the option (an autocomplete shows only its first line)
+          const now = lower(shown(e));
+          if (now && (lower(clicked).includes(now) || now.includes(lower(want)))) { out.push(k + ': ok'); continue; }
+          miss = true; out.push(k + ': the page shows "' + shown(e) + '" instead of "' + want + '"'); continue;
+        }
+        if (e.type === 'checkbox' || e.type === 'radio' || e.tagName === 'SELECT' || got === want) { out.push(k + ': ok'); continue; }
         miss = true; // a v-select keeps its model and puts it back: the field is a menu, so click it and then the option
-        return k + ': the page shows "' + got + '" instead of "' + want + '"';
-      } catch (x) { miss = true; return k + ': ' + x.message; }
-    });
+        out.push(k + ': the page shows "' + got + '" instead of "' + want + '"');
+      } catch (x) { miss = true; out.push(k + ': ' + x.message); }
+    }
     if (miss) out.push('Next: page(state) lists the fields and their labels.');
     return out.join('\n');
   };
@@ -217,6 +258,6 @@
     return 'the next ' + times + ' request(s) with "' + a.match + '" answer ' + status;
   };
 
-  const wrap = f => a => { try { return f(a || {}); } catch (e) { return fail(e.message); } };
+  const wrap = f => a => { try { const r = f(a || {}); return r && r.then ? r.catch(e => fail(e.message)) : r; } catch (e) { return fail(e.message); } };
   window.__ws = { state: wrap(state), read: wrap(read), fill: wrap(fill), click: wrap(click), press: wrap(press), simulate: wrap(simulate) };
 })();

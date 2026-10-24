@@ -42,7 +42,7 @@ load: one line of JavaScript; run it with javascript_tool once per page load (ne
 state|read|fill|click|press|simulate: return a snippet; run it with javascript_tool, its value is the answer.
   state {max?}: URL, title, headings, fields, buttons, alerts, errors, dialog, tables.
   read {selector?, max?}: text of the first match, or of the page.
-  fill {fields:{label:value}}: by label, name, placeholder or id; true/false for checkboxes; select by option text.
+  fill {fields:{label:value}}: by label, name, placeholder or id; true/false for checkboxes; select by option text; Vuetify menus too (long lists are scrolled).
   click {text} or {selector}; press {key, selector?}.
   simulate {match, status, times?, method?}: the next requests whose URL contains match answer HTTP status 400-599 without reaching the app; {clear:true} cancels.
 payloads {limit?}: the requests the page sent and their answers (answered here, no snippet).
@@ -100,7 +100,7 @@ func snippet(action string, args map[string]any) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return fmt.Sprintf(`window.__ws?window.__ws.%s(%s):"Failed: webscope is not loaded in this page. Next: page(load) and run it."`, action, raw), nil
+	return fmt.Sprintf(`await (window.__ws?window.__ws.%s(%s):"Failed: webscope is not loaded in this page. Next: page(load) and run it.")`, action, raw), nil // await: fill waits for menus
 }
 
 func (p *pageTool) answer(in pageArgs) (string, error) {

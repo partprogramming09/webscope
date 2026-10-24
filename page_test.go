@@ -68,6 +68,9 @@ func TestSnippetCarriesArgsOnlyAsJSON(t *testing.T) {
 		if strings.Contains(got, "</script>") || strings.ContainsAny(got, "\n\r  ") {
 			t.Errorf("%s: raw </script> or line break in the snippet: %q", action, got)
 		}
+		if !strings.HasPrefix(got, "await (") { // javascript_tool shows a Promise as {}: fill waits for menus, so the value must be awaited
+			t.Errorf("%s: the snippet does not await its answer: %q", action, got)
+		}
 		if !strings.Contains(got, `"007"`) || !strings.Contains(got, "window.__ws."+action+"(") {
 			t.Errorf("%s: 007 lost its quotes or the call is not there: %q", action, got)
 		}
@@ -275,8 +278,14 @@ const fixturePage = `<!doctype html><meta charset=utf-8><title>Pedido</title><h1
 <label><input type=checkbox id=a> Acepto</label>
 <label for=m>Estado</label><input id=m value=ENPROCESO>
 <label for=k>Tipo</label><select id=k><option>uno<option>dos</select>
+<div class=v-select><div class=v-field id=mf><label for=mi>Origen</label><input id=mi><span class=v-select__selection id=msel></span></div></div>
+<div class=v-select><div class=v-field id=df><label for=di>Destino</label><input id=di></div></div>
+<div class=v-autocomplete><div class=v-field><label for=ai>Cliente</label><input id=ai></div></div>
+<label for=on>Nota</label><input id=on>
+<div role=dialog><label for=dn>Nota</label><input id=dn></div>
+<div class=v-overlay-container id=oc></div>
 <button type=button id=go>Guardar</button><button type=button id=up>Actualizar</button><button type=button id=big>Grande</button><button type=button>Cancelar</button></form>
-<p role=alert id=al></p><p id=mirror></p><p id=picked></p><pre id=out></pre>
+<p id=cl></p><p id=nn></p><p role=alert id=al></p><p id=mirror></p><p id=picked></p><pre id=out></pre>
 <script type=application/json id=steps>{{STEPS}}</script>
 <script>
 go.onclick=()=>fetch('/api/orders',{method:'POST',body:JSON.stringify({n:n.value,c:c.value,a:a.checked,k:k.value})}).then(r=>al.textContent='status '+r.status)
@@ -285,10 +294,20 @@ up.onclick=()=>{const x=new XMLHttpRequest();x.open('PUT','/api/orders/1');x.onl
 n.oninput=()=>mirror.textContent=n.value // what a v-model would copy: it only hears the input and change events
 k.onchange=()=>picked.textContent=k.value
 m.onblur=()=>{m.value='ENPROCESO'} // a v-select keeps its model and puts it back when the field loses focus
+// a v-select keeps its list virtual (a few rows rendered at the scroll position), shows the option text and holds the code in the input
+const OPTS=Array.from({length:300},(_,i)=>'PAIS '+String(i).padStart(3,'0'))
+mf.onmousedown=()=>{oc.innerHTML='<div class=v-overlay--active><div class=v-list style="height:120px;overflow:auto;position:relative"><div style="height:6000px"></div></div></div>'
+ const l=oc.querySelector('.v-list');const draw=()=>{const k=Math.floor(l.scrollTop/20);[...l.querySelectorAll('.v-list-item')].forEach(e=>e.remove())
+  for(let i=k;i<k+6&&i<300;i++){const d=document.createElement('div');d.className='v-list-item';d.style.cssText='position:absolute;height:20px;top:'+i*20+'px';d.textContent=OPTS[i];d.onclick=()=>{msel.textContent=OPTS[i];mi.value='C'+i};l.appendChild(d)}}
+ draw();setInterval(()=>{if(l.isConnected)draw()},20)} // the list stays after a choice, like a menu on its way out
+// an autocomplete answers a search after a delay and shows two lines per row
+ai.oninput=()=>setTimeout(()=>{oc.innerHTML='<div class=v-overlay--active><div class=v-list></div></div>';for(const t of ['Demo','Otro']){if(!t.toLowerCase().includes(ai.value.toLowerCase()))continue;const d=document.createElement('div');d.className='v-list-item';d.innerHTML=t+'<br>+57300';d.onclick=()=>{ai.value=t;oc.innerHTML='';cl.textContent='cliente '+t};oc.querySelector('.v-list').appendChild(d)}},1500)
+df.onmousedown=()=>{oc.innerHTML='<div class=v-overlay--active><div class=v-list><div class=v-list-item id=u>Uno</div></div></div>';u.onclick=()=>{}} // a menu that keeps its list and does not keep the option
+on.oninput=()=>nn.textContent='outside';dn.oninput=()=>nn.textContent='dialog'
 n.onkeydown=e=>{if(e.key==='Escape')al.textContent='esc'}
 const steps=JSON.parse(document.getElementById('steps').textContent),res=[]
 const sleep=ms=>new Promise(r=>setTimeout(r,ms))
-;(async()=>{for(const s of steps){try{res.push(String((0,eval)(s)))}catch(e){res.push('THROW '+e)}await sleep(300)}out.textContent=JSON.stringify(res)})()
+;(async()=>{for(const s of steps){try{res.push(String(await (0,eval)("(async()=>("+s+"))()")))}catch(e){res.push('THROW '+e)}await sleep(300)}out.textContent=JSON.stringify(res)})()
 </script>`
 
 // TestActionsRunInARealChrome loads a form from one origin, the webscope listener is another one (so CORS is real), runs every action the way
@@ -359,6 +378,14 @@ func TestActionsRunInARealChrome(t *testing.T) {
 	steps = append(steps, load2)                                                                                                        // 19
 	add("click", map[string]any{"text": "Guardar"})                                                                                     // 20
 	add("fill", map[string]any{"fields": map[string]any{"Estado": "Rechazada"}})                                                        // 21
+	add("fill", map[string]any{"fields": map[string]any{"Origen": "PAIS 250", "Nota": "x"}})                                            // 22
+	add("read", map[string]any{"selector": "#msel"})                                                                                    // 23
+	add("read", map[string]any{"selector": "#cl"})                                                                                      // 24
+	add("read", map[string]any{"selector": "#nn"})                                                                                      // 25
+	add("fill", map[string]any{"fields": map[string]any{"Origen": "PAIS 999"}})                                                         // 26
+	add("fill", map[string]any{"fields": map[string]any{"Destino": "Uno"}})                                                             // 27
+	add("fill", map[string]any{"fields": map[string]any{"Cliente": "Demo"}})                                                            // 28: the autocomplete answers late and the last menu is still in the DOM
+	add("read", map[string]any{"selector": "#cl"})                                                                                      // 29
 	raw, _ := json.Marshal(steps)
 	mu.Lock()
 	html_ = strings.Replace(fixturePage, "{{STEPS}}", string(raw), 1)
@@ -366,7 +393,7 @@ func TestActionsRunInARealChrome(t *testing.T) {
 
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
-	flags := []string{"--headless=new", "--disable-gpu", "--no-first-run", "--no-default-browser-check", "--user-data-dir=" + t.TempDir(), "--virtual-time-budget=20000", "--dump-dom"}
+	flags := []string{"--headless=new", "--disable-gpu", "--no-first-run", "--no-default-browser-check", "--user-data-dir=" + t.TempDir(), "--virtual-time-budget=60000", "--dump-dom"}
 	if os.Getenv("CI") != "" {
 		flags = append(flags, "--no-sandbox") // hosted Linux runners forbid the sandbox's user namespaces; the page is this test's own fixture
 	}
@@ -413,6 +440,16 @@ func TestActionsRunInARealChrome(t *testing.T) {
 	has(18, "big 100000")
 	has(19, "loading")
 	has(21, "Estado: ", "ENPROCESO", "Rechazada")
+	has(22, "Origen: ok", "Nota: ok")
+	if out[23] != "PAIS 250" || out[29] != "cliente Demo" || out[25] != "dialog" {
+		t.Errorf("the menus were not chosen or the dialog field was not the one filled: %q %q %q", out[23], out[29], out[25])
+	}
+	has(26, "Origen:", "PAIS 999")
+	has(27, "Destino: the page shows")
+	has(28, "Cliente: ok")
+	if strings.Contains(out[26], "Origen: ok") {
+		t.Errorf("an option that does not exist must not be ok: %q", out[26])
+	}
 	if strings.Contains(out[21], "Estado: ok") {
 		t.Errorf("fill said ok but the page put the old value back: %q", out[21])
 	}
