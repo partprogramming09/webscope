@@ -29,6 +29,7 @@ var codeSchema = map[string]any{
 type coder struct {
 	s       *source
 	backend string
+	front   string
 }
 
 type codeArgs struct {
@@ -59,7 +60,12 @@ type lines map[string][]string
 
 // phpFiles are the .php files under root, read-only: symbolic links are never followed (a link could lead out of the root), .env* files, the
 // folders in skipDirs and files over maxPHPBytes are left out. The names come back relative to the real root.
-func phpFiles(root string) (files []string, real string, err error) {
+func phpFiles(root string) ([]string, string, error) {
+	return walkFiles(root, func(n string) bool { return strings.HasSuffix(n, ".php") })
+}
+
+// walkFiles is the safe walk behind phpFiles for any kind of file: want says which names to keep.
+func walkFiles(root string, want func(name string) bool) (files []string, real string, err error) {
 	if real, err = filepath.EvalSymlinks(root); err != nil {
 		return nil, "", err
 	}
@@ -72,7 +78,7 @@ func phpFiles(root string) (files []string, real string, err error) {
 				return filepath.SkipDir
 			}
 			return nil
-		case !strings.HasSuffix(d.Name(), ".php") || strings.HasPrefix(d.Name(), ".env"):
+		case !want(d.Name()) || strings.HasPrefix(d.Name(), ".env"):
 			return nil
 		}
 		if info, err := d.Info(); err != nil || info.Size() > maxPHPBytes {
@@ -166,8 +172,12 @@ func (c *coder) do(ctx context.Context, in codeArgs) (string, error) {
 		return c.consumers(in.Args)
 	case "fields":
 		return c.fields(ctx, in.Args)
+	case "map":
+		return c.mapFront(in.Args)
+	case "map_back":
+		return c.mapBack(in.Args)
 	}
-	return "", fmt.Errorf("unknown action %q: fields {table, tenant?}, consumers {table, column} or {column_only}", in.Action)
+	return "", fmt.Errorf("unknown action %q: fields {table, tenant?}, consumers {table, column} or {column_only}, map {module, walkthrough?} or map_back {query}", in.Action)
 }
 
 // consumers lists who reads and who writes a column in the PHP of WEBSCOPE_BACKEND.

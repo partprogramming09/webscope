@@ -1,13 +1,13 @@
-# webscope 0.5a
+# webscope 0.5
 
-Four MCP tools for AI agents that spend few tokens. `query`: read-only SQL, answered as short TSV (header, `\N` for NULL, rows and cells capped). `page`: test a screen in your Chrome through Claude in Chrome. `check`: compare one saved row with what the screen sent and read back. `code`: read the project's PHP (`fields` of a table, `consumers` of a column).
+Four MCP tools for AI agents that spend few tokens. `query`: read-only SQL, answered as short TSV (header, `\N` for NULL, rows and cells capped). `page`: test a screen in your Chrome through Claude in Chrome. `check`: compare one saved row with what the screen sent and read back. `code`: read the project's code (`fields` of a table, `consumers` of a column, `map` of a front module, `map_back` from a screen to the table).
 
 ## Build and register (Claude Code)
 
     go build -o webscope .        # Go 1.27 or newer
     claude mcp add webscope -e WEBSCOPE_DB_URL='mysql://user:pass@127.0.0.1:3306/dbname' -- /absolute/path/to/webscope
 
-`WEBSCOPE_DB_URL` is `mysql://user:password@host:port/db` or `sqlite:///path/file.db`. Percent-encode special characters in the password. `WEBSCOPE_BACKEND` is the folder with the project's PHP (the `code` tool needs it; `WEBSCOPE_FRONT` is reserved for `map`, the next step).
+`WEBSCOPE_DB_URL` is `mysql://user:password@host:port/db` or `sqlite:///path/file.db`. Percent-encode special characters in the password. `WEBSCOPE_BACKEND` is the folder with the project's PHP (the `code` tool needs it; `WEBSCOPE_FRONT` is the folder of the Vue front, used by `map` and `map_back`: its `src/modules` is read if it exists).
 
 ## The tool
 
@@ -41,6 +41,10 @@ Both are estimates by text, and the answer says so: a use is `WRITES` when an `u
 
 In Acme (development), `fields app_cotizaciones` gives the 42 columns of the table, with the same counts as `query` (54 rows, `ESTADO` 54, `DESCRIPCION` 53, `MOTIVO_RECHAZO` 5); `consumers app_cotizaciones ESTADO` finds 47 uses in 21 of the 68 files that name the table or the `Quote` model, the same as a `grep` by hand. Walking 2212 PHP files takes about 0.3 s of CPU.
 
+`map {module, walkthrough?}` lists, for the front modules whose path contains `module` (e.g. `crm/quotes`): the routes with their view and `file:line`, the HTTP calls (`axios`, `http` or `api` with a URL in quotes on the same line), the composables and the stores. With `walkthrough` it lists instead what can be clicked: actions with their `v-if`, permissions (`can(...)`), links, form fields (`name*` is required), tabs and statuses. `map_back {query}` takes a front module or a part of an API address and gives each endpoint with its controller and the line of the method, the front call that uses it, the services and the models with their table. The routes are deduced from `app/Modules/**/Routes/*.php`; no `artisan` is run, and `--required`, `--seen`, `--coverage` and the saved walkthroughs of the old project are not here. Answers stop at 8000 bytes.
+
+In Acme (development), `map crm/quotes` gives 2 routes and 49 calls, and a `grep` of the module finds 53 lines with a call: the 4 that `map` does not list have the URL on the next line, which it does not read. `map_back crm/quotes` finds 47 endpoints and their controllers with the line of each method.
+
 ## Not in this version
 
-Several tenants in one call, per-tenant database users, PostgreSQL, a mapping of fields that is found by itself (`check` takes it from you), the routes of the backend and the front (`map_back`, `map`: 0.5b). The older, larger project is `webscope-publico`. Checked against MySQL 9.7.1 and SQLite. Test: `go test ./...`
+Several tenants in one call, per-tenant database users, PostgreSQL, a mapping of fields that is found by itself (`check` takes it from you), the old `--required`, `--seen` and `--coverage` options of `map` and `map_back`. The older, larger project is `webscope-publico`. Checked against MySQL 9.7.1 and SQLite. Test: `go test ./...`

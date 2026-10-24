@@ -13,8 +13,8 @@ import (
 )
 
 const (
-	version      = "0.5.0-a"
-	instructions = `query(sql): one read-only statement (SELECT, SHOW, DESCRIBE, EXPLAIN, WITH). The answer is TSV with a header; \N is NULL; rows and cells are capped, so refine with WHERE or fewer columns. page(action,args?): test a screen in Chrome; start with page(help). check(sent,table,where,map,after?,at?,tenant?): sent is a request page captured ("POST /api/quotes"), where {column:value} picks one row, map {sent field:column}, after a later captured read; only differences are shown. code(action,args?): fields {table,tenant?} is the sheet of a table (counts, never values); consumers {table,column} lists who reads and writes a column in the backend (an estimate). If a tool fails, report it as is.`
+	version      = "0.5.0"
+	instructions = `query(sql): one read-only statement (SELECT, SHOW, DESCRIBE, EXPLAIN, WITH). The answer is TSV with a header; \N is NULL; rows and cells are capped, so refine with WHERE or fewer columns. page(action,args?): test a screen in Chrome; start with page(help). check(sent,table,where,map,after?,at?,tenant?): sent is a request page captured ("POST /api/quotes"), where {column:value} picks one row, map {sent field:column}, after a later captured read; only differences are shown. code(action,args?): fields {table,tenant?} is the sheet of a table (counts, never values); consumers {table,column} lists who reads and writes a column in the backend (an estimate); map {module,walkthrough?} the routes, calls and screens of a front module; map_back {query} from them to endpoint, controller, service and table. If a tool fails, report it as is.`
 )
 
 // query answers a query call: plain text on success, and on failure a text that starts with "Failed:" and names the next step, marked as an error.
@@ -42,10 +42,10 @@ func newServer(s *source, p *pageTool) *mcp.Server {
 		Name:        "page",
 		Description: "Test a screen in Chrome (Claude in Chrome): returns text or JavaScript to run with javascript_tool. page(help) lists the actions.",
 	}, p.tool)
-	cd := &coder{s: s, backend: os.Getenv("WEBSCOPE_BACKEND")}
+	cd := &coder{s: s, backend: os.Getenv("WEBSCOPE_BACKEND"), front: os.Getenv("WEBSCOPE_FRONT")}
 	mcp.AddTool(srv, &mcp.Tool{
 		Name:        "code",
-		Description: "Read the project's code: fields of a table, consumers of a column.",
+		Description: "Read the project's code: fields, consumers, map, map_back.",
 		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true},
 		InputSchema: codeSchema,
 	}, cd.tool)
