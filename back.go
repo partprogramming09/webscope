@@ -250,6 +250,8 @@ func (c *coder) mapBack(args map[string]any) (string, error) {
 		}
 	}
 	out = append(out, "## backend")
+	head, apis := out, []string{}
+	out = nil
 	var controllers, services, models []string
 	add := func(list *[]string, v string) {
 		if v != "" && !slicesContains(*list, v) {
@@ -281,7 +283,7 @@ func (c *coder) mapBack(args map[string]any) (string, error) {
 		if len(cross) > 0 {
 			l += "  <- " + strings.Join(cross, ", ")
 		}
-		out = append(out, l)
+		apis = append(apis, l)
 	}
 	var orphan []string
 	for u := range requested {
@@ -321,5 +323,17 @@ func (c *coder) mapBack(args map[string]any) (string, error) {
 	if len(chosen) == 0 && len(found) == 0 {
 		return fmt.Sprintf("no module or route contains «%s»", query), nil
 	}
-	return capOut(strings.Join(out, "\n")), nil
+	// The endpoints are the long part: when they do not fit, the last ones go and the services and tables stay.
+	room := maxBytes - len(strings.Join(head, "\n")) - len(strings.Join(out, "\n")) - 120
+	var shown []string
+	for _, l := range apis {
+		if room -= len(l) + 1; room < 0 {
+			break
+		}
+		shown = append(shown, l)
+	}
+	if len(shown) < len(apis) {
+		shown = append(shown, fmt.Sprintf("(… and %d more endpoints not shown: narrow the query)", len(apis)-len(shown)))
+	}
+	return capOut(strings.Join(append(append(head, shown...), out...), "\n")), nil
 }

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -146,5 +147,27 @@ func TestMapNeedsItsFolderAndSaysWhich(t *testing.T) {
 	c.backend = ""
 	if _, err := code(t, c, "map_back", map[string]any{"query": "quotes"}); err == nil || !strings.Contains(err.Error(), "WEBSCOPE_BACKEND") {
 		t.Errorf("map_back without WEBSCOPE_BACKEND: %v", err)
+	}
+}
+
+func TestMapBackKeepsTheTablesWhenThereAreMoreEndpointsThanFit(t *testing.T) {
+	c := mapSetup(t)
+	var b strings.Builder
+	b.WriteString("<?php\nuse App\\Modules\\Crm\\Quotes\\Controllers\\QuoteController;\n")
+	for i := 0; i < 400; i++ {
+		fmt.Fprintf(&b, "Route::get('quotes/extra-endpoint-number-%03d', [QuoteController::class, 'index']);\n", i)
+	}
+	if err := os.WriteFile(filepath.Join(c.backend, "app/Modules/Crm/Quotes/Routes/many.php"), []byte(b.String()), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	out, err := code(t, c, "map_back", map[string]any{"query": "quotes"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(out) > maxBytes+200 || !strings.Contains(out, "model app/Modules/Crm/Quotes/Models/Quote.php -> table app_cotizaciones") || !strings.Contains(out, "more endpoints") {
+		t.Errorf("%d bytes: the model and its table must survive and the cut must be said:\n...%s", len(out), out[max(0, len(out)-400):])
+	}
+	if !strings.Contains(out, "api GET quotes -> QuoteController@index") {
+		t.Errorf("the first endpoints must still be there")
 	}
 }
