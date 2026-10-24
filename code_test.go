@@ -28,6 +28,8 @@ func codeSetup(t *testing.T) *coder {
 	}
 	write(root, "app/Models/Quote.php", "<?php\nclass Quote extends Model {\n    protected $table = 'quotes';\n}\n")
 	write(root, "app/Services/QuoteService.php", "<?php\nclass QuoteService {\n  function show(Quote $q) {\n    return $q->estado;\n  }\n  function close($q) {\n\n    $q->update(['estado' => 'BORRADO']);\n\n  }\n}\n")
+	write(root, "app/Resources/PlainResource.php", "<?php\nreturn ['state' => $this->estado];\n") // reads the column without naming the table or the model
+	write(root, "app/Elsewhere/NotAResource.php", "<?php\n$y = $x->estado;\n")
 	write(root, "app/Http/QuoteResource.php", "<?php // resource of a Quote\nreturn ['estado' => $this->estado, 'code' => $this->code];\n") // reads only
 	write(root, "app/Other.php", "<?php\n$x = 'estado'; // does not name the table or the model\n")
 	write(root, ".env", "DB_PASSWORD=hunter2\nestado='SECRET_IN_ENV'\n")
@@ -139,7 +141,7 @@ func TestFieldsGivesTypeNullCountsAndWhoUsesEachColumnButNeverAValue(t *testing.
 	if strings.Contains(out, "SECRET_CELL_VALUE") || strings.Contains(out, "007") {
 		t.Errorf("fields shows counts, never a stored value:\n%s", out)
 	}
-	if !strings.Contains(out, "estado\tTEXT\tNO\t'X'\t3/3\t1 / 1") {
+	if !strings.Contains(out, "estado\tTEXT\tNO\t'X'\t3/3\t2 / 1") {
 		t.Errorf("estado is read by QuoteResource and written (and read) by QuoteService; the writer file is not counted again as reader:\n%s", out)
 	}
 }
@@ -385,5 +387,15 @@ func TestConsumersByTableSaysWhichFilesItSearchedAndHowToSearchAll(t *testing.T)
 	out, err = code(t, codeSetup(t), "consumers", map[string]any{"column_only": "estado"})
 	if err != nil || strings.Contains(out, "NOTE: only the files") {
 		t.Errorf("column_only searches everything, so it has no such note: %q, %v", out, err)
+	}
+}
+
+func TestConsumersByTableAlsoSearchesTheResourcesOfTheModelsModule(t *testing.T) {
+	out, err := code(t, codeSetup(t), "consumers", map[string]any{"table": "quotes", "column": "estado"})
+	if err != nil || !strings.Contains(out, "app/Resources/PlainResource.php:2") {
+		t.Errorf("a Resource that reads $this->estado without naming the table or the model must be searched: %q, %v", out, err)
+	}
+	if strings.Contains(out, "NotAResource.php") || strings.Contains(out, "Other.php") {
+		t.Errorf("only the Resources of the module are added, not every file:\n%s", out)
 	}
 }

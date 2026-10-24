@@ -136,9 +136,13 @@ func classify(ls []string, n int) string {
 // tableFiles are the PHP files that name the table or the model that declares it ($table = 'name'), and the models.
 func tableFiles(table string, files []string, all lines) ([]string, []string) {
 	var models []string
+	var moduleDirs []string // the folder above Models/: its Resources/ read the columns of the model as $this->COLUMN, without naming the table or the model
 	for _, h := range grep(regexp.MustCompile(`\$table\s*=\s*['"]`+regexp.QuoteMeta(table)+`['"]`), files, all) {
 		if name := strings.TrimSuffix(filepath.Base(h.file), ".php"); name != "" {
 			models = append(models, name)
+		}
+		if filepath.Base(filepath.Dir(h.file)) == "Models" {
+			moduleDirs = append(moduleDirs, filepath.Dir(filepath.Dir(h.file)))
 		}
 	}
 	sort.Strings(models)
@@ -152,6 +156,14 @@ func tableFiles(table string, files []string, all lines) ([]string, []string) {
 		if !seen[h.file] {
 			seen[h.file] = true
 			used = append(used, h.file)
+		}
+	}
+	for _, f := range files {
+		for _, d := range moduleDirs {
+			if !seen[f] && strings.HasPrefix(f, d+string(filepath.Separator)+"Resources"+string(filepath.Separator)) {
+				seen[f] = true
+				used = append(used, f)
+			}
 		}
 	}
 	return used, slicesCompact(models)
@@ -227,7 +239,7 @@ func (c *coder) consumers(args map[string]any) (string, error) {
 			m = "(no model; DB::table)"
 		}
 		fmt.Fprintf(&b, "model: %s · %d files use the table\n", m, len(used))
-		fmt.Fprintf(&b, "NOTE: only the files that name the table or the model were searched; a Resource that reads $this->COLUMN may not name them: column_only searches the whole backend (more noise)\n")
+		fmt.Fprintf(&b, "NOTE: only the files that name the table or the model, and the Resources of their module, were searched; another file that reads $this->COLUMN may not name them: column_only searches the whole backend (more noise)\n")
 	}
 	if len([]rune(col)) < 4 {
 		fmt.Fprintf(&b, "NOTE: '%s' is short; expect noise\n", col)
