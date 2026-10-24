@@ -29,7 +29,7 @@ var pageJS string
 const (
 	maxCaptureBody = 256 << 10 // a capture bigger than this is refused (413)
 	maxCaptures    = 50        // requests kept; the oldest go first
-	storeClip      = 2000      // bytes of each body kept
+	storeClip      = 16 << 10  // bytes of each body kept (check compares them whole; a list answer of Acme passed 2000)
 	showClip       = 600       // bytes of each body shown by payloads
 	defaultShown   = 10        // requests shown by payloads unless limit says otherwise
 )

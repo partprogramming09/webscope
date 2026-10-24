@@ -60,6 +60,19 @@ func (s *source) conn(database string) (*sql.DB, string, error) {
 	return db, driver, nil
 }
 
+// open is the connection to the URL's database, or to the database of tenant (an fqdn) found in the central one.
+func (s *source) open(ctx context.Context, tenant string) (*sql.DB, string, error) {
+	db, driver, err := s.conn("")
+	if err != nil || tenant == "" {
+		return db, driver, err
+	}
+	name, err := tenantDatabase(ctx, db, driver, s.tenantQuery, tenant)
+	if err != nil {
+		return nil, "", err
+	}
+	return s.conn(name)
+}
+
 // answer checks the statement, runs it and returns the text for the agent; no error text carries the password of the URL.
 func (s *source) answer(ctx context.Context, in queryArgs) (string, error) {
 	pw := password(s.url)
@@ -68,18 +81,9 @@ func (s *source) answer(ctx context.Context, in queryArgs) (string, error) {
 	if err != nil {
 		return fail(err)
 	}
-	db, driver, err := s.conn("")
+	db, driver, err := s.open(ctx, in.Tenant)
 	if err != nil {
 		return fail(err)
-	}
-	if in.Tenant != "" {
-		name, err := tenantDatabase(ctx, db, driver, s.tenantQuery, in.Tenant)
-		if err != nil {
-			return fail(err)
-		}
-		if db, driver, err = s.conn(name); err != nil {
-			return fail(err)
-		}
 	}
 	out, err := runQuery(ctx, db, driver, stmt, rowLimit(in.Limit))
 	if err != nil {

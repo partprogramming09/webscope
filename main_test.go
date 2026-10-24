@@ -23,7 +23,7 @@ func connect(t *testing.T, s *source) *mcp.ClientSession {
 	return cs
 }
 
-func TestOnlyQueryAndPageAreOffered(t *testing.T) {
+func TestOnlyQueryPageAndCheckAreOffered(t *testing.T) {
 	res, err := connect(t, &source{}).ListTools(context.Background(), nil)
 	if err != nil {
 		t.Fatal(err)
@@ -32,11 +32,14 @@ func TestOnlyQueryAndPageAreOffered(t *testing.T) {
 	for _, tool := range res.Tools {
 		tools[tool.Name] = tool
 	}
-	if len(tools) != 2 || tools["query"] == nil || tools["page"] == nil {
+	if len(tools) != 3 || tools["query"] == nil || tools["page"] == nil || tools["check"] == nil {
 		t.Fatalf("tools = %v", res.Tools)
 	}
 	if a := tools["query"].Annotations; a == nil || !a.ReadOnlyHint {
 		t.Error("query is not marked read-only")
+	}
+	if a := tools["check"].Annotations; a == nil || !a.ReadOnlyHint {
+		t.Error("check is not marked read-only")
 	}
 	// page is not read-only: the snippets it hands out can fill and click in the app (writes go through the screen, ROADMAP rule 1).
 	if a := tools["page"].Annotations; a != nil && a.ReadOnlyHint {
