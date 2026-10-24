@@ -101,11 +101,15 @@ func indexModules(base string) (map[string]*frontModule, []string, error) {
 		if slicesContains(parts, "stores") {
 			m.stores = append(m.stores, rel)
 		}
-		for i, l := range strings.Split(text, "\n") {
-			for _, h := range httpCall.FindAllStringSubmatch(l, -1) {
-				url := h[2] + h[3] + h[4]
-				m.calls = append(m.calls, fmt.Sprintf("%s %s  %s:%d", strings.ToUpper(h[1]), url, rel, i+1))
+		// The whole text, not line by line: a call with a generic often has its URL on the next line. The line is where the call starts.
+		for _, h := range httpCall.FindAllStringSubmatchIndex(text, -1) {
+			var url string
+			for g := 4; g <= 8; g += 2 {
+				if h[g] >= 0 {
+					url = text[h[g]:h[g+1]]
+				}
 			}
+			m.calls = append(m.calls, fmt.Sprintf("%s %s  %s:%d", strings.ToUpper(text[h[2]:h[3]]), url, rel, lineAt(text, h[0])))
 		}
 	}
 	return mods, names, nil

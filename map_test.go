@@ -36,7 +36,7 @@ func mapSetup(t *testing.T) *coder {
 import { useQuotes } from '../composables/useQuotes'
 </script>
 `)
-	write(front, m+"composables/useQuotes.ts", "export function useQuotes() {\n  api.get('/api/quotes?page=1')\n  api.get<Quote>(`/api/quotes/${id}`)\n  http.post(\"/api/quotes\", body)\n}\n")
+	write(front, m+"composables/useQuotes.ts", "export function useQuotes() {\n  api.get('/api/quotes?page=1')\n  api.get<Quote>(`/api/quotes/${id}`)\n  http.post(\"/api/quotes\", body)\n  api.put<{ ok: boolean }>(\n    `/api/quotes/${id}/lines`,\n    body\n  )\n}\n")
 	write(front, m+"stores/quoteStore.ts", "export const useQuoteStore = defineStore('quote', {})\n")
 	write(front, m+"constants/QuoteStatus.ts", "export const QuoteStatus = {\n  ENPROCESO: 'ENPROCESO',\n  APROBADA: 'APROBADA',\n}\n")
 	write(front, "src/modules/crm/quotes/node_modules/dep/x.ts", "api.get('/api/SECRET_IN_NODE_MODULES')\n")
@@ -64,7 +64,7 @@ func TestMapListsRoutesCallsComposablesAndStores(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, want := range []string{"## crm/quotes", "route /crm/quotes (quotes) -> @/modules/crm/quotes/views/QuoteIndex.vue", "routes/QuotesRoutes.ts:4",
-		"route /crm/quotes/:quoteId (quotes-show)", "api GET /api/quotes?page=1", "composables/useQuotes.ts:2", "api GET /api/quotes/${id}", `api POST /api/quotes  `,
+		"route /crm/quotes/:quoteId (quotes-show)", "api GET /api/quotes?page=1", "composables/useQuotes.ts:2", "api GET /api/quotes/${id}", `api POST /api/quotes  `, "api PUT /api/quotes/${id}/lines  crm/quotes/composables/useQuotes.ts:5",
 		"composable crm/quotes/composables/useQuotes.ts", "store crm/quotes/stores/quoteStore.ts"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("lacks %q:\n%s", want, out)
@@ -83,7 +83,7 @@ func TestMapWalkthroughGivesActionsPermissionsLinksFieldsAndStatuses(t *testing.
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, want := range []string{"### crm/quotes/views/QuoteIndex.vue [useQuotes: GET×2 POST]", "action 3 openCreate if can('quotes.create') «Nueva»",
+	for _, want := range []string{"### crm/quotes/views/QuoteIndex.vue [useQuotes: GET×2 POST PUT]", "action 3 openCreate if can('quotes.create') «Nueva»",
 		"permission 7 v-if=can('quotes.delete')", "link 4 '/crm/quotes/1'", "fields 5 client*, notes", "statuses ENPROCESO APROBADA  crm/quotes/constants/QuoteStatus.ts"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("lacks %q:\n%s", want, out)
