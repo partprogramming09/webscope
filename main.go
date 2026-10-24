@@ -1,5 +1,5 @@
-// Command webscope is an MCP server over stdio. Version 0.1 has one tool, query: read-only SQL against the database in WEBSCOPE_DB_URL,
-// answered as short TSV so the agent spends few tokens.
+// Command webscope is an MCP server over stdio. Two tools: query, read-only SQL against the database in WEBSCOPE_DB_URL answered as short TSV,
+// and page, snippets for testing a screen in Chrome (WEBSCOPE_APP_URL) so the agent spends few tokens.
 package main
 
 import (
@@ -13,8 +13,8 @@ import (
 )
 
 const (
-	version      = "0.2.0"
-	instructions = `query(sql): one read-only statement (SELECT, SHOW, DESCRIBE, EXPLAIN, WITH). The answer is TSV with a header; \N is NULL; rows and cells are capped, so refine with WHERE or fewer columns. If a tool fails, report it as is.`
+	version      = "0.3.0"
+	instructions = `query(sql): one read-only statement (SELECT, SHOW, DESCRIBE, EXPLAIN, WITH). The answer is TSV with a header; \N is NULL; rows and cells are capped, so refine with WHERE or fewer columns. page(action,args?): test a screen in Chrome; start with page(help). If a tool fails, report it as is.`
 )
 
 // query answers a query call: plain text on success, and on failure a text that starts with "Failed:" and names the next step, marked as an error.
@@ -31,13 +31,17 @@ func failure(err error) string {
 	return "Failed: " + strings.TrimRight(err.Error(), ". ") + ". Next: fix the statement or the connection (WEBSCOPE_DB_URL) and call again."
 }
 
-func newServer(s *source) *mcp.Server {
+func newServer(s *source, p *pageTool) *mcp.Server {
 	srv := mcp.NewServer(&mcp.Implementation{Name: "webscope", Version: version}, &mcp.ServerOptions{Instructions: instructions})
 	mcp.AddTool(srv, &mcp.Tool{
 		Name:        "query",
 		Description: "Read-only SQL on the project database. One statement. Answer: TSV with header, capped.",
 		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true},
 	}, s.query)
+	mcp.AddTool(srv, &mcp.Tool{
+		Name:        "page",
+		Description: "Test a screen in Chrome (Claude in Chrome): returns text or JavaScript to run with javascript_tool. page(help) lists the actions.",
+	}, p.tool)
 	return srv
 }
 
@@ -53,7 +57,9 @@ func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer stop()
 	fmt.Fprintf(os.Stderr, "webscope %s\n", version)
-	if err := newServer(&source{url: os.Getenv("WEBSCOPE_DB_URL"), tenantQuery: tenantLookup()}).Run(ctx, &mcp.StdioTransport{}); err != nil && ctx.Err() == nil {
+	page := newPage(os.Getenv("WEBSCOPE_APP_URL"))
+	page.life = ctx
+	if err := newServer(&source{url: os.Getenv("WEBSCOPE_DB_URL"), tenantQuery: tenantLookup()}, page).Run(ctx, &mcp.StdioTransport{}); err != nil && ctx.Err() == nil {
 		fmt.Fprintln(os.Stderr, "webscope:", err)
 		os.Exit(1)
 	}

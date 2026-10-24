@@ -113,7 +113,7 @@ func TestTheToolOffersTheTenantArgumentAndStaysSmall(t *testing.T) {
 	if !strings.Contains(string(raw), `"tenant"`) {
 		t.Errorf("the schema has no tenant argument: %s", raw)
 	}
-	if len(raw) > 700 {
-		t.Errorf("tools/list is %d bytes, the budget for this version is 700", len(raw))
+	if len(raw) > 1300 {
+		t.Errorf("tools/list is %d bytes, the budget for this version is 1300", len(raw))
 	}
 }
