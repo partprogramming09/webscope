@@ -46,12 +46,20 @@ func checkDialect(stmt string, sqlite bool) (string, error) {
 	if first := firstWord(code); !allowed[strings.ToUpper(first)] {
 		return "", fmt.Errorf("the statement must start with SELECT, SHOW, DESCRIBE, DESC, EXPLAIN or WITH, not %q", first)
 	}
+	isWith, prev := strings.EqualFold(firstWord(code), "WITH"), ""
 	for _, w := range strings.FieldsFunc(code, func(r rune) bool {
 		return !unicode.IsLetter(r) && !unicode.IsDigit(r) && r != '_' && r != '$' // '@' separates: INTO@x is INTO followed by a variable
 	}) {
 		if strings.EqualFold(w, "INTO") {
 			return "", errors.New("INTO writes files or variables")
 		}
+		if isWith && (strings.EqualFold(w, "DELETE") || strings.EqualFold(w, "UPDATE") || ((strings.EqualFold(w, "INSERT") || strings.EqualFold(w, "REPLACE")) && !calledAsFunction(code, w))) {
+			return "", fmt.Errorf("a WITH that ends in %s is a write", strings.ToUpper(w))
+		}
+		if strings.EqualFold(prev, "FOR") && (strings.EqualFold(w, "UPDATE") || strings.EqualFold(w, "SHARE")) {
+			return "", errors.New("FOR UPDATE and FOR SHARE take locks that others wait for")
+		}
+		prev = w
 		if refused(w) {
 			return "", fmt.Errorf("%s is not allowed: it reads a file of the server, takes a lock that others wait for, or changes the session", strings.ToUpper(w))
 		}
@@ -70,10 +78,35 @@ var quotedName = regexp.MustCompile("`([^`]*)`|\"([^\"]*)\"|\\[([^\\]]*)\\]")
 // refused says whether w is a word the guard never lets through: PRAGMA can switch off the read-only mode of SQLite even after EXPLAIN.
 func refused(w string) bool {
 	switch strings.ToUpper(strings.TrimSpace(w)) {
-	case "LOAD_FILE", "GET_LOCK", "PRAGMA":
+	case "LOAD_FILE", "GET_LOCK", "PRAGMA", "ATTACH", "DETACH":
 		return true
 	}
 	return false
+}
+
+// calledAsFunction says whether every occurrence of the word w in code is followed by "(": INSERT(...) and REPLACE(...) are functions that read.
+func calledAsFunction(code, w string) bool {
+	lower, w := strings.ToLower(code), strings.ToLower(w)
+	for from := 0; ; {
+		i := strings.Index(lower[from:], w)
+		if i < 0 {
+			return true
+		}
+		end := from + i + len(w)
+		if end < len(lower) && (lower[end] == '_' || lower[end] >= 'a' && lower[end] <= 'z' || lower[end] >= '0' && lower[end] <= '9') {
+			from = end // part of a longer name
+			continue
+		}
+		if start := from + i; start > 0 && (lower[start-1] == '_' || lower[start-1] >= 'a' && lower[start-1] <= 'z' || lower[start-1] >= '0' && lower[start-1] <= '9') {
+			from = end
+			continue
+		}
+		rest := strings.TrimLeft(lower[end:], " \t\r\n")
+		if !strings.HasPrefix(rest, "(") {
+			return false
+		}
+		from = end
+	}
 }
 
 // firstWord is the leading run of letters of code, or its first character when it starts with anything else.

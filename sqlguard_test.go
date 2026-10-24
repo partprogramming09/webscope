@@ -183,3 +183,22 @@ func TestNoStatementTheGuardAcceptsWritesInSQLite(t *testing.T) {
 	}
 	t.Logf("%d statements tried, %d accepted by the guard, none wrote", tried, accepted)
 }
+
+func TestAWithThatEndsInAWriteIsRefusedByTheGuardItselfAndATableFunctionIsNot(t *testing.T) {
+	for _, q := range []string{
+		"WITH x AS (SELECT 1) DELETE FROM t", "with x as (select 1) update t set a = 99", "WITH x AS (SELECT 1) INSERT t SELECT * FROM x",
+		"WITH x AS (SELECT 1) REPLACE t SELECT * FROM x", "EXPLAIN ATTACH DATABASE 'f.db' AS evil", "SELECT 1 FROM t FOR UPDATE", "SELECT 1; DETACH evil",
+	} {
+		if out, err := checkSQL(q); err == nil {
+			t.Errorf("%q was let through as %q", q, out)
+		}
+	}
+	for _, q := range []string{
+		"WITH x AS (SELECT 1 AS a) SELECT REPLACE(a, '1', '2'), INSERT('abc', 1, 1, 'x') FROM x", "WITH updates AS (SELECT 1 AS deleted) SELECT deleted FROM updates",
+		"SELECT `update`, `delete` FROM t", "WITH x AS (SELECT 'DELETE UPDATE' AS w) SELECT w FROM x",
+	} {
+		if _, err := checkSQL(q); err != nil {
+			t.Errorf("%q is a read and was refused: %v", q, err)
+		}
+	}
+}
