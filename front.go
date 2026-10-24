@@ -182,7 +182,7 @@ func (c *coder) mapFront(args map[string]any) (string, error) {
 		}
 	}
 	if len(out) == 1 {
-		return fmt.Sprintf("no module contains «%s»", echo(filter)), nil
+		return fmt.Sprintf("no module contains «%s». Next: module is a part of the path of a front module, such as crm/quotes", echo(filter)), nil
 	}
 	return capOut(strings.Join(out, "\n")), nil
 }

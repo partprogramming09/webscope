@@ -216,3 +216,14 @@ func TestACallThatAddsAnIdAfterASlashIsTheShowEndpointNotTheList(t *testing.T) {
 		t.Errorf("it is the call of the show endpoint: %s", show)
 	}
 }
+
+func TestAMapBackThatFindsNothingSaysWhatToTry(t *testing.T) {
+	out, err := code(t, mapSetup(t), "map_back", map[string]any{"query": "aprobar cotización"})
+	if err != nil || !strings.Contains(out, "no module or route contains") || !strings.Contains(out, "words of an API address") || !strings.Contains(out, "in English") {
+		t.Errorf("the answer to a query in Spanish must say that the code is in English and what a query can be: %q, %v", out, err)
+	}
+	out, err = code(t, mapSetup(t), "map", map[string]any{"module": "zzz"})
+	if err != nil || !strings.Contains(out, "no module contains") || !strings.Contains(out, "crm/quotes") {
+		t.Errorf("map must say what a module is: %q, %v", out, err)
+	}
+}

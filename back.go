@@ -352,7 +352,7 @@ func (c *coder) mapBack(args map[string]any) (string, error) {
 		out = append(out, fmt.Sprintf("model %s -> table %s", relOf(f), t))
 	}
 	if len(chosen) == 0 && len(found) == 0 {
-		return fmt.Sprintf("no module or route contains «%s»", echo(query)), nil
+		return fmt.Sprintf("no module or route contains «%s». Next: query is the path of a front module (crm/quotes) or words of an API address (quote approve); the names in the code are in English, so a query in another language finds nothing", echo(query)), nil
 	}
 	// The endpoints are the long part: when they do not fit, the last ones go and the services and tables stay.
 	room := maxBytes - len(strings.Join(head, "\n")) - len(strings.Join(out, "\n")) - 120
