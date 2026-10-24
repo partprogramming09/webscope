@@ -13,6 +13,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
@@ -30,6 +31,9 @@ type coder struct {
 	s       *source
 	backend string
 	front   string
+
+	snapMu sync.Mutex
+	snaps  map[string]*snapshot // in memory only: they are lost when the server restarts
 }
 
 type codeArgs struct {
@@ -172,12 +176,16 @@ func (c *coder) do(ctx context.Context, in codeArgs) (string, error) {
 		return c.consumers(in.Args)
 	case "fields":
 		return c.fields(ctx, in.Args)
+	case "snap":
+		return c.snapSave(ctx, in.Args)
+	case "snap_diff":
+		return c.snapDiff(ctx, in.Args)
 	case "map":
 		return c.mapFront(in.Args)
 	case "map_back":
 		return c.mapBack(in.Args)
 	}
-	return "", fmt.Errorf("unknown action %q: fields {table, tenant?}, consumers {table, column} or {column_only}, map {module, walkthrough?} or map_back {query}", in.Action)
+	return "", fmt.Errorf("unknown action %q: fields {table, tenant?}, consumers {table, column} or {column_only}, map {module, walkthrough?}, map_back {query}, snap {name, sql, key?, tenant?} or snap_diff {name}", in.Action)
 }
 
 // consumers lists who reads and who writes a column in the PHP of WEBSCOPE_BACKEND.

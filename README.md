@@ -1,6 +1,6 @@
 # webscope 0.5
 
-Four MCP tools for AI agents that spend few tokens. `query`: read-only SQL, answered as short TSV (header, `\N` for NULL, rows and cells capped). `page`: test a screen in your Chrome through Claude in Chrome. `check`: compare one saved row with what the screen sent and read back. `code`: read the project's code (`fields` of a table, `consumers` of a column, `map` of a front module, `map_back` from a screen to the table).
+Four MCP tools for AI agents that spend few tokens. `query`: read-only SQL, answered as short TSV (header, `\N` for NULL, rows and cells capped). `page`: test a screen in your Chrome through Claude in Chrome. `check`: compare one saved row with what the screen sent and read back. `code`: read the project's code (`fields` of a table, `consumers` of a column, `map` of a front module, `map_back` from a screen to the table) and see what an action on the screen wrote (`snap`, `snap_diff`).
 
 ## Build and register (Claude Code)
 
@@ -44,6 +44,8 @@ In Acme (development), `fields app_cotizaciones` gives the 42 columns of the tab
 `map {module, walkthrough?}` lists, for the front modules whose path contains `module` (e.g. `crm/quotes`): the routes with their view and `file:line`, the HTTP calls (`axios`, `http` or `api` with a URL in quotes on the same line), the composables and the stores. With `walkthrough` it lists instead what can be clicked: actions with their `v-if`, permissions (`can(...)`), links, form fields (`name*` is required), tabs and statuses. `map_back {query}` takes a front module or a part of an API address and gives each endpoint with its controller and the line of the method, the front call that uses it, the services and the models with their table. The routes are deduced from `app/Modules/**/Routes/*.php`; no `artisan` is run, and `--required`, `--seen`, `--coverage` and the saved walkthroughs of the old project are not here. Answers stop at 8000 bytes.
 
 In Acme (development), `map crm/quotes` gives 2 routes and 49 calls, and a `grep` of the module finds 53 lines with a call: the 4 that `map` does not list have the URL on the next line, which it does not read. `map_back crm/quotes` finds 47 endpoints and their controllers with the line of each method.
+
+`snap {name, sql, key?, tenant?}` keeps in memory the result of a read-only query, by a key column (the first by default; up to 2000 rows and 20 snapshots), and `snap_diff {name}` repeats the query and shows only what changed: `new KEY: col=value`, `deleted KEY` and, for a changed row, each column as `before → after` (NULL is `\N`, an empty text `''`, a value is cut at 40 characters). It answers "what did this action really write", for example the child rows that saving a quote leaves. The snapshots are lost when the server restarts, and a text value that is exactly `\N` reads as NULL. Against Acme (development), a snapshot of the 54 quotes followed by a diff with nothing done says `54 rows before, 54 now: no changes`.
 
 ## Not in this version
 

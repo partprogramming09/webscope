@@ -183,3 +183,104 @@ func TestFieldsCutsAnAnswerThatIsTooBigAndSaysSo(t *testing.T) {
 		t.Errorf("%d bytes: %v\n%.300s", len(out), err, out)
 	}
 }
+
+// writeDB is a writable connection to the SQLite file of c: the tool itself only reads, the test plays the part of "an action on the screen".
+func writeDB(t *testing.T, c *coder) *sql.DB {
+	t.Helper()
+	db, err := sql.Open("sqlite", strings.TrimPrefix(c.s.url, "sqlite://"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { db.Close() })
+	return db
+}
+
+func TestSnapSaysNothingChangedWhenNothingDid(t *testing.T) {
+	c := codeSetup(t)
+	out, err := code(t, c, "snap", map[string]any{"name": "q", "sql": "SELECT id, estado, nota FROM quotes", "key": "id"})
+	if err != nil || !strings.Contains(out, "3 rows") {
+		t.Fatalf("%q, %v", out, err)
+	}
+	if out, err = code(t, c, "snap_diff", map[string]any{"name": "q"}); err != nil || !strings.Contains(out, "no changes") {
+		t.Errorf("%q, %v", out, err)
+	}
+}
+
+func TestSnapShowsNewDeletedAndChangedRowsWithBeforeAndAfter(t *testing.T) {
+	c := codeSetup(t)
+	if _, err := code(t, c, "snap", map[string]any{"name": "q", "sql": "SELECT id, estado, nota, code FROM quotes", "key": "id"}); err != nil {
+		t.Fatal(err)
+	}
+	db := writeDB(t, c)
+	for _, q := range []string{
+		"UPDATE quotes SET estado = 'Z' WHERE id = '1'",
+		"UPDATE quotes SET nota = '' WHERE id = '2'", // NULL to empty: a change, and it must be visible
+		"DELETE FROM quotes WHERE id = '3'",
+		"INSERT INTO quotes (id, estado, nota, code) VALUES ('4', 'N', 'ñandú 😀', '9')",
+	} {
+		if _, err := db.Exec(q); err != nil {
+			t.Fatal(err)
+		}
+	}
+	out, err := code(t, c, "snap_diff", map[string]any{"name": "q"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{"3 rows before, 3 now", "changed 1: estado A → Z", "changed 2: nota \\N → ''", "deleted 3", "new 4:", "ñandú 😀"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("lacks %q:\n%s", want, out)
+		}
+	}
+	if strings.Contains(out, "code 007") || strings.Contains(out, "changed 1: estado A → Z, code") {
+		t.Errorf("a column that did not change must not be listed:\n%s", out)
+	}
+}
+
+func TestSnapRefusesWhatItCannotCompareNorKeepSafely(t *testing.T) {
+	c := codeSetup(t)
+	if _, err := code(t, c, "snap", map[string]any{"name": "q", "sql": "DELETE FROM quotes"}); err == nil {
+		t.Error("a statement that is not a read must be refused")
+	}
+	if _, err := code(t, c, "snap", map[string]any{"name": "q", "sql": "SELECT estado FROM quotes", "key": "estado"}); err != nil {
+		t.Errorf("distinct values are a valid key: %v", err)
+	}
+	if _, err := code(t, c, "snap", map[string]any{"name": "dup", "sql": "SELECT id, estado FROM quotes UNION ALL SELECT id, estado FROM quotes"}); err == nil || !strings.Contains(err.Error(), "not unique") {
+		t.Errorf("a key that repeats: %v", err)
+	}
+	if _, err := code(t, c, "snap", map[string]any{"name": "bad name!", "sql": "SELECT id FROM quotes"}); err == nil || !strings.Contains(err.Error(), "not valid") {
+		t.Errorf("the name: %v", err)
+	}
+	if _, err := code(t, c, "snap", map[string]any{"name": "k", "sql": "SELECT id FROM quotes", "key": "nope"}); err == nil || !strings.Contains(err.Error(), "key") {
+		t.Errorf("a key that is not a column: %v", err)
+	}
+	if _, err := code(t, c, "snap_diff", map[string]any{"name": "missing"}); err == nil || !strings.Contains(err.Error(), "q") {
+		t.Errorf("an unknown snapshot names the known ones: %v", err)
+	}
+}
+
+func TestSnapRefusesAResultTooBigToKeepAndCutsAnAnswerThatIsTooBig(t *testing.T) {
+	c := codeSetup(t)
+	db := writeDB(t, c)
+	tx, _ := db.Begin()
+	for i := 0; i < maxSnapRows+1; i++ {
+		tx.Exec("INSERT INTO quotes (id, estado) VALUES (?, 'B')", fmt.Sprintf("big%05d", i))
+	}
+	tx.Commit()
+	if _, err := code(t, c, "snap", map[string]any{"name": "all", "sql": "SELECT id, estado FROM quotes"}); err == nil || !strings.Contains(err.Error(), "WHERE") {
+		t.Errorf("too many rows must say to narrow the query: %v", err)
+	}
+	if _, err := code(t, c, "snap", map[string]any{"name": "some", "sql": "SELECT id, estado FROM quotes WHERE id LIKE 'big%'", "key": "id"}); err == nil {
+		// still too many rows (maxSnapRows+1): the same refusal
+		t.Error("the filtered query has more rows than the limit")
+	}
+	if _, err := code(t, c, "snap", map[string]any{"name": "few", "sql": "SELECT id, estado, nota FROM quotes WHERE id IN ('1','2','3')", "key": "id"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec("UPDATE quotes SET nota = ? WHERE id = '1'", strings.Repeat("y", 500)); err != nil {
+		t.Fatal(err)
+	}
+	out, _ := code(t, c, "snap_diff", map[string]any{"name": "few"})
+	if strings.Contains(out, strings.Repeat("y", 60)) {
+		t.Errorf("a value must be cut at 40 characters:\n%s", out)
+	}
+}
