@@ -1,13 +1,13 @@
-# webscope 0.4
+# webscope 0.5a
 
-Three MCP tools for AI agents that spend few tokens. `query`: read-only SQL, answered as short TSV (header, `\N` for NULL, rows and cells capped). `page`: test a screen in your Chrome through Claude in Chrome. `check`: compare one saved row with what the screen sent and read back.
+Four MCP tools for AI agents that spend few tokens. `query`: read-only SQL, answered as short TSV (header, `\N` for NULL, rows and cells capped). `page`: test a screen in your Chrome through Claude in Chrome. `check`: compare one saved row with what the screen sent and read back. `code`: read the project's PHP (`fields` of a table, `consumers` of a column).
 
 ## Build and register (Claude Code)
 
     go build -o webscope .        # Go 1.27 or newer
     claude mcp add webscope -e WEBSCOPE_DB_URL='mysql://user:pass@127.0.0.1:3306/dbname' -- /absolute/path/to/webscope
 
-`WEBSCOPE_DB_URL` is `mysql://user:password@host:port/db` or `sqlite:///path/file.db`. Percent-encode special characters in the password.
+`WEBSCOPE_DB_URL` is `mysql://user:password@host:port/db` or `sqlite:///path/file.db`. Percent-encode special characters in the password. `WEBSCOPE_BACKEND` is the folder with the project's PHP (the `code` tool needs it; `WEBSCOPE_FRONT` is reserved for `map`, the next step).
 
 ## The tool
 
@@ -33,6 +33,14 @@ The answer is the counts (equal, `empty~`, different) and one line only for each
 
 In Acme (development), after saving a quote and deleting it from the screen, `check` shows a single difference: `status  ENPROCESO  BORRADO`. The delete is logical: the row stays, marked `BORRADO`, with its child rows.
 
+## The code tool
+
+`code(action, args?)` reads, never writes. `fields {table, tenant?}` is the sheet of a table: per column its type, null, default, how many rows have a value (`3/54`) and how many PHP files read and write it (`14 / 7`); a column with no value in any row, or that no file names, is marked. It returns counts, never a stored value, and stops at 8000 bytes. `consumers {table, column}` (or `{column_only}` to search the whole backend) lists who reads and who writes a column, `file:line`, from the files that name the table or its model (the one that declares `$table = '...'`).
+
+Both are estimates by text, and the answer says so: a use is `WRITES` when an `update`, `create`, `save`, `insert`, `fill` or `upsert` call is within 3 lines, `READS` otherwise. The column is searched as text, not as a regular expression. Only the `.php` files under `WEBSCOPE_BACKEND` are read: symbolic links are never followed, and `.env*`, `vendor`, `node_modules`, `storage` and `.git` are left out.
+
+In Acme (development), `fields app_cotizaciones` gives the 42 columns of the table, with the same counts as `query` (54 rows, `ESTADO` 54, `DESCRIPCION` 53, `MOTIVO_RECHAZO` 5); `consumers app_cotizaciones ESTADO` finds 47 uses in 21 of the 68 files that name the table or the `Quote` model, the same as a `grep` by hand. Walking 2212 PHP files takes about 0.3 s of CPU.
+
 ## Not in this version
 
-Several tenants in one call, per-tenant database users, PostgreSQL, a mapping of fields that is found by itself (`check` takes it from you). The older, larger project is `webscope-publico`. Checked against MySQL 9.7.1 and SQLite. Test: `go test ./...`
+Several tenants in one call, per-tenant database users, PostgreSQL, a mapping of fields that is found by itself (`check` takes it from you), the routes of the backend and the front (`map_back`, `map`: 0.5b). The older, larger project is `webscope-publico`. Checked against MySQL 9.7.1 and SQLite. Test: `go test ./...`

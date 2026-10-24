@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"database/sql"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -159,5 +160,26 @@ func TestFieldsWorksWithoutTheBackendAndSaysSo(t *testing.T) {
 func TestCodeRefusesAnUnknownActionAndNamesTheList(t *testing.T) {
 	if _, err := code(t, codeSetup(t), "run", nil); err == nil || !strings.Contains(err.Error(), "fields") || !strings.Contains(err.Error(), "consumers") {
 		t.Errorf("%v", err)
+	}
+}
+
+func TestFieldsCutsAnAnswerThatIsTooBigAndSaysSo(t *testing.T) {
+	c := codeSetup(t)
+	path := strings.TrimPrefix(c.s.url, "sqlite://")
+	db, err := sql.Open("sqlite", path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	cols := make([]string, 400)
+	for i := range cols {
+		cols[i] = fmt.Sprintf("column_number_%03d_with_a_long_name TEXT", i)
+	}
+	if _, err := db.Exec("CREATE TABLE wide (" + strings.Join(cols, ", ") + ")"); err != nil {
+		t.Fatal(err)
+	}
+	out, err := code(t, c, "fields", map[string]any{"table": "wide"})
+	if err != nil || len(out) > maxBytes+200 || !strings.Contains(out, "columns shown") {
+		t.Errorf("%d bytes: %v\n%.300s", len(out), err, out)
 	}
 }

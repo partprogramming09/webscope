@@ -390,7 +390,12 @@ func (c *coder) fields(ctx context.Context, args map[string]any) (string, error)
 		}
 		b.WriteString("\n" + line)
 	}
-	return b.String(), nil
+	out := b.String()
+	if len(out) > maxBytes {
+		cut := strings.LastIndex(out[:maxBytes], "\n")
+		out = out[:cut] + fmt.Sprintf("\n(%d of %d columns shown, cut at %d bytes)", strings.Count(out[:cut], "\n")-1, len(cols), maxBytes)
+	}
+	return out, nil
 }
 
 func (c *coder) tool(ctx context.Context, _ *mcp.CallToolRequest, in codeArgs) (*mcp.CallToolResult, any, error) {
