@@ -71,6 +71,8 @@ type pageTool struct {
 	mu   sync.Mutex
 	base string
 	caps []capture
+
+	refused bool // a request that held the token came from another origin than the app's
 }
 
 func newPage(appURL string) *pageTool {
@@ -166,6 +168,9 @@ func (p *pageTool) guard(next http.HandlerFunc) http.HandlerFunc {
 		}
 		if o := r.Header.Get("Origin"); o != "" {
 			if o != p.origin() {
+				p.mu.Lock()
+				p.refused = true
+				p.mu.Unlock()
 				http.Error(w, "forbidden", http.StatusForbidden)
 				return
 			}
@@ -240,6 +245,9 @@ func (p *pageTool) payloads(args map[string]any) string {
 	list := p.caps[max(0, len(p.caps)-n):]
 	var b strings.Builder
 	fmt.Fprintf(&b, "%d requests captured (showing last %d)\n", len(p.caps), len(list))
+	if p.refused { // the origin itself is not repeated: it comes from the browser, and the agent can read the tab's address with state
+		fmt.Fprintf(&b, "(requests from another origin were refused: the tab's address must be the one in WEBSCOPE_APP_URL, %s; restart the server after changing it)\n", p.origin())
+	}
 	for i, c := range list {
 		// The method and the URL come from the page under test: one line each, and short.
 		e := fmt.Sprintf("%s %s %d\n", clip(oneLine(c.M), 10), clip(oneLine(c.U), 300), c.S)

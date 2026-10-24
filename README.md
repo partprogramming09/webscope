@@ -17,7 +17,7 @@ With `tenant` (an fqdn) the query runs in that tenant's database, found in the c
 
 ## The page tool
 
-`page(action, args?)` does not drive the browser: it returns a short JavaScript snippet and you run it with Claude in Chrome's `javascript_tool`; the snippet returns the screen as compact text. Set `WEBSCOPE_APP_URL` to the app's address (`http://localhost:5173`).
+`page(action, args?)` does not drive the browser: it returns a short JavaScript snippet and you run it with Claude in Chrome's `javascript_tool`; the snippet returns the screen as compact text. Set `WEBSCOPE_APP_URL` to the address of the tab, exactly as the browser writes it: scheme, host and port (`http://localhost:5173`; a tenant on a subdomain is another origin, `http://demo.localhost:5173`). The listener refuses every other origin, so with a different address the helper still loads and `state` works, but `payloads` shows no requests; it then says that a request was refused. Restart the server after changing the variable.
 
 1. `page(load)`: one line that loads the helper. A local server on `127.0.0.1` (random port, random token per start, answers only the app's origin, caps what it receives) serves the helper and keeps the requests the page sends. Run it once per page load.
 2. `state` (URL, headings, fields, buttons, alerts, errors, table rows), `read`, `fill` (a whole form in one call; it also chooses in Vuetify `v-select` and `v-autocomplete` menus, scrolling long lists, and fails with the rows it saw when the option is missing), `click`, `press`, `simulate` (the next requests to a URL answer an HTTP error, for `fetch` and XMLHttpRequest), each returns a snippet.

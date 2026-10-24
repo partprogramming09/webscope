@@ -196,6 +196,33 @@ func TestTheServerAnswersOnlyTheAppOrigin(t *testing.T) {
 	}
 }
 
+// A tab on another address than WEBSCOPE_APP_URL (demo.localhost instead of localhost) has every capture refused and looks like a page that sent nothing.
+func TestPayloadsSaysWhenARequestFromAnotherOriginWasRefused(t *testing.T) {
+	p := testPage(t, appOrigin)
+	srv := httptest.NewServer(p.handler())
+	defer srv.Close()
+	if out, _ := askPage(t, p, "payloads", nil); strings.Contains(out, "refused") {
+		t.Errorf("nothing was refused yet: %q", out)
+	}
+	send(t, "POST", srv.URL+"/capture?t="+p.token, "http://evil.example", `{"m":"GET","u":"/x","s":200}`)
+	out, _ := askPage(t, p, "payloads", nil)
+	if !strings.Contains(out, "refused") || !strings.Contains(out, "WEBSCOPE_APP_URL") || !strings.Contains(out, appOrigin) {
+		t.Errorf("no hint about the refused origin: %q", out)
+	}
+	if strings.Contains(out, "evil") {
+		t.Errorf("the refused origin must not reach the agent: %q", out)
+	}
+	if p2 := testPage(t, appOrigin); func() bool {
+		srv2 := httptest.NewServer(p2.handler())
+		defer srv2.Close()
+		send(t, "POST", srv2.URL+"/capture?t=wrong", "http://evil.example", `{}`)
+		o, _ := askPage(t, p2, "payloads", nil)
+		return strings.Contains(o, "refused")
+	}() {
+		t.Error("a request without the token says nothing: only a page that holds the token is told about")
+	}
+}
+
 func TestTheServerCutsWhatIsTooBig(t *testing.T) {
 	p := testPage(t, appOrigin)
 	srv := httptest.NewServer(p.handler())
