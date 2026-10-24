@@ -78,11 +78,13 @@ func walkFiles(root string, want func(name string) bool) (files []string, real s
 		case err != nil || d.Type()&fs.ModeSymlink != 0:
 			return nil
 		case d.IsDir():
-			if p != real && skipDirs[d.Name()] {
+			if p != real && skipDirs[strings.ToLower(d.Name())] {
 				return filepath.SkipDir
 			}
 			return nil
-		case !want(d.Name()) || strings.HasPrefix(d.Name(), ".env"):
+		case !d.Type().IsRegular(): // a fifo or a socket named X.php would block the read for ever
+			return nil
+		case !want(d.Name()) || strings.HasPrefix(strings.ToLower(d.Name()), ".env"):
 			return nil
 		}
 		if info, err := d.Info(); err != nil || info.Size() > maxPHPBytes {

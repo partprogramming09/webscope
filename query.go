@@ -177,7 +177,15 @@ func runQuery(ctx context.Context, db *sql.DB, driver, stmt string, limit int) (
 		return "", err
 	}
 	var b strings.Builder
-	b.WriteString(show(strings.Join(cols, "\t")[:min(len(strings.Join(cols, "\t")), maxBytes/2)]) + "\n")
+	header := strings.Join(cols, "\t") // every column name stays: the values are positional; only an absurd header is cut
+	if len(header) > maxBytes/2 {
+		n := maxBytes / 2
+		for n > 0 && !utf8.RuneStart(header[n]) {
+			n--
+		}
+		header = header[:n] + "…"
+	}
+	b.WriteString(header + "\n")
 	vals, ptrs := make([]any, len(cols)), make([]any, len(cols))
 	for i := range vals {
 		ptrs[i] = &vals[i]

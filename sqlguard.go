@@ -3,6 +3,7 @@ package main
 import (
 	"errors"
 	"fmt"
+	"regexp"
 	"strings"
 	"unicode"
 )
@@ -51,11 +52,28 @@ func checkDialect(stmt string, sqlite bool) (string, error) {
 		if strings.EqualFold(w, "INTO") {
 			return "", errors.New("INTO writes files or variables")
 		}
-		if strings.EqualFold(w, "LOAD_FILE") || strings.EqualFold(w, "GET_LOCK") {
-			return "", fmt.Errorf("%s reads a file of the server or takes a lock that others wait for", strings.ToUpper(w))
+		if refused(w) {
+			return "", fmt.Errorf("%s is not allowed: it reads a file of the server, takes a lock that others wait for, or changes the session", strings.ToUpper(w))
+		}
+	}
+	// A function name can be written between quotes (MySQL runs `load_file`(...)): look inside the quoted names too.
+	for _, m := range quotedName.FindAllStringSubmatch(stmt, -1) {
+		if refused(m[1] + m[2] + m[3]) {
+			return "", fmt.Errorf("%s is not allowed, even between quotes", strings.ToUpper(strings.TrimSpace(m[1]+m[2]+m[3])))
 		}
 	}
 	return strings.TrimSpace(stmt), nil
+}
+
+var quotedName = regexp.MustCompile("`([^`]*)`|\"([^\"]*)\"|\\[([^\\]]*)\\]")
+
+// refused says whether w is a word the guard never lets through: PRAGMA can switch off the read-only mode of SQLite even after EXPLAIN.
+func refused(w string) bool {
+	switch strings.ToUpper(strings.TrimSpace(w)) {
+	case "LOAD_FILE", "GET_LOCK", "PRAGMA":
+		return true
+	}
+	return false
 }
 
 // firstWord is the leading run of letters of code, or its first character when it starts with anything else.
@@ -114,7 +132,7 @@ func mask(s string, sqlite bool) (string, error) {
 			}
 			blank(i+1, j)
 			i = j + 1
-		case c == '#' || (c == '-' && i+1 < len(b) && b[i+1] == '-' && (i+2 >= len(b) || strings.IndexByte(" \t\r\n", b[i+2]) >= 0)):
+		case c == '#' || (c == '-' && i+1 < len(b) && b[i+1] == '-' && (sqlite || i+2 >= len(b) || strings.IndexByte(" \t\r\n", b[i+2]) >= 0)): // MySQL: -- needs a space after it; SQLite: it is always a comment. # is a comment for MySQL and an illegal token for SQLite (the statement fails to prepare, nothing runs).
 			j := i
 			for j < len(b) && b[j] != '\n' {
 				j++

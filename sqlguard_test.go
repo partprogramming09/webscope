@@ -1,6 +1,7 @@
 package main
 
 import (
+	"database/sql"
 	"strings"
 	"testing"
 )
@@ -90,4 +91,95 @@ func TestIntoStuckToAnAtSignIsStillInto(t *testing.T) {
 	if _, err := checkSQL("SELECT @a, @@version, 'INTO' AS w"); err != nil {
 		t.Errorf("variables and the word in a string are reads: %v", err)
 	}
+}
+
+func TestADoubleDashIsACommentForSQLiteEvenWithoutASpaceAfterIt(t *testing.T) {
+	for _, q := range []string{"SELECT 1 --'\n;DELETE FROM items;'", "SELECT 1 --\"\n;DELETE FROM items;\"", "SELECT 1 --`\n;DELETE FROM items;`", "SELECT 1 --[\n;DELETE FROM items;]"} {
+		if out, err := checkSQL(q); err == nil {
+			t.Errorf("%q was let through as %q", q, out)
+		}
+	}
+	if _, err := checkSQL("SELECT 1 -- a comment\n, 2"); err != nil {
+		t.Errorf("a comment with a space is a comment: %v", err)
+	}
+}
+
+func TestPragmaIsRefusedWhereverItAppears(t *testing.T) {
+	for _, q := range []string{"EXPLAIN PRAGMA query_only=0", "explain pragma writable_schema=1", "EXPLAIN PRAGMA journal_mode=wal"} {
+		if _, err := checkSQL(q); err == nil {
+			t.Errorf("%q was let through", q)
+		}
+	}
+	if _, err := checkSQL("SELECT name FROM pragma_table_info('items')"); err != nil {
+		t.Errorf("the table function pragma_table_info is a read: %v", err)
+	}
+}
+
+func TestAFunctionNameBetweenQuotesIsStillTheFunction(t *testing.T) {
+	for _, q := range []string{"SELECT `load_file`('/etc/hosts')", "SELECT `GET_LOCK`('a', 1)", "SELECT \"load_file\"('/etc/hosts')", "SELECT [pragma]"} {
+		if _, err := checkSQL(q); err == nil {
+			t.Errorf("%q was let through", q)
+		}
+	}
+	if _, err := checkSQL("SELECT `name` FROM `items` WHERE `code` = 'x'"); err != nil {
+		t.Errorf("ordinary quoted names are fine: %v", err)
+	}
+}
+
+// Whatever the guard accepts must not write, even without the read-only open of SQLite: every combination of quote and comment characters
+// around a hidden DELETE is run on a scratch in-memory database when checkSQL lets it through.
+func TestNoStatementTheGuardAcceptsWritesInSQLite(t *testing.T) {
+	alphabet := []string{"'", "\"", "`", "[", "]", "-", "#", "/", "*", "\\", "\n", " ", "!"}
+	var words []string
+	var build func(prefix string, left int)
+	build = func(prefix string, left int) {
+		words = append(words, prefix)
+		if left == 0 {
+			return
+		}
+		for _, c := range alphabet {
+			build(prefix+c, left-1)
+		}
+	}
+	build("", 3)
+	tails := append([]string{""}, alphabet...)
+	for _, c := range alphabet {
+		tails = append(tails, c+c, c+"\n")
+	}
+	db, err := sql.Open("sqlite", "file:fuzz?mode=memory&cache=shared")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	db.SetMaxOpenConns(1)
+	if _, err := db.Exec("CREATE TABLE t (a)"); err != nil {
+		t.Fatal(err)
+	}
+	accepted, tried := 0, 0
+	for _, p := range words {
+		for _, q := range tails {
+			for _, stmt := range []string{"SELECT 1 " + p + ";\nDELETE FROM t;\n" + q, "SELECT 1 " + p + "\n;DELETE FROM t;" + q, "SELECT 1 " + p + "\nDELETE FROM t;" + q} {
+				tried++
+				if _, err := checkSQL(stmt); err != nil {
+					continue
+				}
+				accepted++
+				if _, err := db.Exec("INSERT INTO t VALUES (1)"); err != nil {
+					t.Fatal(err)
+				}
+				rows, err := db.Query(stmt)
+				if err == nil {
+					rows.Close()
+				}
+				var n int
+				db.QueryRow("SELECT count(*) FROM t").Scan(&n)
+				if n == 0 {
+					t.Fatalf("checkSQL accepted %q and it deleted the rows", stmt)
+				}
+				db.Exec("DELETE FROM t")
+				db.Exec("CREATE TABLE IF NOT EXISTS t (a)")
+			}
+		}
+	}
+	t.Logf("%d statements tried, %d accepted by the guard, none wrote", tried, accepted)
 }

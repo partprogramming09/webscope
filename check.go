@@ -48,24 +48,22 @@ type checkArgs struct {
 var cutMark = regexp.MustCompile(`…\(\+\d+ (bytes|chars)\)$`)
 
 // find is the last captured request, at index from or later, that matches "METHOD /path": the path of the URL, or its end after a "/".
-func (c *checker) find(spec string, from int) (capture, int, error) {
+func (c *checker) find(caps []capture, spec string, from int) (capture, int, error) {
 	method, path, ok := strings.Cut(strings.TrimSpace(spec), " ")
 	if !ok || path == "" {
 		return capture{}, 0, fmt.Errorf("%q is not METHOD /path", spec)
 	}
 	path = "/" + strings.TrimPrefix(path, "/")
-	c.p.mu.Lock()
-	defer c.p.mu.Unlock()
-	for i := len(c.p.caps) - 1; i >= from; i-- {
-		k := c.p.caps[i]
+	for i := len(caps) - 1; i >= from; i-- {
+		k := caps[i]
 		if u, err := url.Parse(k.U); err == nil && strings.EqualFold(k.M, method) && (u.Path == path || strings.HasSuffix(u.Path, path)) {
 			return k, i, nil
 		}
 	}
 	if from > 0 {
-		return capture{}, 0, fmt.Errorf("no captured request matches %q after the save (%d captured, page(payloads) lists them)", spec, len(c.p.caps))
+		return capture{}, 0, fmt.Errorf("no captured request matches %q after the save (%d captured, page(payloads) lists them)", spec, len(caps))
 	}
-	return capture{}, 0, fmt.Errorf("no captured request matches %q (%d captured, page(payloads) lists them)", spec, len(c.p.caps))
+	return capture{}, 0, fmt.Errorf("no captured request matches %q (%d captured, page(payloads) lists them)", spec, len(caps))
 }
 
 // object is the JSON object of a captured body, at a path like "quote" or "data.0" when at is not empty.
@@ -224,7 +222,10 @@ func (c *checker) compare(ctx context.Context, in checkArgs) (string, error) {
 			return "", fmt.Errorf("the name %q is not valid: letters, digits and _ only", n)
 		}
 	}
-	req, at, err := c.find(in.Sent, 0)
+	c.p.mu.Lock()
+	caps := slices.Clone(c.p.caps) // one copy for both searches: the buffer may be trimmed between them
+	c.p.mu.Unlock()
+	req, at, err := c.find(caps, in.Sent, 0)
 	if err != nil {
 		return "", err
 	}
@@ -237,7 +238,7 @@ func (c *checker) compare(ctx context.Context, in checkArgs) (string, error) {
 	}
 	var read map[string]any
 	if in.After != "" {
-		rd, _, err := c.find(in.After, at)
+		rd, _, err := c.find(caps, in.After, at)
 		if err != nil {
 			return "", err
 		}

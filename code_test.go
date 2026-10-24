@@ -7,7 +7,9 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"syscall"
 	"testing"
+	"time"
 )
 
 // codeSetup is a small Laravel-like tree with traps: a .env that names the column, a vendor folder, a symlinked file and a symlinked folder that
@@ -331,5 +333,46 @@ func TestSnapSeesAChangeThatIsFarInsideAVeryLongValue(t *testing.T) {
 	}
 	if len(out) > 1000 {
 		t.Errorf("the answer is %d bytes", len(out))
+	}
+}
+
+func TestTheWalkSkipsWhatIsNotARegularFileAndTheNamesInAnyCase(t *testing.T) {
+	c := codeSetup(t)
+	if err := syscall.Mkfifo(filepath.Join(c.backend, "app/Models/Pipe.php"), 0o644); err != nil { // reading it would block for ever
+		t.Skip("no fifo here:", err)
+	}
+	done := make(chan string, 1)
+	go func() {
+		out, _ := code(t, c, "consumers", map[string]any{"table": "quotes", "column": "estado"})
+		done <- out
+	}()
+	select {
+	case out := <-done:
+		if !strings.Contains(out, "QuoteService.php") {
+			t.Errorf("the search did not finish well: %q", out)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("a fifo named Pipe.php blocked the search")
+	}
+}
+
+func TestFileOfRefusesALinkInsideTheRootThatLeadsToASkippedFolder(t *testing.T) {
+	root := t.TempDir()
+	for rel, body := range map[string]string{"storage/framework/S.php": "<?php // SECRET_STORAGE\n", "vendor/v/V.php": "<?php // SECRET_VENDOR\n", "app/Models/Ok.php": "<?php\n"} {
+		p := filepath.Join(root, rel)
+		os.MkdirAll(filepath.Dir(p), 0o755)
+		os.WriteFile(p, []byte(body), 0o644)
+	}
+	os.Symlink(filepath.Join(root, "storage/framework"), filepath.Join(root, "app/Store"))
+	os.Symlink(filepath.Join(root, "vendor"), filepath.Join(root, "app/Lib"))
+	os.WriteFile(filepath.Join(root, "app/Models/.ENV.php"), []byte("<?php\n"), 0o644)
+	real, _ := filepath.EvalSymlinks(root)
+	for _, cls := range []string{`App\Store\S`, `App\Lib\v\V`, `Vendor\v\V`, `App\Models\.ENV`} {
+		if f := fileOf(real, cls); f != "" {
+			t.Errorf("%s resolved to %s", cls, f)
+		}
+	}
+	if fileOf(real, `App\Models\Ok`) == "" {
+		t.Error("a plain model must resolve")
 	}
 }

@@ -49,7 +49,7 @@ In Acme (development), `map crm/quotes` gives 2 routes and 53 calls, the same as
 
 ## Known limits
 
-`consumers`, `fields` and `map_back` read at most 20000 `.php` files of 2 MB each, and they stop there without saying so. `map` reads a generic up to its first `>`, so a type with `=>` inside is not recognized. `fields` counts the values of every column with one scan of the table: fine for the tables of an application, slow on a table of millions of rows. `snap` keeps a value of up to 4096 bytes whole and a longer one cut plus its hash, so a change anywhere in it still shows. `check` shows a text that differs only in spaces as `space~`, not as equal. A tool that fails with a bug answers `Failed: internal error` and the server keeps running. The code is searched by text, not parsed: every answer of `code` is an estimate.
+`consumers`, `fields` and `map_back` read at most 20000 `.php` files of 2 MB each, and they stop there without saying so. `map` reads a generic up to its first `>`, so a type with `=>` inside is not recognized. `fields` counts the values of every column with one scan of the table: fine for the tables of an application, slow on a table of millions of rows. `snap` keeps a value of up to 4096 bytes whole and a longer one cut plus its hash, so a change anywhere in it still shows. `check` shows a text that differs only in spaces as `space~`, not as equal. A tool that fails with a bug answers `Failed: internal error` and the server keeps running. The code is searched by text, not parsed: every answer of `code` is an estimate. The address of the app (`WEBSCOPE_APP_URL`) must be ASCII: a host with accents does not match the punycode that the browser sends, and `page` refuses it (it fails closed).
 
 ## Not in this version
 

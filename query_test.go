@@ -218,3 +218,10 @@ func TestACellKeepsTheTimeZoneAndTheFractionOfATime(t *testing.T) {
 		t.Error("a huge cell must be cut before it is converted")
 	}
 }
+
+func TestTheHeaderOfAnAnswerKeepsEveryColumnName(t *testing.T) {
+	out, err := ask(t, fixture(t), "SELECT id AS identifier_number_one, name AS the_name_of_the_item_that_is_long, code AS c FROM items WHERE id = 1", 0)
+	if err != nil || !strings.HasPrefix(out, "identifier_number_one\tthe_name_of_the_item_that_is_long\tc\n") {
+		t.Errorf("%q, %v", out, err)
+	}
+}

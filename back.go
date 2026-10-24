@@ -159,19 +159,30 @@ func fileRoutes(files []string, all lines) []backRoute {
 // the walk skips, or once its symbolic links are resolved is not under root (root is already the real path of the backend).
 func fileOf(root, cls string) string {
 	rel := strings.ReplaceAll(strings.Replace(cls, `App\`, "app/", 1), `\`, "/") + ".php"
-	for _, part := range strings.Split(rel, "/") {
-		if part == "" || part == ".." || skipDirs[part] {
-			return ""
-		}
+	if skipped(rel) {
+		return ""
 	}
 	real, err := filepath.EvalSymlinks(filepath.Join(root, rel))
-	if err != nil || !strings.HasPrefix(real, root+string(filepath.Separator)) || strings.HasPrefix(filepath.Base(real), ".env") {
+	if err != nil || !strings.HasPrefix(real, root+string(filepath.Separator)) {
+		return ""
+	}
+	if inside, err := filepath.Rel(root, real); err != nil || skipped(filepath.ToSlash(inside)) { // the links are resolved: the same rules apply to where they lead
 		return ""
 	}
 	if fi, err := os.Stat(real); err != nil || !fi.Mode().IsRegular() || fi.Size() > maxPHPBytes {
 		return ""
 	}
 	return real
+}
+
+// skipped says whether a path relative to the root goes through a folder the walk skips, an empty or ".." part, or is a .env, in any letter case.
+func skipped(rel string) bool {
+	for _, part := range strings.Split(rel, "/") {
+		if l := strings.ToLower(part); part == "" || part == ".." || skipDirs[l] || strings.HasPrefix(l, ".env") {
+			return true
+		}
+	}
+	return false
 }
 
 func importsOf(file, folder string) []string {
