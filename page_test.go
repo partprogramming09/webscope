@@ -328,7 +328,7 @@ mf.onmousedown=()=>{oc.innerHTML='<div class=v-overlay--active><div class=v-list
   for(let i=k;i<k+6&&i<300;i++){const d=document.createElement('div');d.className='v-list-item';d.style.cssText='position:absolute;height:20px;top:'+i*20+'px';d.textContent=OPTS[i];d.onclick=()=>{msel.textContent=OPTS[i];mi.value='C'+i};l.appendChild(d)}}
  draw();setInterval(()=>{if(l.isConnected)draw()},20)} // the list stays after a choice, like a menu on its way out
 // an autocomplete answers a search after a delay and shows two lines per row
-ai.oninput=()=>setTimeout(()=>{oc.innerHTML='<div class=v-overlay--active><div class=v-list></div></div>';for(const t of ['Demo','Otro']){if(!t.toLowerCase().includes(ai.value.toLowerCase()))continue;const d=document.createElement('div');d.className='v-list-item';d.innerHTML=t+'<br>+57300';d.onclick=()=>{ai.value=t;oc.innerHTML='';cl.textContent='cliente '+t};oc.querySelector('.v-list').appendChild(d)}},1500)
+ai.oninput=()=>setTimeout(()=>{oc.innerHTML='<div class=v-overlay--active><div class=v-list></div></div>';for(const t of ['Demo','Otro']){const q=ai.value.toLowerCase();if(!q.includes(t.toLowerCase())&&!t.toLowerCase().includes(q))continue;const d=document.createElement('div');d.className='v-list-item';d.innerHTML=t+' <small>+57300</small>';d.onclick=()=>{ai.value=t;oc.innerHTML='';cl.textContent='cliente '+t;const f=ai.closest('.v-field');f.querySelectorAll('.v-autocomplete__selection').forEach(x=>x.remove());f.insertAdjacentHTML('beforeend','<div class=v-autocomplete__selection><span class=v-autocomplete__selection-text>'+t+'</span></div>')};oc.querySelector('.v-list').appendChild(d)}},1500)
 df.onmousedown=()=>{oc.innerHTML='<div class=v-overlay--active><div class=v-list><div class=v-list-item id=u>Uno</div></div></div>';u.onclick=()=>{}} // a menu that keeps its list and does not keep the option
 on.oninput=()=>nn.textContent='outside';dn.oninput=()=>nn.textContent='dialog'
 n.onkeydown=e=>{if(e.key==='Escape')al.textContent='esc'}
@@ -416,6 +416,7 @@ func TestActionsRunInARealChrome(t *testing.T) {
 	add("fill", map[string]any{"fields": map[string]any{"Cliente": "Demo"}})                                                            // 28: the autocomplete answers late and the last menu is still in the DOM
 	add("read", map[string]any{"selector": "#cl"})                                                                                      // 29
 	steps = append(steps, "fetch('/api/mid').then(r=>r.text()).then(t=>t.length)")                                                      // 30
+	add("fill", map[string]any{"fields": map[string]any{"Cliente": "Demo +57300"}})                                                     // 31: the whole text of the option, while the field shows only its first part
 	raw, _ := json.Marshal(steps)
 	mu.Lock()
 	html_ = strings.Replace(fixturePage, "{{STEPS}}", string(raw), 1)
@@ -477,6 +478,7 @@ func TestActionsRunInARealChrome(t *testing.T) {
 	has(26, "Origen:", "PAIS 999")
 	has(27, "Destino: the page shows")
 	has(28, "Cliente: ok")
+	has(31, "Cliente: ok")
 	if strings.Contains(out[26], "Origen: ok") {
 		t.Errorf("an option that does not exist must not be ok: %q", out[26])
 	}

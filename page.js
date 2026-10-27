@@ -146,7 +146,7 @@
   const MENU = '.v-select,.v-autocomplete,.v-combobox';
   const sleep = ms => new Promise(r => setTimeout(r, ms));
   const rows = () => all('.v-overlay-container .v-list-item');
-  const shown = e => { const c = all('.v-field *').filter(x => e.closest('.v-field').contains(x) && /__selection/.test(x.className)).map(textOf).filter(Boolean); return c.length ? c.join(', ') : e.value; };
+  const shown = e => { const c = all('.v-field *').filter(x => e.closest('.v-field').contains(x) && /__selection/.test(x.className)).map(textOf).filter((s, i, a) => s && a.indexOf(s) === i); return c.length ? c.join(', ') : e.value; };
   const choose = async (e, v) => {
     const field = e.closest('.v-field'), want = lower(v), late = !!e.closest('.v-autocomplete,.v-combobox');
     for (let i = 0; i < 14 && rows().length; i++) await sleep(70); // the previous menu may still be leaving
