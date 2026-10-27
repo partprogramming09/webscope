@@ -151,23 +151,27 @@
     const field = e.closest('.v-field'), want = lower(v), late = !!e.closest('.v-autocomplete,.v-combobox');
     for (let i = 0; i < 14 && rows().length; i++) await sleep(70); // the previous menu may still be leaving
     ['pointerdown', 'mousedown', 'pointerup', 'mouseup', 'click'].forEach(t => field.dispatchEvent(new MouseEvent(t, { bubbles: true, cancelable: true, view: window })));
-    if (late) { // the search is the option text; the answer comes later
-      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set.call(e, String(v));
-      e.dispatchEvent(new Event('input', { bubbles: true }));
-    }
+    const type = s => { Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set.call(e, s); e.dispatchEvent(new Event('input', { bubbles: true })); };
+    if (late) type(String(v)); // the search is the option text; the answer comes later
     const match = () => { const r = rows(), eq = r.filter(i => lower(i.innerText) === want || lower(i.innerText.split('\n')[0]) === want), inc = r.filter(i => lower(i.innerText).includes(want)); return eq[0] || (inc.length === 1 && inc[0]); };
     const seen = new Set();
-    let hit, list, end = 0;
-    for (let i = 0; i < 400 && !hit; i++) { // shortcut: 400 steps of 70 ms at most (a list of 4000 rows), then it gives up
-      await sleep(70);
-      rows().forEach(r => seen.add(norm(r.innerText)));
-      hit = match();
-      list = [...document.querySelectorAll('.v-overlay-container .v-list')].pop();
-      if (hit || i < (late ? 25 : 4)) continue; // an autocomplete asks the server: give it about two seconds
-      if (!list) { if (i > 30) break; continue; } // no menu appeared: two more seconds, then give up
-      if (list.scrollTop + list.clientHeight >= list.scrollHeight - 2) { if (++end > 2) break; } // the end of the list: look three more times, then give up
-      else list.scrollTop += list.clientHeight * 0.8;
-    }
+    const look = async () => {
+      let hit, list, end = 0;
+      for (let i = 0; i < 400 && !hit; i++) { // shortcut: 400 steps of 70 ms at most (a list of 4000 rows), then it gives up
+        await sleep(70);
+        rows().forEach(r => seen.add(norm(r.innerText)));
+        hit = match();
+        list = [...document.querySelectorAll('.v-overlay-container .v-list')].pop();
+        if (hit || i < (late ? 25 : 4)) continue; // an autocomplete asks the server: give it about two seconds
+        if (!list) { if (i > 30) break; continue; } // no menu appeared: two more seconds, then give up
+        if (list.scrollTop + list.clientHeight >= list.scrollHeight - 2) { if (++end > 2) break; } // the end of the list: look three more times, then give up
+        else list.scrollTop += list.clientHeight * 0.8;
+      }
+      return hit;
+    };
+    let hit = await look();
+    const first = String(v).trim().split(/\s+/)[0];
+    if (!hit && late && !seen.size && first !== String(v).trim()) { type(first); hit = await look(); } // the server found nothing for the whole text: search its first word
     if (!hit) { document.body.click(); throw new Error('no option "' + v + '" among ' + seen.size + ' seen: ' + [...seen].slice(0, 5).join(' | ')); }
     const text = norm(hit.innerText);
     if (!hit.classList.contains('v-list-item--active') || !e.closest('.v-select--multiple')) hit.click(); // multiple: choosing adds, so one already chosen is left alone

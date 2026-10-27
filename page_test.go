@@ -308,11 +308,12 @@ const fixturePage = `<!doctype html><meta charset=utf-8><title>Pedido</title><h1
 <div class=v-select><div class=v-field id=mf><label for=mi>Origen</label><input id=mi><span class=v-select__selection id=msel></span></div></div>
 <div class=v-select><div class=v-field id=df><label for=di>Destino</label><input id=di></div></div>
 <div class=v-autocomplete><div class=v-field><label for=ai>Cliente</label><input id=ai></div></div>
+<div class=v-autocomplete><div class=v-field><label for=ci>Contacto</label><input id=ci></div></div>
 <label for=on>Nota</label><input id=on>
 <div role=dialog><label for=dn>Nota</label><input id=dn></div>
 <div class=v-overlay-container id=oc></div>
 <button type=button id=go>Guardar</button><button type=button id=up>Actualizar</button><button type=button id=big>Grande</button><button type=button>Cancelar</button></form>
-<p id=cl></p><p id=nn></p><p role=alert id=al></p><p id=mirror></p><p id=picked></p><pre id=out></pre>
+<p id=cl></p><p id=ct></p><p id=nn></p><p role=alert id=al></p><p id=mirror></p><p id=picked></p><pre id=out></pre>
 <script type=application/json id=steps>{{STEPS}}</script>
 <script>
 go.onclick=()=>fetch('/api/orders',{method:'POST',body:JSON.stringify({n:n.value,c:c.value,a:a.checked,k:k.value})}).then(r=>al.textContent='status '+r.status)
@@ -329,6 +330,8 @@ mf.onmousedown=()=>{oc.innerHTML='<div class=v-overlay--active><div class=v-list
  draw();setInterval(()=>{if(l.isConnected)draw()},20)} // the list stays after a choice, like a menu on its way out
 // an autocomplete answers a search after a delay and shows two lines per row
 ai.oninput=()=>setTimeout(()=>{oc.innerHTML='<div class=v-overlay--active><div class=v-list></div></div>';for(const t of ['Demo','Otro']){const q=ai.value.toLowerCase();if(!q.includes(t.toLowerCase())&&!t.toLowerCase().includes(q))continue;const d=document.createElement('div');d.className='v-list-item';d.innerHTML=t+' <small>+57300</small>';d.onclick=()=>{ai.value=t;oc.innerHTML='';cl.textContent='cliente '+t;const f=ai.closest('.v-field');f.querySelectorAll('.v-autocomplete__selection').forEach(x=>x.remove());f.insertAdjacentHTML('beforeend','<div class=v-autocomplete__selection><span class=v-autocomplete__selection-text>'+t+'</span></div>')};oc.querySelector('.v-list').appendChild(d)}},1500)
+// a strict autocomplete: the server answers only when the search is part of the name, so the whole text of an option finds nothing
+ci.oninput=()=>setTimeout(()=>{oc.innerHTML='<div class=v-overlay--active><div class=v-list></div></div>';if('laura'.includes(ci.value.toLowerCase())){const d=document.createElement('div');d.className='v-list-item';d.innerHTML='Laura <small>+57311</small>';d.onclick=()=>{ci.value='Laura';oc.innerHTML='';ct.textContent='contacto Laura'};oc.querySelector('.v-list').appendChild(d)}},300)
 df.onmousedown=()=>{oc.innerHTML='<div class=v-overlay--active><div class=v-list><div class=v-list-item id=u>Uno</div></div></div>';u.onclick=()=>{}} // a menu that keeps its list and does not keep the option
 on.oninput=()=>nn.textContent='outside';dn.oninput=()=>nn.textContent='dialog'
 n.onkeydown=e=>{if(e.key==='Escape')al.textContent='esc'}
@@ -417,6 +420,9 @@ func TestActionsRunInARealChrome(t *testing.T) {
 	add("read", map[string]any{"selector": "#cl"})                                                                                      // 29
 	steps = append(steps, "fetch('/api/mid').then(r=>r.text()).then(t=>t.length)")                                                      // 30
 	add("fill", map[string]any{"fields": map[string]any{"Cliente": "Demo +57300"}})                                                     // 31: the whole text of the option, while the field shows only its first part
+	add("fill", map[string]any{"fields": map[string]any{"Contacto": "Laura +57311"}})                                                   // 32: the server finds nothing for the whole text: the first word finds the option
+	add("read", map[string]any{"selector": "#ct"})                                                                                      // 33
+	add("fill", map[string]any{"fields": map[string]any{"Contacto": "Zzz Qqq"}})                                                        // 34: an option that does not exist stays an error
 	raw, _ := json.Marshal(steps)
 	mu.Lock()
 	html_ = strings.Replace(fixturePage, "{{STEPS}}", string(raw), 1)
@@ -479,6 +485,11 @@ func TestActionsRunInARealChrome(t *testing.T) {
 	has(27, "Destino: the page shows")
 	has(28, "Cliente: ok")
 	has(31, "Cliente: ok")
+	has(32, "Contacto: ok")
+	if out[33] != "contacto Laura" {
+		t.Errorf("the strict autocomplete was not chosen: %q", out[33])
+	}
+	has(34, "Contacto: no option", "Zzz Qqq")
 	if strings.Contains(out[26], "Origen: ok") {
 		t.Errorf("an option that does not exist must not be ok: %q", out[26])
 	}
