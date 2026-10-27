@@ -133,6 +133,30 @@ func TestCheckComparesWhatTheScreenReadAfterSaving(t *testing.T) {
 	}
 }
 
+func TestCheckDoesNotCallDifferentAFieldThatTheReadDoesNotName(t *testing.T) {
+	c, p := checkSetup(t)
+	sent(p, "POST", "/api/quotes", `{"sub_type":"AI","office":"MIA","code":"7","n":null}`, "")
+	sent(p, "GET", "/api/quotes/059", "", `{"quote":{"office":"MIA"}}`)
+	a := args("059", map[string]string{"sub_type": "sub", "office": "office", "code": "code", "n": "note2"})
+	a.After, a.At = "GET /api/quotes/059", "quote"
+	out, err := run(t, c, a)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{"4 fields: 1 equal, 1 empty~, 0 space~, 1 different, 1 unread~", "code\t7\t007\t(absent)", "unread~", "sub_type"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("lacks %q: %q", want, out)
+		}
+	}
+	if strings.Contains(out, "sub_type\tAI") {
+		t.Errorf("a field whose sent and stored values agree must not get a row: %q", out)
+	}
+	sent(p, "POST", "/api/quotes", `{"sub_type":"AI","office":"MIA"}`, "")
+	if out, err = run(t, c, args("059", map[string]string{"sub_type": "sub", "office": "office"})); err != nil || strings.Contains(out, "unread~") {
+		t.Errorf("without a read nothing is unread: %q, %v", out, err)
+	}
+}
+
 func TestCheckRefusesWhatItCannotCompareHonestly(t *testing.T) {
 	c, p := checkSetup(t)
 	if _, err := run(t, c, args("059", fourFields)); err == nil || !strings.Contains(err.Error(), "no captured request matches") {

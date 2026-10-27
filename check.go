@@ -261,7 +261,7 @@ func (c *checker) compare(ctx context.Context, in checkArgs) (string, error) {
 		return "", err
 	}
 	var equal, soft, differ, spaces int
-	var emptied, spaced []string
+	var emptied, spaced, unreadNames []string
 	var b strings.Builder
 	var picked []string
 	for _, k := range slices.Sorted(maps.Keys(in.Where)) {
@@ -287,6 +287,11 @@ func (c *checker) compare(ctx context.Context, in checkArgs) (string, error) {
 			rv, rok := read[f]
 			t, e := value(rv, rok)
 			cells = append(cells, seen{t, e, rok})
+		}
+		shown, unread := cells, false
+		if read != nil && cells[0].here && cells[1].here && !cells[2].here {
+			// a read that does not name the field says nothing about it: sent and stored are compared alone
+			cells, unread = cells[:2], true
 		}
 		same, kinds := true, map[string]bool{}
 		for _, k := range cells {
@@ -332,6 +337,7 @@ func (c *checker) compare(ctx context.Context, in checkArgs) (string, error) {
 		case !same:
 			differ++
 			line := []string{f}
+			cells := shown
 			for _, k := range cells {
 				if !k.here {
 					line = append(line, "(absent)")
@@ -344,10 +350,17 @@ func (c *checker) compare(ctx context.Context, in checkArgs) (string, error) {
 			soft++
 			emptied = append(emptied, f)
 		default:
-			equal++
+			if unread {
+				unreadNames = append(unreadNames, f)
+			} else {
+				equal++
+			}
 		}
 	}
 	fmt.Fprintf(&b, "%s\n%d fields: %d equal, %d empty~, %d space~, %d different", head, len(fields), equal, soft, spaces, differ)
+	if len(unreadNames) > 0 {
+		fmt.Fprintf(&b, ", %d unread~", len(unreadNames))
+	}
 	if differ > 0 {
 		b.WriteString("\nfield\tsent\tstored")
 		if read != nil {
@@ -357,6 +370,9 @@ func (c *checker) compare(ctx context.Context, in checkArgs) (string, error) {
 	}
 	if spaces > 0 {
 		b.WriteString("\nspace~ (the text is the same once the spaces are collapsed: the app trimmed or changed them): " + strings.Join(spaced, ", "))
+	}
+	if len(unreadNames) > 0 {
+		b.WriteString("\nunread~ (the read does not name them; sent and stored agree): " + strings.Join(unreadNames, ", "))
 	}
 	if soft > 0 {
 		b.WriteString("\nempty~ (null, empty text or NULL, not the same): " + strings.Join(emptied, ", "))
