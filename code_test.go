@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -164,6 +165,35 @@ func TestFieldsWorksWithoutTheBackendAndSaysSo(t *testing.T) {
 func TestCodeRefusesAnUnknownActionAndNamesTheList(t *testing.T) {
 	if _, err := code(t, codeSetup(t), "run", nil); err == nil || !strings.Contains(err.Error(), "fields") || !strings.Contains(err.Error(), "consumers") {
 		t.Errorf("%v", err)
+	}
+}
+
+func TestCodeAcceptsTheArgumentsAtTheTopLevelToo(t *testing.T) {
+	cases := map[string]string{
+		"nested":       `{"action":"consumers","args":{"table":"quotes","column":"estado"}}`,
+		"top level":    `{"action":"consumers","table":"quotes","column":"estado"}`,
+		"args win":     `{"action":"consumers","table":"nope","args":{"table":"quotes","column":"estado"}}`,
+		"mixed":        `{"action":"consumers","column":"estado","args":{"table":"quotes"}}`,
+	}
+	c := codeSetup(t)
+	want, err := code(t, c, "consumers", map[string]any{"table": "quotes", "column": "estado"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for name, raw := range cases {
+		var in codeArgs
+		if err := json.Unmarshal([]byte(raw), &in); err != nil {
+			t.Fatalf("%s: %v", name, err)
+		}
+		got, err := c.run(context.Background(), in)
+		if err != nil || got != want {
+			t.Errorf("%s: %q, %v", name, got, err)
+		}
+	}
+	for _, raw := range []string{`{"action":1}`, `{"action":"fields","args":"x"}`} {
+		if err := json.Unmarshal([]byte(raw), &codeArgs{}); err == nil {
+			t.Errorf("%s is accepted", raw)
+		}
 	}
 }
 

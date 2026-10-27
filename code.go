@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io/fs"
@@ -39,6 +40,40 @@ type coder struct {
 type codeArgs struct {
 	Action string         `json:"action"`
 	Args   map[string]any `json:"args,omitempty"`
+}
+
+// UnmarshalJSON reads the arguments from "args" and also from the top level of the call; a key inside "args" wins.
+func (a *codeArgs) UnmarshalJSON(b []byte) error {
+	var raw map[string]json.RawMessage
+	if err := json.Unmarshal(b, &raw); err != nil {
+		return err
+	}
+	*a = codeArgs{Args: map[string]any{}}
+	for k, v := range raw {
+		switch k {
+		case "action":
+			if err := json.Unmarshal(v, &a.Action); err != nil {
+				return err
+			}
+		case "args":
+		default:
+			var x any
+			if err := json.Unmarshal(v, &x); err != nil {
+				return err
+			}
+			a.Args[k] = x
+		}
+	}
+	if v, ok := raw["args"]; ok {
+		var nested map[string]any
+		if err := json.Unmarshal(v, &nested); err != nil {
+			return err
+		}
+		for k, x := range nested {
+			a.Args[k] = x
+		}
+	}
+	return nil
 }
 
 const (
