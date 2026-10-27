@@ -87,6 +87,33 @@ func TestConsumersListsReadersAndWritersWithFileAndLine(t *testing.T) {
 	}
 }
 
+func TestClassifyJudgesTheLineOfTheColumnNotOnlyItsNeighbours(t *testing.T) {
+	for _, tc := range []struct {
+		name, want string
+		lines      []string
+		at         int
+	}{
+		{"assignment", "WRITES", []string{"$quote->ESTADO = 'X';"}, 1},
+		{"compound assignment", "WRITES", []string{"$quote->ESTADO .= 'X';"}, 1},
+		{"null coalescing assignment", "WRITES", []string{"$quote->ESTADO ??= 'X';"}, 1},
+		{"assignment at the end of the line", "WRITES", []string{"$quote->ESTADO ="}, 1},
+		{"comparison", "READS", []string{"if ($quote->ESTADO == 'X') {"}, 1},
+		{"strict comparison", "READS", []string{"if ($quote->ESTADO === 'X') {"}, 1},
+		{"negated comparison", "READS", []string{"if ($quote->ESTADO !== 'X') {"}, 1},
+		{"comparison next to an update", "READS", []string{"if ($quote->ESTADO === 'DO_ASIGNADO' && ! empty($quote->do)) {", "  $quote->update(['x' => 1]);"}, 1},
+		{"read into an array next to a create", "READS", []string{"Quote::create([", "  'status' => $quote->ESTADO,", "]);"}, 2},
+		{"key of a create", "WRITES", []string{"Quote::create([", "  'ESTADO' => $data['status'],", "]);"}, 2},
+		{"key of an update", "WRITES", []string{"$q->update([", "  'ESTADO' => 'INACTIVO',", "]);"}, 2},
+		{"key with no write call around", "READS", []string{"return ['ESTADO' => $row->x];"}, 1},
+		{"filter next to an update of another column", "READS", []string{"Quote::where('ESTADO', 'A')->update(['MONEDA' => 'USD']);"}, 1},
+		{"read next to a save", "READS", []string{"$x = $quote->ESTADO;", "$quote->save();"}, 1},
+	} {
+		if got := classify(tc.lines, tc.at, "ESTADO"); got != tc.want {
+			t.Errorf("%s: %s, want %s", tc.name, got, tc.want)
+		}
+	}
+}
+
 func TestConsumersNeverReadsOutsideTheRootNorEnvNorVendor(t *testing.T) {
 	c := codeSetup(t)
 	for _, args := range []map[string]any{{"table": "quotes", "column": "estado"}, {"column_only": "estado"}} {

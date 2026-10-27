@@ -160,9 +160,14 @@ func grep(re *regexp.Regexp, files []string, all lines) []hit {
 	return out
 }
 
-// classify says WRITES when an update, create, save, insert, fill or upsert call is within 3 lines of line n, READS otherwise: a text estimate.
-func classify(ls []string, n int) string {
-	if writes.MatchString(strings.Join(ls[max(0, n-4):min(len(ls), n+3)], " ")) {
+// classify says WRITES when line n assigns the column ($x->COL = v) or holds it as the key of an array ('COL' => v) within 3 lines of an update, create, save, insert, fill or upsert call, READS otherwise: a text estimate.
+func classify(ls []string, n int, col string) string {
+	q := regexp.QuoteMeta(col)
+	if regexp.MustCompile(`->` + q + `\s*(\?\?|[-+.*/])?=(?:[^=>]|$)`).MatchString(ls[n-1]) {
+		return "WRITES"
+	}
+	key := regexp.MustCompile(`['"` + "`" + `]` + q + `['"` + "`" + `]\s*=>`)
+	if key.MatchString(ls[n-1]) && writes.MatchString(strings.Join(ls[max(0, n-4):min(len(ls), n+3)], " ")) {
 		return "WRITES"
 	}
 	return "READS"
@@ -295,7 +300,7 @@ func (c *coder) consumers(args map[string]any) (string, error) {
 		}
 		return names[i] < names[j]
 	})
-	fmt.Fprintf(&b, "BACKEND  %d uses in %d files (an estimate: text search, READS or WRITES by the 3 lines around, not a flow analysis)\n", len(hits), len(per))
+	fmt.Fprintf(&b, "BACKEND  %d uses in %d files (an estimate: text search, READS or WRITES by the line of each use: an assignment, or a key of an array next to a write call; not a flow analysis)\n", len(hits), len(per))
 	for i, f := range names {
 		if i == maxConsumed {
 			fmt.Fprintf(&b, "  … and %d more files", len(names)-maxConsumed)
@@ -303,7 +308,7 @@ func (c *coder) consumers(args map[string]any) (string, error) {
 		}
 		marks := map[string]bool{}
 		for _, h := range per[f] {
-			marks[classify(all[f], h.line)] = true
+			marks[classify(all[f], h.line, col)] = true
 		}
 		var ms []string
 		for m := range marks {
@@ -440,7 +445,7 @@ func (c *coder) fields(ctx context.Context, args map[string]any) (string, error)
 			}
 			w, r := map[string]bool{}, map[string]bool{}
 			for _, h := range uses {
-				if classify(all[h.file], h.line) == "WRITES" {
+				if classify(all[h.file], h.line, k.name) == "WRITES" {
 					w[h.file] = true
 				}
 			}
