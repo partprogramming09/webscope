@@ -44,7 +44,7 @@ state|read|fill|click|press|simulate: return a snippet; run it with javascript_t
   state {max?}: URL, title, headings, fields, buttons, alerts, errors, dialog, tables.
   read {selector?, max?}: text of the first match, or of the page.
   fill {fields:{label:value}}: by label, name, placeholder or id; true/false for checkboxes; select by option text; Vuetify menus too (long lists are scrolled).
-  click {text} or {selector}; press {key, selector?}.
+  click {text} or {selector}; press {key, selector?}: both then say what happened (requests with status, new alerts and errors, URL change, or "No effect seen").
   simulate {match, status, times?, method?}: the next requests whose URL contains match answer HTTP status 400-599 without reaching the app; {clear:true} cancels.
 payloads {limit?}: the requests the page sent and their answers (answered here, no snippet).
 Writes only with the user's approval, and rows prefixed ZZ_.`

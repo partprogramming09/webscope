@@ -324,12 +324,14 @@ const fixturePage = `<!doctype html><meta charset=utf-8><title>Pedido</title><h1
 <label for=on>Nota</label><input id=on>
 <div role=dialog><label for=dn>Nota</label><input id=dn></div>
 <div class=v-overlay-container id=oc></div>
-<button type=button id=go>Guardar</button><button type=button id=up>Actualizar</button><button type=button id=big>Grande</button><button type=button>Cancelar</button></form>
+<button type=button id=go>Guardar</button><button type=button id=up>Actualizar</button><button type=button id=big>Grande</button><button type=button id=ping>Ping</button><button type=button id=nop>Inerte</button><button type=button id=tx>Texto</button><button type=button>Cancelar</button></form><a href="#x" id=lk>Ir</a><p id=tx2></p>
 <p id=cl></p><p id=ct></p><p id=nn></p><p role=alert id=al></p><p id=mirror></p><p id=picked></p><pre id=out></pre>
 <script type=application/json id=steps>{{STEPS}}</script>
 <script>
 go.onclick=()=>fetch('/api/orders',{method:'POST',body:JSON.stringify({n:n.value,c:c.value,a:a.checked,k:k.value})}).then(r=>al.textContent='status '+r.status)
 big.onclick=()=>fetch('/api/big').then(r=>r.text()).then(t=>al.textContent='big '+t.length)
+ping.onclick=()=>fetch('/api/ping').then(r=>al.textContent='ping '+r.status)
+tx.onclick=()=>tx2.textContent='cambió' // changes the screen without a request or an alert
 up.onclick=()=>{const x=new XMLHttpRequest();x.open('PUT','/api/orders/1');x.onloadend=()=>al.textContent='xhr '+x.status;x.send('{}')}
 n.oninput=()=>mirror.textContent=n.value // what a v-model would copy: it only hears the input and change events
 k.onchange=()=>picked.textContent=k.value
@@ -371,6 +373,8 @@ func TestActionsRunInARealChrome(t *testing.T) {
 			io.WriteString(w, `{"id":1}`)
 		case r.URL.Path == "/api/mid": // a list answer of Acme was about 4600 characters
 			io.WriteString(w, `{"data":[{"v":"`+strings.Repeat("m", 6000)+`"}]}`)
+		case r.URL.Path == "/api/ping":
+			io.WriteString(w, `{}`)
 		case r.URL.Path == "/api/big":
 			io.WriteString(w, strings.Repeat("x", 100_000))
 		case r.Method == "PUT":
@@ -435,9 +439,14 @@ func TestActionsRunInARealChrome(t *testing.T) {
 	add("fill", map[string]any{"fields": map[string]any{"Contacto": "Laura +57311"}})                                                   // 32: the server finds nothing for the whole text: the first word finds the option
 	add("read", map[string]any{"selector": "#ct"})                                                                                      // 33
 	add("fill", map[string]any{"fields": map[string]any{"Contacto": "Zzz Qqq"}})                                                        // 34: an option that does not exist stays an error
+	add("click", map[string]any{"text": "Ping"})                                                                                        // 35: a request and a new alert
+	add("click", map[string]any{"text": "Inerte"})                                                                                      // 36: nothing happens
+	add("click", map[string]any{"text": "Texto"})                                                                                       // 37: only the screen text changes
+	add("press", map[string]any{"key": "Escape", "selector": "#n"})                                                                     // 38: a new alert, no request
+	add("click", map[string]any{"text": "Ir"})                                                                                          // 39: the URL changes
 	raw, _ := json.Marshal(steps)
 	mu.Lock()
-	html_ = strings.Replace(fixturePage, "{{STEPS}}", string(raw), 1)
+	html_ =strings.Replace(fixturePage, "{{STEPS}}", string(raw), 1)
 	mu.Unlock()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
@@ -498,6 +507,17 @@ func TestActionsRunInARealChrome(t *testing.T) {
 	has(28, "Cliente: ok")
 	has(31, "Cliente: ok")
 	has(32, "Contacto: ok")
+	has(35, "clicked", "Requests: GET /api/ping 200", "New alerts: ping 200")
+	has(36, "clicked", "No effect seen")
+	if strings.Contains(out[36], "Requests:") || strings.Contains(out[36], "New alerts:") {
+		t.Errorf("a button that does nothing must not report an effect: %q", out[36])
+	}
+	has(37, "The screen text changed")
+	if strings.Contains(out[37], "No effect seen") {
+		t.Errorf("the screen changed, so it is an effect: %q", out[37])
+	}
+	has(38, "pressed", "New alerts: esc")
+	has(39, "URL: ", "#x")
 	if out[33] != "contacto Laura" {
 		t.Errorf("the strict autocomplete was not chosen: %q", out[33])
 	}

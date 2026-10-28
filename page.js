@@ -22,7 +22,15 @@
 
   // ---- what the page sends: fetch and XMLHttpRequest are wrapped, and each request is reported to the listener
   const realFetch = window.fetch.bind(window);
-  const report = c => {
+  const log = []; // the last 200 requests with their status, for the effect of an action
+  let seq = 0, pending = 0;
+  const report = (c, counted) => {
+    if (counted) pending = Math.max(0, pending - 1);
+    try {
+      const u = new URL(c.u, location.href);
+      log.push({ i: seq++, t: c.m + ' ' + u.pathname + u.search + ' ' + c.s });
+      if (log.length > 200) log.shift();
+    } catch (e) { /* an address that does not parse is left out of the log */ }
     try {
       c.req = clip(c.req, SENT);
       c.res = clip(c.res, SENT);
@@ -53,13 +61,14 @@
       return new Response(SIM_BODY, { status: sim.status, headers: { 'Content-Type': 'application/json' } });
     }
     let res;
+    pending++;
     try {
       res = await realFetch(input, init);
     } catch (e) {
-      report({ m, u, s: 0, req, res: String(e) });
+      report({ m, u, s: 0, req, res: String(e) }, true);
       throw e;
     }
-    res.clone().text().then(res_ => report({ m, u, s: res.status, req, res: res_ })).catch(() => {});
+    res.clone().text().then(res_ => report({ m, u, s: res.status, req, res: res_ }, true)).catch(() => { pending = Math.max(0, pending - 1); });
     return res;
   };
 
@@ -79,9 +88,10 @@
         xhrOpen.call(this, c.m, cfg.base + '/sim?t=' + cfg.t + '&status=' + sim.status, true);
         this.withCredentials = false;
       }
+      pending++;
       this.addEventListener('loadend', () => {
         const text = this.responseType === '' || this.responseType === 'text' ? this.responseText : kind(this.response);
-        report({ m: c.m, u: c.u, s: this.status, req: c.req, res: text });
+        report({ m: c.m, u: c.u, s: this.status, req: c.req, res: text }, true);
       });
     }
     return xhrSend.apply(this, arguments);
@@ -103,6 +113,8 @@
   };
   const texts = sel => [...new Set(all(sel).map(e => norm(e.innerText)).filter(Boolean))];
   const CLICKABLE = 'button,a,[role=button],[role=tab],[role=menuitem],[role=option],input[type=submit],input[type=button],.v-btn,.v-list-item';
+  const ALERTS = '[role=alert],.v-alert,.v-snackbar__content,.alert,.toast';
+  const ERRORS = '.v-messages__message,.invalid-feedback,.error--text,.text-danger';
 
   const state = a => {
     const out = ['URL: ' + location.pathname + location.search + location.hash, 'Title: ' + norm(document.title)];
@@ -115,9 +127,9 @@
     }
     const b = [...new Set(all(CLICKABLE).map(textOf).filter(Boolean))].slice(0, 30);
     if (b.length) out.push('Buttons: ' + b.join(' | '));
-    const al = texts('[role=alert],.v-alert,.v-snackbar__content,.alert,.toast');
+    const al = texts(ALERTS);
     if (al.length) out.push('Alerts: ' + al.join(' | '));
-    const er = texts('.v-messages__message,.invalid-feedback,.error--text,.text-danger');
+    const er = texts(ERRORS);
     if (er.length) out.push('Errors: ' + er.join(' | '));
     const dlg = all('[role=dialog],dialog[open]')[0];
     if (dlg) out.push('Dialog: ' + clip(norm(dlg.innerText), 200));
@@ -224,7 +236,27 @@
     return out.join('\n');
   };
 
-  const click = a => {
+  // Runs `f` (a click or a key) and appends what it caused: the requests with their status, the new alerts and field errors, a URL change, or that nothing changed.
+  const withEffect = async f => {
+    const url = () => location.pathname + location.search + location.hash;
+    const before = { seq, alerts: new Set(texts(ALERTS)), errors: new Set(texts(ERRORS)), url: url(), text: norm(document.body.innerText) };
+    const r = f();
+    if (/^Failed:/.test(r)) return r;
+    await sleep(400);
+    for (let i = 0; i < 30 && pending > 0; i++) await sleep(70); // a slow answer: about two more seconds
+    await sleep(150); // the screen draws the answer
+    const out = [r], reqs = log.filter(e => e.i >= before.seq).map(e => e.t);
+    if (reqs.length) out.push('Requests: ' + reqs.join(' | '));
+    const na = texts(ALERTS).filter(x => !before.alerts.has(x));
+    if (na.length) out.push('New alerts: ' + na.join(' | '));
+    const ne = texts(ERRORS).filter(x => !before.errors.has(x));
+    if (ne.length) out.push('New errors: ' + ne.join(' | '));
+    if (url() !== before.url) out.push('URL: ' + before.url + ' → ' + url());
+    if (out.length === 1) out.push(norm(document.body.innerText) === before.text ? 'No effect seen: no request, no new alert, the screen text is the same.' : 'The screen text changed; no request, alert or URL change.');
+    return out.join('\n');
+  };
+
+  const clickOnce = a => {
     let els;
     if (a.selector) {
       try { els = all(a.selector); } catch (x) { return fail('bad selector ' + a.selector); }
@@ -239,7 +271,7 @@
     return 'clicked ' + describe(els[0]);
   };
 
-  const press = a => {
+  const pressOnce = a => {
     if (!a.key) return fail('press needs key');
     let e;
     try { e = a.selector ? document.querySelector(a.selector) : document.activeElement || document.body; } catch (x) { return fail('bad selector ' + a.selector); }
@@ -252,6 +284,9 @@
     if (a.key === 'Enter' && go && e.tagName === 'INPUT' && e.form) e.form.requestSubmit(); // a synthetic Enter does not submit by itself
     return 'pressed ' + a.key + ' on ' + describe(e);
   };
+
+  const click = a => withEffect(() => clickOnce(a));
+  const press = a => withEffect(() => pressOnce(a));
 
   const simulate = a => {
     if (a.clear) { sims.length = 0; return 'simulations cleared'; }
