@@ -33,6 +33,7 @@ Tools of the old server (`e2e_chrome`, `__f.*`, `payload_check`, …) are in [ol
 | Pattern | How to recognize it | What to do | Seen |
 |---|---|---|---|
 | Save without changes modifies data | `code snap` before, open the record and press «Edit» then save without touching anything, `code snap_diff` after: columns change (`'' → NULL`, a code replaced by a name) | The edit form sends a different representation than the create form (`MIA` against `Miami`); report it, it corrupts data on every untouched save | measured |
+| Untouched save is clean | `snap` before, open the record, save without changes, `snap_diff`: «no changes» (`charge-types`, a `PUT` whose `check` gives all fields equal) | Not a defect; it shows the contrast with the module where it does modify data | measured |
 | Same field, three representations | `check` shows `office  MIA  MIA  Miami` | A real difference when sent and stored agree and the read differs; a field the list names differently shows as `unread~`, not as an error | measured |
 | `check` says `unread~` | The read does not name the field (the list calls it `description`, the POST `notes`) | Not a defect: pass `after` with the request that names it, or `at` to point at the row | measured |
 | Delete is logical | After deleting by screen the row stays with `ESTADO = BORRADO` and its child rows stay too | Count by `ESTADO`, not the total; `query` cannot clean it (it never writes): clean through the screen and list the ids left | measured |
