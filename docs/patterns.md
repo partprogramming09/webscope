@@ -8,7 +8,7 @@ Tools of the old server (`e2e_chrome`, `__f.*`, `payload_check`, …) are in [ol
 
 | Pattern | How to recognize it | What to do | Seen |
 |---|---|---|---|
-| Save disabled until valid | `click` on the save button answers `No effect seen`; `state` still lists the button (it does not mark disabled buttons) | Read `disabled` / `aria-disabled` with `javascript_tool` and report «disabled», not «no errors»; fill one field at a time to find the rule that enables it | measured (a disabled pager button) |
+| Save disabled until valid | `state` lists `Guardar (disabled)` (from 0.5.16) and `click` on it answers `No effect seen` | Report «disabled», not «no errors»; fill one field at a time to find the rule that enables it (`charge-types`: Tipo, Tipo de Cargo, Base and Operación) | measured |
 | Message only on screen | `click` or `press` answers `New alerts:` or `New errors:` and no `Requests:` | Client validation: record the text per field; never count it as a save | test |
 | HTTP error with no notice, old data left | `simulate {match, status:500}` then an action that reloads the list: `Requests: GET … 500`, no `New alerts`, same rows as before | Report it (the user sees stale data and thinks it is current); S4 in [module-testing.md](module-testing.md) | measured twice (quotes list) |
 | A screen calls an endpoint that needs a session before the login | `Requests: GET … 403` on a screen shown without a session (the reset-password screen called the settings endpoint) | Report it; it is noise in the log and a wrong request, not a data leak | measured in a session, not reproduced since |

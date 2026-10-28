@@ -324,7 +324,7 @@ const fixturePage = `<!doctype html><meta charset=utf-8><title>Pedido</title><h1
 <label for=on>Nota</label><input id=on>
 <div role=dialog><label for=dn>Nota</label><input id=dn></div>
 <div class=v-overlay-container id=oc></div>
-<button type=button id=go>Guardar</button><button type=button id=up>Actualizar</button><button type=button id=big>Grande</button><button type=button id=ping>Ping</button><button type=button id=nop>Inerte</button><button type=button id=tx>Texto</button><button type=button id=boom>Boom</button><button type=button>Cancelar</button></form><a href="#x" id=lk>Ir</a><p id=tx2></p>
+<button type=button id=go>Guardar</button><button type=button id=up>Actualizar</button><button type=button id=big>Grande</button><button type=button id=ping>Ping</button><button type=button id=nop>Inerte</button><button type=button id=tx>Texto</button><button type=button id=boom>Boom</button><button type=button id=dis disabled>Bloqueado</button><button type=button>Cancelar</button></form><a href="#x" id=lk>Ir</a><p id=tx2></p>
 <p id=cl></p><p id=ct></p><p id=nn></p><p role=alert id=al></p><p id=mirror></p><p id=picked></p><pre id=out></pre>
 <script type=application/json id=steps>{{STEPS}}</script>
 <script>
@@ -350,6 +350,7 @@ ci.oninput=()=>setTimeout(()=>{oc.innerHTML='<div class=v-overlay--active><div c
 df.onmousedown=()=>{oc.innerHTML='<div class=v-overlay--active><div class=v-list><div class=v-list-item id=u>Uno</div></div></div>';u.onclick=()=>{}} // a menu that keeps its list and does not keep the option
 on.oninput=()=>nn.textContent='outside';dn.oninput=()=>nn.textContent='dialog'
 n.onkeydown=e=>{if(e.key==='Escape')al.textContent='esc'}
+document.body.insertAdjacentHTML('afterbegin','<nav>'+Array.from({length:35},(_,i)=>'<button type=button>Menu '+i+'</button>').join('')+'</nav>') // a side menu comes first in the DOM and holds more buttons than state lists
 const steps=JSON.parse(document.getElementById('steps').textContent),res=[]
 const sleep=ms=>new Promise(r=>setTimeout(r,ms))
 ;(async()=>{for(const s of steps){try{res.push(String(await (0,eval)("(async()=>("+s+"))()")))}catch(e){res.push('THROW '+e)}await sleep(300)}out.textContent=JSON.stringify(res)})()
@@ -485,6 +486,13 @@ func TestActionsRunInARealChrome(t *testing.T) {
 		}
 	}
 	has(1, "Nuevo pedido", "Nombre", "Acepto", "Tipo", "Guardar", "Cancelar")
+	has(1, "Bloqueado (disabled)")
+	if strings.Contains(out[1], "Guardar (disabled)") || strings.Contains(out[1], "Cancelar (disabled)") {
+		t.Errorf("only the disabled button is marked: %q", out[1])
+	}
+	if i, j := strings.Index(out[1], "Guardar"), strings.Index(out[1], "Menu 0"); j >= 0 && i > j {
+		t.Errorf("the page's buttons come before the side menu: %q", out[1])
+	}
 	has(2, "Nada: not found", "Nombre: ok", "Código: ok", "Acepto: ok", "Tipo: ok")
 	has(4, "ñandú 😀 \"q\" </script>", `"007"`, "status 201")
 	has(7, "status 503")

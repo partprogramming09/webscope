@@ -126,7 +126,10 @@
   };
   const texts = sel => [...new Set(all(sel).map(e => norm(e.innerText)).filter(Boolean))];
   const CLICKABLE = 'button,a,[role=button],[role=tab],[role=menuitem],[role=option],input[type=submit],input[type=button],.v-btn,.v-list-item';
-  const ALERTS = '[role=alert],.v-alert,.v-snackbar__content,.alert,.toast';
+  const disabled = e => e.disabled || e.getAttribute('aria-disabled') === 'true' || /--disabled/.test(e.className);
+  // the dialog's buttons first, the page's next, the side menu and the top bar last: they come first in the DOM and would fill the 30 places
+  const rank = e => e.closest('[role=dialog],.v-dialog') ? 0 : e.closest('nav,aside,header,[role=navigation],.v-navigation-drawer,.v-app-bar,.v-toolbar') ? 2 : 1;
+  const ALERTS ='[role=alert],.v-alert,.v-snackbar__content,.alert,.toast';
   const ERRORS = '.v-messages__message,.invalid-feedback,.error--text,.text-danger';
 
   const state = a => {
@@ -139,8 +142,8 @@
       out.push('Fields:');
       f.forEach(e => out.push('  [' + (e.type || e.tagName.toLowerCase()) + '] ' + (labelOf(e) || '(no label)') + ' = "' + valueOf(e).replace(/\n/g, '⏎') + '"'));
     }
-    const b = [...new Set(all(CLICKABLE).map(textOf).filter(Boolean))].slice(0, 30);
-    if (b.length) out.push('Buttons: ' + b.join(' | '));
+    const b = [...new Set(all(CLICKABLE).filter(textOf).map((e, i) => ({ i, t: textOf(e) + (disabled(e) ? ' (disabled)' : ''), r: rank(e) })).sort((x, y) => x.r - y.r || x.i - y.i).map(x => x.t))].slice(0, 30);
+    if (b.length) out.push('Buttons (dialog first, side menu last): ' + b.join(' | '));
     const al = texts(ALERTS);
     if (al.length) out.push('Alerts: ' + al.join(' | '));
     const er = texts(ERRORS);

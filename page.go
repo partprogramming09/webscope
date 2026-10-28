@@ -41,7 +41,7 @@ const helpText = `page(action, args?) tests a screen in the user's Chrome throug
 Needs a tab of the app (WEBSCOPE_APP_URL) with the session already started: open one with tabs_create_mcp and navigate to a screen; if it shows the login, stop and ask the user for the session (never type credentials).
 load: one line of JavaScript; run it with javascript_tool once per page load (needs WEBSCOPE_APP_URL).
 state|read|fill|click|press|simulate: return a snippet; run it with javascript_tool, its value is the answer.
-  state {max?}: URL, title, console, headings, fields, buttons, alerts, errors, dialog, tables.
+  state {max?}: URL, title, console, headings, fields, buttons (dialog first, side menu last, disabled ones marked), alerts, errors, dialog, tables.
   read {selector?, max?}: text of the first match, or of the page.
   fill {fields:{label:value}}: by label, name, placeholder or id; true/false for checkboxes; select by option text; Vuetify menus too (long lists are scrolled).
   click {text} or {selector}; press {key, selector?}: both then say what happened (requests with status, new alerts, errors and console errors, URL change, or "No effect seen").
