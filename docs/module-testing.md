@@ -28,13 +28,15 @@ Browser order when an E2E is justified:
 
 ## 1. Before touching the screen
 - `code map_back {module}`, `code map {module}`, and `code fields {table}` for each table: columns, how many rows have a value, which backend files name each column.
+- `map_back` also lists the models of every shared service the module's endpoints go through (25 tables for `charge-types`, whose own table is one): the module's table is the model under its own folder, so read that one first.
 - `code consumers {table, column}` for a column you are about to test: who reads and who writes it (an estimate by text, and it says so).
 - Baseline numbers with `query` (with `tenant`): rows of each table, counted by `ESTADO` when the delete is logical. Write them down.
 - Never read rows of a real customer: schema and counts only.
 
 ## 2. Read it deep
 - `page(state)`: URL, title, console, headings, fields, buttons, alerts, errors, dialog, tables. `page(read {selector})` for one part.
-- `state` does not mark disabled buttons and lists a button with no text only if it has an `aria-label` or `title`: read the rest with `javascript_tool`.
+- `state` does not mark disabled buttons (a dialog showed `Cancelar Guardar` with `Guardar` disabled) and lists a button with no text only if it has an `aria-label` or `title`: read the rest with `javascript_tool`. Its `Buttons` line keeps the first 30, and the side menu comes first (read in `page.js`), so on a busy screen the page's own buttons may be cut: ask for `read {selector}` of the part you need.
+- A dialog's fields are listed in `Fields` after the page's own; `fill` looks in the open dialog first.
 
 ## 3. As the user (complete flows, in the browser)
 - `fill {fields:{label:value}}` for a whole form (it chooses in Vuetify menus), then `click` the save button. `click` and `press` answer what happened: `Requests:` (method, path, status), `New alerts:`, `New errors:`, `New console errors:`, `URL: a → b`, or `No effect seen`.
@@ -42,11 +44,12 @@ Browser order when an E2E is justified:
 - Test data carries the `ZZ_` prefix so it can be found and removed. A write needs the user's approval, action by action.
 
 ## 4. As someone looking for a way in or a way to break it
-- Empty form (`click` save: `New errors:` or `No effect seen` for a disabled button), weak values, mismatched confirmation, over-long values, repeated submit.
-- `simulate {match, status, times}` then an action that calls it: the screen must say something (`New alerts:`). A 500 with no notice and the old data still shown is a finding.
+- Empty form: first read whether the save button is disabled (`javascript_tool`); if it is, fill one required field at a time and read it again to find the rule that enables it (in `charge-types` it was the four fields Tipo, Tipo de Cargo, Base and Operación; Estado and Orden come filled; nothing was written). Pressing a save that is **enabled** is an attempt to write: ask first. Then weak values, mismatched confirmation, over-long values, repeated submit.
+- `simulate {match, status, times}` then an action that calls it: the screen must say something (`New alerts:`). A 500 with no notice and the old data still shown is a finding (seen in two modules). `New console errors:` shows what the app logged (`error: Error fetching charge types: …`); `rejected:` lines can come from elsewhere (one `reading 'M_ID'` is not in the app's `src`), so read the code before blaming the app.
 - Limits (licences, page size, rate limit), protected records (system rows), a role without the permission: the same flow must be refused, on screen and in the API. Another user's data (the same id with a second token) needs a crafted request, which is outside `page`.
 
 ## 5. Data
+- A pass with no write approval stops at the baseline: counts by `ESTADO`, `code fields`, `code consumers`, and the screen compared with `query` (in `charge-types`: 3 rows on screen with 1 active and 2 shown as «Eliminado», the same as the table). `check` needs a row written through the screen, so it needs the user's approval.
 - After every write read the row back: `check {sent, table, where, map, after?, at?, tenant?}` compares the body the screen sent, the row stored and the answer the screen read, with a map you give. `007` against `7` is a difference; `''` against `NULL` is marked apart.
 - `code snap {name, sql, key?}` before and `code snap_diff {name}` after an action shows only what changed. Do it also around **opening a record and saving without touching anything**: it must change nothing.
 - Count rows and totals before and after. Clean up through the screen; list leftovers with `query … WHERE column LIKE 'ZZ\_%'`. A screen that cannot delete what the test created is a defect to report.
