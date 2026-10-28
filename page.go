@@ -128,7 +128,7 @@ func (p *pageTool) answer(in pageArgs) (string, error) {
 		if err != nil {
 			return "", err
 		}
-		return fmt.Sprintf(`(()=>{var s=document.createElement("script");s.src=%q;document.head.appendChild(s);return "loading the webscope helper; next: page(state)"})()`, base+"/page.js?t="+p.token), nil
+		return fmt.Sprintf(`(()=>{var s=document.createElement("script");s.src=%q;document.head.appendChild(s);return "loading the webscope helper; next: page(state)"})()`, base+"/page.js?t="+p.token+"&o="+url.QueryEscape(p.origin())), nil
 	}
 	return snippet(in.Action, in.Args)
 }

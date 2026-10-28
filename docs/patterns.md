@@ -44,7 +44,7 @@ Tools of the old server (`e2e_chrome`, `__f.*`, `payload_check`, …) are in [ol
 
 | Pattern | How to recognize it | What to do | Seen |
 |---|---|---|---|
-| `payloads` shows 0 requests | `state` works but nothing is captured; since 0.5.5 `payloads` says a request from another origin was refused | `WEBSCOPE_APP_URL` must equal the tab's exact origin (`demo.localhost:5173`, not `localhost:5173`); change it, run `/mcp` and `page(load)` again | measured |
+| `payloads` shows 0 requests, or `Requests: … 0 (no answer)` after a `simulate` | `state` works but nothing is captured; `payloads` says a request from another origin was refused; since 0.5.19 `state` and `click` also say `Warning: This tab is X but WEBSCOPE_APP_URL is Y` | `WEBSCOPE_APP_URL` must equal the tab's exact origin (`demo.localhost:5173`, not `localhost:5173`): open the app at that address, or change the variable, run `/mcp` and `page(load)` again | measured (twice) |
 | `page` has no tab with a session | `Failed: webscope is not loaded in this page` or the login shows | Open a tab of the app in the MCP group with `tabs_create_mcp` and navigate; if it shows the login, stop and ask | measured |
 | Console lines missing | `state` shows no `Console` line although the page failed earlier | The helper logs only from `page(load)` on: load it first, then act | test |
 | `javascript_tool` answers `[BLOCKED: Cookie/query string data]` | The output carries an address with a query string | `Requests:` already drops the query; for other text return only the lines you need, filtered | measured |

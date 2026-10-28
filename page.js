@@ -6,6 +6,7 @@
   const cfg = (window.__wsCfg = window.__wsCfg || {});
   cfg.base = src.slice(0, src.indexOf('/page.js'));
   cfg.t = new URL(src).searchParams.get('t');
+  cfg.o = new URL(src).searchParams.get('o'); // the address WEBSCOPE_APP_URL names: the only origin the listener answers
   if (window.__ws) return;
   const CAP = 3000;
   const SENT = 8000; // chars of each body reported (check compares them): request and answer together stay under the 64 KiB a keepalive fetch may carry, even at 3 bytes a character
@@ -28,7 +29,7 @@
     if (counted) pending = Math.max(0, pending - 1);
     try {
       const u = new URL(c.u, location.href);
-      log.push({ i: seq++, t: c.m + ' ' + u.pathname + ' ' + c.s }); // no query string: it can hold a token, and payloads still shows the whole address
+      log.push({ i: seq++, t: c.m + ' ' + u.pathname + ' ' + (c.s === 0 ? '0 (no answer)' : c.s) }); // no query string: it can hold a token, and payloads still shows the whole address
       if (log.length > 200) log.shift();
     } catch (e) { /* an address that does not parse is left out of the log */ }
     try {
@@ -132,8 +133,11 @@
   const ALERTS ='[role=alert],.v-alert,.v-snackbar__content,.alert,.toast';
   const ERRORS = '.v-messages__message,.invalid-feedback,.error--text,.text-danger';
 
+  const wrongOrigin = () => cfg.o && location.origin !== cfg.o ? 'This tab is ' + location.origin + ' but WEBSCOPE_APP_URL is ' + cfg.o + ': captures and simulate are refused. Open the app at that address.' : '';
+
   const state = a => {
     const out = ['URL: ' + location.pathname + location.search + location.hash, 'Title: ' + norm(document.title)];
+    if (wrongOrigin()) out.push('Warning: ' + wrongOrigin());
     const h = texts('h1,h2,h3').slice(0, 8);
     if (clog.length) out.push('Console (last ' + Math.min(5, clog.length) + ' of ' + clog.length + ' since the helper loaded): ' + clog.slice(-5).map(e => e.t).join(' | '));
     if (h.length) out.push('Headings: ' + h.join(' | '));
@@ -272,6 +276,7 @@
     if (nc.length) out.push('New console errors: ' + nc.join(' | '));
     if (url() !== before.url) out.push('URL: ' + before.url + ' → ' + url());
     if (out.length === 1) out.push(norm(document.body.innerText) === before.text ? 'No effect seen: no request, no new alert, the screen text is the same.' : 'The screen text changed; no request, alert or URL change.');
+    if (wrongOrigin()) out.push('Warning: ' + wrongOrigin());
     return out.join('\n');
   };
 
