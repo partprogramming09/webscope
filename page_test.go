@@ -330,7 +330,7 @@ const fixturePage = `<!doctype html><meta charset=utf-8><title>Pedido</title><h1
 <script>
 go.onclick=()=>fetch('/api/orders',{method:'POST',body:JSON.stringify({n:n.value,c:c.value,a:a.checked,k:k.value})}).then(r=>al.textContent='status '+r.status)
 big.onclick=()=>fetch('/api/big').then(r=>r.text()).then(t=>al.textContent='big '+t.length)
-ping.onclick=()=>fetch('/api/ping').then(r=>al.textContent='ping '+r.status)
+ping.onclick=()=>fetch('/api/ping?token=abc&page=2').then(r=>al.textContent='ping '+r.status)
 tx.onclick=()=>tx2.textContent='cambió' // changes the screen without a request or an alert
 up.onclick=()=>{const x=new XMLHttpRequest();x.open('PUT','/api/orders/1');x.onloadend=()=>al.textContent='xhr '+x.status;x.send('{}')}
 n.oninput=()=>mirror.textContent=n.value // what a v-model would copy: it only hears the input and change events
@@ -508,6 +508,9 @@ func TestActionsRunInARealChrome(t *testing.T) {
 	has(31, "Cliente: ok")
 	has(32, "Contacto: ok")
 	has(35, "clicked", "Requests: GET /api/ping 200", "New alerts: ping 200")
+	if strings.Contains(out[35], "token") || strings.Contains(out[35], "?") {
+		t.Errorf("the requests of an effect carry no query string: %q", out[35])
+	}
 	has(36, "clicked", "No effect seen")
 	if strings.Contains(out[36], "Requests:") || strings.Contains(out[36], "New alerts:") {
 		t.Errorf("a button that does nothing must not report an effect: %q", out[36])

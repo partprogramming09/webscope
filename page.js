@@ -28,7 +28,7 @@
     if (counted) pending = Math.max(0, pending - 1);
     try {
       const u = new URL(c.u, location.href);
-      log.push({ i: seq++, t: c.m + ' ' + u.pathname + u.search + ' ' + c.s });
+      log.push({ i: seq++, t: c.m + ' ' + u.pathname + ' ' + c.s }); // no query string: it can hold a token, and payloads still shows the whole address
       if (log.length > 200) log.shift();
     } catch (e) { /* an address that does not parse is left out of the log */ }
     try {
