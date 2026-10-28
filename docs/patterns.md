@@ -38,7 +38,7 @@ Tools of the old server (`e2e_chrome`, `__f.*`, `payload_check`, …) are in [ol
 | `check` says `unread~` | The read does not name the field (the list calls it `description`, the POST `notes`) | Not a defect: pass `after` with the request that names it, or `at` to point at the row | measured |
 | Delete is logical | After deleting by screen the row stays with `ESTADO = BORRADO` and its child rows stay too | Count by `ESTADO`, not the total; `query` cannot clean it (it never writes): clean through the screen and list the ids left | measured |
 | Leading zeros lost | `check` would show `007  007  7` (sent, stored, read) | A type problem between the form, the rule and the column: S1; `007` travelled intact in the real cycles so far | test |
-| `Unknown column` or `Unknown table` | `query` answers `Error 1054` or `Error 1146` | The answer says how to see the real ones: `code fields {table}`, `SHOW COLUMNS FROM table`, `SHOW TABLES LIKE '%word%'`; do not guess names | measured (about 8 % of the calls before 0.5.11) |
+| `Unknown column` or `Unknown table` | `query` answers `Error 1054` or `Error 1146` | The answer says how to see the real ones: `code fields {table}`, `SHOW COLUMNS FROM table`, `SHOW TABLES LIKE '%word%'`; do not guess names. With a `tenant`, a missing table may live in the central database: call without `tenant` (said by the answer from 0.5.18) | measured (about 8 % of the calls before 0.5.11; two missing tables in one session were central or misnamed) |
 
 ## Running it
 

@@ -13,7 +13,7 @@ import (
 )
 
 const (
-	version      = "0.5.17"
+	version      = "0.5.18"
 	instructions = `query(sql): one read-only statement (SELECT, SHOW, DESCRIBE, EXPLAIN, WITH). The answer is TSV with a header; \N is NULL; rows and cells are capped, so refine with WHERE or fewer columns. page(action,args?): test a screen in Chrome; start with page(help). check(sent,table,where,map,after?,at?,tenant?): sent is a request page captured ("POST /api/quotes"), where {column:value} picks one row, map {sent field:column}, after a later captured read; only differences are shown. code(action,args?): fields {table,tenant?} is the sheet of a table (counts, never values); consumers {table,column} lists who reads and writes a column in the backend (an estimate); map {module,walkthrough?} the routes, calls and screens of a front module; map_back {query} from them to endpoint, controller, service and table; snap {name,sql,key?,tenant?} keeps a query and snap_diff {name} shows what changed since (new, deleted, before → after). If a tool fails, report it as is.`
 )
 
@@ -21,19 +21,22 @@ const (
 func (s *source) query(ctx context.Context, _ *mcp.CallToolRequest, in queryArgs) (*mcp.CallToolResult, any, error) {
 	text, err := s.answer(ctx, in)
 	if err != nil {
-		text = failure(err)
+		text = failure(err, in.Tenant)
 	}
 	return &mcp.CallToolResult{IsError: err != nil, Content: []mcp.Content{&mcp.TextContent{Text: text}}}, nil, nil
 }
 
-// failure is the text of a failed call: what happened and what to do next.
-func failure(err error) string {
+// failure is the text of a failed call: what happened and what to do next. tenant is the one the call named, if any.
+func failure(err error, tenant string) string {
 	next := "fix the statement or the connection (WEBSCOPE_DB_URL) and call again."
 	switch msg := err.Error(); {
 	case strings.Contains(msg, "Error 1054") || strings.Contains(msg, "no such column"):
 		next = "that column does not exist: code(fields {table}) or SHOW COLUMNS FROM table lists the real ones; then call again."
 	case strings.Contains(msg, "Error 1146") || strings.Contains(msg, "no such table"):
 		next = "that table does not exist: SHOW TABLES LIKE '%word%' lists the tables; then call again."
+		if tenant != "" {
+			next = "that table does not exist in the database of tenant " + tenant + ": SHOW TABLES LIKE '%word%' lists its tables; a central table is read by calling without tenant."
+		}
 	}
 	return "Failed: " + strings.TrimRight(err.Error(), ". ") + ". Next: " + next
 }
