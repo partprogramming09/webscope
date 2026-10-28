@@ -1,32 +1,52 @@
-> **Written for the old webscope server (`webscope-publico`); copied on 24 October 2026 without changing a word of it.** The tools it names (`e2e_chrome`, `plan`, `options`, `__f.*`, `payload_check`, `run`, …) are not in webscope 0.5 or are called differently: read [old-to-new-tools.md](old-to-new-tools.md) before following a step. What it says about *what to look for* in a module still holds; the commands do not.
-
 # Known patterns
 
-Findings met while testing modules through webscope, each with how to recognize it and what to do. Check this list before
-testing a module; add a row (and a detector when one can be written) when a new kind of finding appears.
+Findings met while testing screens with webscope 0.5 (`query`, `page`, `check`, `code`), each with how to recognize it and what to do. Check this list before testing a module; add a row when a new kind of finding appears. The last column says how far each one was verified: **measured** (seen in the Acme demo tenant, 24 to 28 October 2026), **test** (only in the Chrome test fixture) or **read** (from code or from an old session, not reproduced since).
 
-| Pattern | How to recognize it | What to do |
-|---|---|---|
-| Save disabled until valid | Empty form, submit button `disabled`, no `aria-invalid`, no field messages, no request | The deep walk lists it as `Guardar (disabled)`; report `disabled_button` (not «no errors»); test with one field filled to find which rule enables it |
-| Message only on screen | Empty submit shows «select X» under a field; no console line, no request | `__f.emptySubmit('Guardar', {press: true})` gives `verdict: client_validation`, the text per field and `onlyOnScreen`; without `press` it only reads. Hints (helper text) are not errors; `wrote` means the app saved an empty form |
-| Form and FormRequest disagree | The form marks a field required that the backend does not (or the reverse) | `map_back <module> --required-static` compares them from the code, no save; pairs by the label's translation key, camelCase = snake_case; a module with several saves is marked heuristic |
-| Select empty because its source has no rows | A select shows no options; its list comes from a shared catalog filtered by a type code or a status | `options <module>` follows each select to endpoint, controller, service, table and owning module, and says what must exist first (rows of that type or status); lists it cannot follow are `unresolved` |
-| Actions in a row menu | Row has a ⋮ / kebab button; the actions are not in the DOM until it opens | The deep walk (`--map`) opens the first row's menu read-only and lists it as `rowMenu`, without choosing an item |
-| Icon-only row actions | A row action has no text (a copy or trash icon) and no ⋮ menu | `inventory` and the deep walk list them as `rowIcons` (aria-label, title, the `mdi-` class, or `#N` by position when the button has no name; `row` accepts `#N`) |
-| Tabs with their own buttons | Detail page with tabs; each tab has different buttons | The deep walk lists every button per tab (not only create/save ones); the tabs themselves are left out |
-| Rate limit in the API | Console or alert `Too Many Attempts.`, HTTP 429 | `e2e_chrome` route walk reports it as `throttled` (not in `bad`): wait, slow the walk down, repeat the route; never count it as a failure of the module |
-| Session lost | Redirect to the login route while `localStorage` still has the token; seen right after `throttled` requests (probable link, 2 sightings) | Stop and ask the user to sign in; never type a password; leave ≥20 s between walks |
-| Module kind | The deep walk prints `kind` (wizard, actions, crud, report, unknown) and `why` | Heuristic: pick the test types of the kind; `unknown` means look at the screen first |
-| Wizard saves on «Next» | A stepper whose «Next» sends a request | Do not press «Next» or «Finish» without the user's approval; describe the step from the code |
-| Two browser drivers on one Chrome | Tabs jump to other routes, session drops | Drive the browser from one place at a time |
-| Script folder argument wrong | `map` answers «no module contains» for every module | `webscope --doctor` warns when a script argument is not under the root |
-| Tab title empty right after opening it | `/json/list` shows `""` as the title of a tab opened a moment ago (about 100 ms) | Poll `tabs` until the title shows before choosing the tab by title; the tool matches by id and is not affected |
-| Row icon is `mdi-delete`, not `mdi-trash…` | `__f.row(/re/, 'trash')` answers `no trash`; `crud` with the default `remove` stops at `delete-open` | Pass the icon: `crud` with `remove: {icon: 'delete'}` (the alias list knows `delete`, `eliminar`, `borrar`), or `row(/re/, 'mdi-delete')` |
-| `snap save` fails on a query with 0 rows | `ERR the query does not return the key column 'id': []`; the query is valid, the table (or the filter) is just empty | Fixed in `snap.py`: an empty result has no header (`sql.php` prints only `(0 rows)`), so it is saved as 0 rows and `diff` shows what appears later as `NEW`. Before the fix: save with a query that returns at least one row |
-| `payload_check` fails with `Unknown column` on a module that writes several tables | `SELECT DISTINCT <col> FROM <table> -> Unknown column`; the module's Services write to more than one table and the column belongs to another | Fixed: the field→column map keeps only columns of the table passed, so each table gets its own verdict. Run it once per table; a column name shared by two tables still maps in both |
-| `payload_check` ❌ «you entered X and it did not travel» on a form with several save buttons | The form has independent save buttons; the value typed belongs to another panel's request | Fixed: no finding if the value traveled in another write of the capture; ❓ (not ❌) if it traveled nowhere and the capture has several write routes; ❌ only with a single write route |
-| `payload_check` compares a response with the wrong Resource | A module has several Resources; the first one was used for every response | Fixed: each response is compared with the Resource sharing the most keys (tie: the one named in the route) |
-| Column written by a Service outside the module folder | The table's columns (e.g. a counter table) are not mapped; the Service is imported with `use` from a shared folder | Fixed: `payload_check` follows the `use` imports of the module's Services one level, under the backend folder and the root |
-| Downloaded binary killed with exit 137 | A `webscope` binary (ad-hoc signed by the Go linker) with the `com.apple.quarantine` attribute dies at launch, even from a shell (macOS 27, arm64, measured 21 oct: `-version` exit 137, `spctl --assess` rejected; same file without the attribute runs) | Clear it: `xattr -d com.apple.quarantine <file>`; a lasting fix needs a Developer ID signature and notarization (not available) |
-| A tool acts on the user's own browser or home without being asked | Listing tabs starts a Chrome, a fallback drives the everyday Chrome (AppleScript), or a default profile folder is read | Fixed on 22 Oct 2026: nothing starts a browser or reads a default profile; the user starts Chrome with `--remote-debugging-port` and its own `--user-data-dir`, or sets `WEBSCOPE_CHROME_PROFILE`. Tests `TestTabsNeverStartsAChrome`, `TestResolveIgnoresTheDefaultProfileFolders` and `ChromePort.test_no_answering_port_is_an_error_and_never_drives_the_normal_chrome` fail without it. |
+Tools of the old server (`e2e_chrome`, `__f.*`, `payload_check`, …) are in [old-to-new-tools.md](old-to-new-tools.md).
 
+## What the screen does
+
+| Pattern | How to recognize it | What to do | Seen |
+|---|---|---|---|
+| Save disabled until valid | `click` on the save button answers `No effect seen`; `state` still lists the button (it does not mark disabled buttons) | Read `disabled` / `aria-disabled` with `javascript_tool` and report «disabled», not «no errors»; fill one field at a time to find the rule that enables it | measured (a disabled pager button) |
+| Message only on screen | `click` or `press` answers `New alerts:` or `New errors:` and no `Requests:` | Client validation: record the text per field; never count it as a save | test |
+| HTTP error with no notice, old data left | `simulate {match, status:500}` then an action that reloads the list: `Requests: GET … 500`, no `New alerts`, same rows as before | Report it (the user sees stale data and thinks it is current); S4 in [module-testing.md](module-testing.md) | measured twice (quotes list) |
+| A screen calls an endpoint that needs a session before the login | `Requests: GET … 403` on a screen shown without a session (the reset-password screen called the settings endpoint) | Report it; it is noise in the log and a wrong request, not a data leak | measured in a session, not reproduced since |
+| An action offered that the server always refuses | `Requests: PUT … 422` and a notice such as «cannot edit an approved quote» after a click on «Edit» | Report as a UX defect: hide or disable the action for that state | measured in a session |
+| Handler that breaks without a visible effect | `state` shows `Console (…): warn: [Vue warn]: Unhandled error …` or `click` answers `New console errors:` | Read the line (component and handler named), then the code | test; the Acme case did not reproduce on 28 Oct |
+| Actions in a row menu or icon-only buttons | The action is not in `state` (no text) or the menu is closed | `click` by `selector`; open the menu first and read it with `state` | read |
+| Rate limit | `Requests: … 429` or a notice «Too Many Attempts» | Wait and repeat; never count it as a failure of the module | read |
+| Session lost | `state` shows the login screen or `Requests: … 401` | Stop and ask the user for the session; never type credentials | read |
+
+## `fill` and menus
+
+| Pattern | How to recognize it | What to do | Seen |
+|---|---|---|---|
+| A menu keeps its old value | `fill` answers `the page shows "A" instead of "B"` | The field is a Vuetify menu: it reads the value back, so this is real; `fill` chooses in `v-select` and `v-autocomplete` by the text of the option | measured |
+| Option with several parts | The field shows only the first line (`Demo`) and the option reads `Demo Documento: +57…` | Fixed in 0.5.8: the readback joined the selection and its inner text (`Demo, Demo`) and rejected a correct choice | measured |
+| Autocomplete finds nothing for the whole text | `no option "…" among 0 seen` although the option exists | Fixed in 0.5.9: it retries with the first word; if it still fails the option is really missing | measured |
+| Select empty because its source has no rows | `no option "X" among N seen: …` lists what the menu holds | Count the source with `query` (rows of that type or status) before blaming the form | read |
+| Option text differs from the value you typed | `no option "Sí"` and the list shows `Si, No`; `Inactivo` against `Activas, Desactivadas` | Use the text the menu shows (the error lists it); a different label for the same thing is an S5 finding | measured in sessions |
+
+## What is sent, stored and read
+
+| Pattern | How to recognize it | What to do | Seen |
+|---|---|---|---|
+| Save without changes modifies data | `code snap` before, open the record and press «Edit» then save without touching anything, `code snap_diff` after: columns change (`'' → NULL`, a code replaced by a name) | The edit form sends a different representation than the create form (`MIA` against `Miami`); report it, it corrupts data on every untouched save | measured |
+| Same field, three representations | `check` shows `office  MIA  MIA  Miami` | A real difference when sent and stored agree and the read differs; a field the list names differently shows as `unread~`, not as an error | measured |
+| `check` says `unread~` | The read does not name the field (the list calls it `description`, the POST `notes`) | Not a defect: pass `after` with the request that names it, or `at` to point at the row | measured |
+| Delete is logical | After deleting by screen the row stays with `ESTADO = BORRADO` and its child rows stay too | Count by `ESTADO`, not the total; `query` cannot clean it (it never writes): clean through the screen and list the ids left | measured |
+| Leading zeros lost | `check` would show `007  007  7` (sent, stored, read) | A type problem between the form, the rule and the column: S1; `007` travelled intact in the real cycles so far | test |
+| `Unknown column` or `Unknown table` | `query` answers `Error 1054` or `Error 1146` | The answer says how to see the real ones: `code fields {table}`, `SHOW COLUMNS FROM table`, `SHOW TABLES LIKE '%word%'`; do not guess names | measured (about 8 % of the calls before 0.5.11) |
+
+## Running it
+
+| Pattern | How to recognize it | What to do | Seen |
+|---|---|---|---|
+| `payloads` shows 0 requests | `state` works but nothing is captured; since 0.5.5 `payloads` says a request from another origin was refused | `WEBSCOPE_APP_URL` must equal the tab's exact origin (`demo.localhost:5173`, not `localhost:5173`); change it, run `/mcp` and `page(load)` again | measured |
+| `page` has no tab with a session | `Failed: webscope is not loaded in this page` or the login shows | Open a tab of the app in the MCP group with `tabs_create_mcp` and navigate; if it shows the login, stop and ask | measured |
+| Console lines missing | `state` shows no `Console` line although the page failed earlier | The helper logs only from `page(load)` on: load it first, then act | test |
+| `javascript_tool` answers `[BLOCKED: Cookie/query string data]` | The output carries an address with a query string | `Requests:` already drops the query; for other text return only the lines you need, filtered | measured |
+| `find` and clicks fail on an empty tree | The accessibility tree holds only `ref_1` right after a navigation | Wait for the screen to draw, then read `state`; this is Claude in Chrome, not `page` | measured |
+| Two drivers on one Chrome | Tabs jump to other routes, the session drops | Drive the browser from one place at a time | read |
+| A downloaded binary dies with exit 137 | A `webscope` binary with the `com.apple.quarantine` attribute (macOS) | `xattr -d com.apple.quarantine <file>` | read |
