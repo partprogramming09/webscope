@@ -19,7 +19,7 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
-// codeSchema is written by hand, like checkSchema: the generated one costs twice the bytes of tools/list.
+// codeSchema is written by hand, like checkSchema: the generated one costs twice the bytes of tools/list. page uses it too.
 var codeSchema = map[string]any{
 	"type": "object",
 	"properties": map[string]any{

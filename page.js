@@ -234,10 +234,11 @@
     e.blur();
   };
   const fill = async a => {
-    if (!a.fields || typeof a.fields !== 'object') return fail('fill needs fields {label: value}');
+    const fields = a.fields && typeof a.fields === 'object' ? a.fields : a;
+    if (!Object.keys(fields).length) return fail('fill needs fields {label: value}, e.g. fill {"Nombre":"Ana","Acepto":true}');
     let miss = false;
     const out = [];
-    for (const [k, v] of Object.entries(a.fields)) {
+    for (const [k, v] of Object.entries(fields)) {
       const e = findField(k);
       if (!e) { miss = true; out.push(k + ': not found'); continue; }
       try {

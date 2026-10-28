@@ -14,6 +14,8 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
 const appOrigin = "http://localhost:5173"
@@ -77,6 +79,20 @@ func TestSnippetCarriesArgsOnlyAsJSON(t *testing.T) {
 	}
 	if got, _ := snippet("state", nil); !strings.Contains(got, "({})") {
 		t.Errorf("no arguments must be an empty object: %q", got)
+	}
+}
+
+func TestPageAcceptsTheArgumentsAtTheTopLevelToo(t *testing.T) {
+	res, err := connect(t, &source{}).CallTool(context.Background(), &mcp.CallToolParams{Name: "page", Arguments: map[string]any{"action": "fill", "Nombre": "Ana"}})
+	if err != nil || res.IsError {
+		t.Fatalf("the schema refused a top-level argument: %v %+v", err, res)
+	}
+	if got := res.Content[0].(*mcp.TextContent).Text; !strings.Contains(got, `__ws.fill({"Nombre":"Ana"})`) {
+		t.Errorf("the top-level argument did not reach the snippet: %q", got)
+	}
+	var in pageArgs
+	if err := json.Unmarshal([]byte(`{"action":"fill","Nombre":"x","args":{"Nombre":"Ana"}}`), &in); err != nil || in.Args["Nombre"] != "Ana" {
+		t.Errorf("a key inside args must win: %+v, %v", in, err)
 	}
 }
 
@@ -458,6 +474,8 @@ func TestActionsRunInARealChrome(t *testing.T) {
 	steps = append(steps, loadBad)                                                                                                      // 43: the helper now expects another origin than the tab's
 	add("state", nil)                                                                                                                   // 44
 	add("click", map[string]any{"text": "Inerte"})                                                                                      // 45
+	add("fill", map[string]any{"Nombre": "Ana"})                                                                                        // 46: the labels at the top level, without "fields"
+	add("fill", map[string]any{})                                                                                                       // 47: nothing to fill says how to ask
 	raw, _ := json.Marshal(steps)
 	mu.Lock()
 	html_ =strings.Replace(fixturePage, "{{STEPS}}", string(raw), 1)
@@ -563,6 +581,8 @@ func TestActionsRunInARealChrome(t *testing.T) {
 		t.Errorf("the strict autocomplete was not chosen: %q", out[33])
 	}
 	has(34, "Contacto: no option", "Zzz Qqq")
+	has(46, "Nombre: ok")
+	has(47, "fill needs fields", `fill {"Nombre":"Ana"`)
 	if strings.Contains(out[26], "Origen: ok") {
 		t.Errorf("an option that does not exist must not be ok: %q", out[26])
 	}

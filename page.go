@@ -39,20 +39,18 @@ var snippetActions = []string{"state", "read", "fill", "click", "press", "simula
 
 const helpText = `page(action, args?) tests a screen in the user's Chrome through Claude in Chrome.
 Needs a tab of the app (WEBSCOPE_APP_URL) with the session already started: open one with tabs_create_mcp and navigate to a screen; if it shows the login, stop and ask the user for the session (never type credentials).
-load: one line of JavaScript; run it with javascript_tool once per page load (needs WEBSCOPE_APP_URL).
+load: one line of JavaScript; run it with javascript_tool again after every navigation, reload or /mcp: the helper is lost and the port changes (needs WEBSCOPE_APP_URL).
 state|read|fill|click|press|simulate: return a snippet; run it with javascript_tool, its value is the answer.
   state {max?}: URL, title, console, headings, fields, buttons (dialog first, side menu last, disabled ones marked), alerts, errors, dialog, tables.
   read {selector?, max?}: text of the first match, or of the page.
-  fill {fields:{label:value}}: by label, name, placeholder or id; true/false for checkboxes; select by option text; Vuetify menus too (long lists are scrolled).
+  fill {fields:{label:value}} or {label:value}: by label, name, placeholder or id; true/false for checkboxes; select by option text; Vuetify menus too (long lists are scrolled).
   click {text} or {selector}; press {key, selector?}: both then say what happened (requests with status, new alerts, errors and console errors, URL change, or "No effect seen").
   simulate {match, status, times?, method?}: the next requests whose URL contains match answer HTTP status 400-599 without reaching the app; {clear:true} cancels.
 payloads {limit?}: the requests the page sent and their answers (answered here, no snippet).
 Writes only with the user's approval, and rows prefixed ZZ_.`
 
-type pageArgs struct {
-	Action string         `json:"action" jsonschema:"load, state, read, fill, click, press, payloads, simulate or help"`
-	Args   map[string]any `json:"args,omitempty" jsonschema:"arguments of the action; help lists them"`
-}
+// pageArgs reads like codeArgs: the arguments sit in "args" or at the top level of the call.
+type pageArgs = codeArgs
 
 // capture is one request the page sent, as reported by page.js.
 type capture struct {
