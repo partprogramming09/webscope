@@ -324,7 +324,7 @@ const fixturePage = `<!doctype html><meta charset=utf-8><title>Pedido</title><h1
 <label for=on>Nota</label><input id=on>
 <div role=dialog><label for=dn>Nota</label><input id=dn></div>
 <div class=v-overlay-container id=oc></div>
-<button type=button id=go>Guardar</button><button type=button id=up>Actualizar</button><button type=button id=big>Grande</button><button type=button id=ping>Ping</button><button type=button id=nop>Inerte</button><button type=button id=tx>Texto</button><button type=button>Cancelar</button></form><a href="#x" id=lk>Ir</a><p id=tx2></p>
+<button type=button id=go>Guardar</button><button type=button id=up>Actualizar</button><button type=button id=big>Grande</button><button type=button id=ping>Ping</button><button type=button id=nop>Inerte</button><button type=button id=tx>Texto</button><button type=button id=boom>Boom</button><button type=button>Cancelar</button></form><a href="#x" id=lk>Ir</a><p id=tx2></p>
 <p id=cl></p><p id=ct></p><p id=nn></p><p role=alert id=al></p><p id=mirror></p><p id=picked></p><pre id=out></pre>
 <script type=application/json id=steps>{{STEPS}}</script>
 <script>
@@ -332,6 +332,7 @@ go.onclick=()=>fetch('/api/orders',{method:'POST',body:JSON.stringify({n:n.value
 big.onclick=()=>fetch('/api/big').then(r=>r.text()).then(t=>al.textContent='big '+t.length)
 ping.onclick=()=>fetch('/api/ping?token=abc&page=2').then(r=>al.textContent='ping '+r.status)
 tx.onclick=()=>tx2.textContent='cambió' // changes the screen without a request or an alert
+boom.onclick=()=>{console.error('boom ?token=abc');console.warn('[Vue warn]: handler');setTimeout(()=>{throw new Error('late')},10)} // what a handler that breaks leaves in the console
 up.onclick=()=>{const x=new XMLHttpRequest();x.open('PUT','/api/orders/1');x.onloadend=()=>al.textContent='xhr '+x.status;x.send('{}')}
 n.oninput=()=>mirror.textContent=n.value // what a v-model would copy: it only hears the input and change events
 k.onchange=()=>picked.textContent=k.value
@@ -444,6 +445,8 @@ func TestActionsRunInARealChrome(t *testing.T) {
 	add("click", map[string]any{"text": "Texto"})                                                                                       // 37: only the screen text changes
 	add("press", map[string]any{"key": "Escape", "selector": "#n"})                                                                     // 38: a new alert, no request
 	add("click", map[string]any{"text": "Ir"})                                                                                          // 39: the URL changes
+	add("click", map[string]any{"text": "Boom"})                                                                                        // 40: console error, warning and an uncaught error
+	add("state", nil)                                                                                                                   // 41: the console shows in the state
 	raw, _ := json.Marshal(steps)
 	mu.Lock()
 	html_ =strings.Replace(fixturePage, "{{STEPS}}", string(raw), 1)
@@ -521,6 +524,14 @@ func TestActionsRunInARealChrome(t *testing.T) {
 	}
 	has(38, "pressed", "New alerts: esc")
 	has(39, "URL: ", "#x")
+	has(40, "New console errors:", "error: boom", "warn: [Vue warn]: handler", "uncaught: Error: late")
+	has(41, "Console (", "error: boom")
+	if strings.Contains(out[40], "token") || strings.Contains(out[41], "token") {
+		t.Errorf("the console lines carry no query string: %q %q", out[40], out[41])
+	}
+	if strings.Contains(out[1], "Console") || strings.Contains(out[36], "console") {
+		t.Errorf("no console line when nothing was logged: %q %q", out[1], out[36])
+	}
 	if out[33] != "contacto Laura" {
 		t.Errorf("the strict autocomplete was not chosen: %q", out[33])
 	}

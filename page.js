@@ -97,6 +97,19 @@
     return xhrSend.apply(this, arguments);
   };
 
+  // ---- what the page logs from now on: console.error and console.warn, uncaught errors and rejected promises
+  const clog = [];
+  let cseq = 0;
+  const noQuery = s => String(s).replace(/\?[^\s)|]*/g, '');
+  const show = a => { if (a instanceof Error) return a.message; if (typeof a === 'string') return a; try { return JSON.stringify(a); } catch (e) { return String(a); } };
+  const logLine = (level, args) => {
+    clog.push({ i: cseq++, t: level + ': ' + clip(noQuery(args.map(show).join(' ')), 200) });
+    if (clog.length > 100) clog.shift();
+  };
+  ['error', 'warn'].forEach(k => { const o = console[k].bind(console); console[k] = (...a) => { logLine(k, a); o(...a); }; });
+  window.addEventListener('error', e => logLine('uncaught', [String(e.message).replace(/^Uncaught /, '')]));
+  window.addEventListener('unhandledrejection', e => logLine('rejected', [e.reason && e.reason.message ? e.reason.message : e.reason]));
+
   // ---- reading the screen
   const labelOf = e => {
     if (e.labels && e.labels.length) return norm(e.labels[0].textContent);
@@ -119,6 +132,7 @@
   const state = a => {
     const out = ['URL: ' + location.pathname + location.search + location.hash, 'Title: ' + norm(document.title)];
     const h = texts('h1,h2,h3').slice(0, 8);
+    if (clog.length) out.push('Console (last ' + Math.min(5, clog.length) + ' of ' + clog.length + ' since the helper loaded): ' + clog.slice(-5).map(e => e.t).join(' | '));
     if (h.length) out.push('Headings: ' + h.join(' | '));
     const f = fields();
     if (f.length) {
@@ -239,7 +253,7 @@
   // Runs `f` (a click or a key) and appends what it caused: the requests with their status, the new alerts and field errors, a URL change, or that nothing changed.
   const withEffect = async f => {
     const url = () => location.pathname + location.search + location.hash;
-    const before = { seq, alerts: new Set(texts(ALERTS)), errors: new Set(texts(ERRORS)), url: url(), text: norm(document.body.innerText) };
+    const before = { seq, cseq, alerts: new Set(texts(ALERTS)), errors: new Set(texts(ERRORS)), url: url(), text: norm(document.body.innerText) };
     const r = f();
     if (/^Failed:/.test(r)) return r;
     await sleep(400);
@@ -251,6 +265,8 @@
     if (na.length) out.push('New alerts: ' + na.join(' | '));
     const ne = texts(ERRORS).filter(x => !before.errors.has(x));
     if (ne.length) out.push('New errors: ' + ne.join(' | '));
+    const nc = clog.filter(e => e.i >= before.cseq).map(e => e.t);
+    if (nc.length) out.push('New console errors: ' + nc.join(' | '));
     if (url() !== before.url) out.push('URL: ' + before.url + ' → ' + url());
     if (out.length === 1) out.push(norm(document.body.innerText) === before.text ? 'No effect seen: no request, no new alert, the screen text is the same.' : 'The screen text changed; no request, alert or URL change.');
     return out.join('\n');
