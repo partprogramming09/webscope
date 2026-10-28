@@ -70,6 +70,21 @@ func TestAnAnswerIsPlainTextAndAFailureIsMarkedAndNamesTheNextStep(t *testing.T)
 	}
 }
 
+func TestFailureSaysHowToSeeTheRealColumnsAndTables(t *testing.T) {
+	for _, tc := range []struct{ err, want string }{
+		{"Error 1054 (42S22): Unknown column 'pantalla' in 'field list'", "code(fields"},
+		{"SQL logic error: no such column: pantalla (1)", "code(fields"},
+		{"Error 1146 (42S02): Table 'db.nada' doesn't exist", "SHOW TABLES"},
+		{"SQL logic error: no such table: nada (1)", "SHOW TABLES"},
+		{"Error 1064 (42000): You have an error in your SQL syntax", "fix the statement"},
+	} {
+		got := failure(errors.New(tc.err))
+		if !strings.HasPrefix(got, "Failed: "+tc.err) || !strings.Contains(got, "Next: ") || !strings.Contains(got, tc.want) {
+			t.Errorf("%s: %q lacks %q", tc.err, got, tc.want)
+		}
+	}
+}
+
 func TestFailureTextHasNoDoubledPeriodWhenTheErrorEndsInOne(t *testing.T) {
 	got := failure(errors.New("Error 1792 (25006): Cannot execute statement in a READ ONLY transaction."))
 	if strings.Contains(got, "..") {
