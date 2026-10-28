@@ -100,6 +100,18 @@ func TestHelpIsTextAndNamesEveryAction(t *testing.T) {
 	}
 }
 
+func TestHelpSaysWhichTabItNeedsAndHowToOpenIt(t *testing.T) {
+	out, err := askPage(t, testPage(t, appOrigin), "help", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{"session already started", "tabs_create_mcp", "login", "credentials"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("help lacks %q: %q", want, out)
+		}
+	}
+}
+
 func TestLoadNeedsTheAppURLAndAnUnknownActionNamesTheList(t *testing.T) {
 	_, err := askPage(t, testPage(t, ""), "load", nil)
 	if err == nil || !strings.Contains(err.Error(), "WEBSCOPE_APP_URL") {
