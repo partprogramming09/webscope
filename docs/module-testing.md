@@ -35,7 +35,7 @@ Browser order when an E2E is justified:
 
 ## 2. Read it deep
 - `page(state)`: URL, title, console, headings, fields, buttons, alerts, errors, dialog, tables. `page(read {selector})` for one part.
-- `state` marks disabled buttons `(disabled)` (from 0.5.16; before, a dialog showed `Cancelar Guardar` with `Guardar` disabled) and lists a button with no text only if it has an `aria-label` or `title`: read the rest with `javascript_tool`. Its `Buttons` line keeps 30: the dialog's first, the page's next, the side menu and the top bar last (before 0.5.16 the menu came first and could fill all 30).
+- `state` marks disabled buttons `(disabled)` (from 0.5.16; before, a dialog showed `Cancelar Guardar` with `Guardar` disabled) and lists a button with no text only if it has an `aria-label` or `title`: read the rest with `javascript_tool`. Its `Buttons` line keeps 30: the dialog's first, the page's next (the pager included), the side menu and the top bar last (before 0.5.16 the menu came first and could fill all 30).
 - A dialog's fields are listed in `Fields` after the page's own; `fill` looks in the open dialog first.
 
 ## 3. As the user (complete flows, in the browser)

@@ -324,7 +324,7 @@ const fixturePage = `<!doctype html><meta charset=utf-8><title>Pedido</title><h1
 <label for=on>Nota</label><input id=on>
 <div role=dialog><label for=dn>Nota</label><input id=dn></div>
 <div class=v-overlay-container id=oc></div>
-<button type=button id=go>Guardar</button><button type=button id=up>Actualizar</button><button type=button id=big>Grande</button><button type=button id=ping>Ping</button><button type=button id=nop>Inerte</button><button type=button id=tx>Texto</button><button type=button id=boom>Boom</button><button type=button id=dis disabled>Bloqueado</button><button type=button>Cancelar</button></form><a href="#x" id=lk>Ir</a><p id=tx2></p>
+<button type=button id=go>Guardar</button><button type=button id=up>Actualizar</button><button type=button id=big>Grande</button><button type=button id=ping>Ping</button><button type=button id=nop>Inerte</button><button type=button id=tx>Texto</button><button type=button id=boom>Boom</button><button type=button id=dis disabled>Bloqueado</button><nav class=v-pagination><button type=button>Siguiente página</button></nav><button type=button>Cancelar</button></form><a href="#x" id=lk>Ir</a><p id=tx2></p>
 <p id=cl></p><p id=ct></p><p id=nn></p><p role=alert id=al></p><p id=mirror></p><p id=picked></p><pre id=out></pre>
 <script type=application/json id=steps>{{STEPS}}</script>
 <script>
@@ -492,6 +492,9 @@ func TestActionsRunInARealChrome(t *testing.T) {
 	}
 	if i, j := strings.Index(out[1], "Guardar"), strings.Index(out[1], "Menu 0"); j >= 0 && i > j {
 		t.Errorf("the page's buttons come before the side menu: %q", out[1])
+	}
+	if i, j := strings.Index(out[1], "Siguiente página"), strings.Index(out[1], "Menu 0"); i < 0 || (j >= 0 && i > j) {
+		t.Errorf("the pager is a nav of the page, not the side menu: %q", out[1])
 	}
 	has(2, "Nada: not found", "Nombre: ok", "Código: ok", "Acepto: ok", "Tipo: ok")
 	has(4, "ñandú 😀 \"q\" </script>", `"007"`, "status 201")

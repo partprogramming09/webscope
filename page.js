@@ -128,7 +128,7 @@
   const CLICKABLE = 'button,a,[role=button],[role=tab],[role=menuitem],[role=option],input[type=submit],input[type=button],.v-btn,.v-list-item';
   const disabled = e => e.disabled || e.getAttribute('aria-disabled') === 'true' || /--disabled/.test(e.className);
   // the dialog's buttons first, the page's next, the side menu and the top bar last: they come first in the DOM and would fill the 30 places
-  const rank = e => e.closest('[role=dialog],.v-dialog') ? 0 : e.closest('nav,aside,header,[role=navigation],.v-navigation-drawer,.v-app-bar,.v-toolbar') ? 2 : 1;
+  const rank = e => e.closest('[role=dialog],.v-dialog') ? 0 : e.closest('.v-pagination') ? 1 : e.closest('nav,aside,header,[role=navigation],.v-navigation-drawer,.v-app-bar,.v-toolbar') ? 2 : 1; // a pager is a nav too, but it belongs to the page
   const ALERTS ='[role=alert],.v-alert,.v-snackbar__content,.alert,.toast';
   const ERRORS = '.v-messages__message,.invalid-feedback,.error--text,.text-danger';
 
