@@ -67,7 +67,7 @@ Not covered by webscope 0.5 (no tool reads queues, mailboxes or stored files). U
 Per finding: can an ordinary user trigger it from the screen? does it damage or expose data? can someone exploit it deliberately? Only what was reproduced and measured is a confirmed error; the rest goes to «not tested».
 
 ## 9. Coverage table, then close
-One row per route and per row action: tested, excluded with the reason, or pending. The routes come from the code (`code map_back`), not from the screen: bulk import, variations and exports are routes under their own path or verb. Compare the calls `payloads` captured with the endpoints `map_back` lists. Record findings and the table in the project's report, update the task file, and leave the database as it was found.
+One row per route and per row action: tested, excluded with the reason, or pending. The routes come from the code (`code map_back`), not from the screen: bulk import, variations and exports are routes under their own path or verb. Compare the calls `payloads` captured with the endpoints `map_back` lists. Also one row per button `page(state)` lists on each screen and per action the old system offered: a button with no row is pending. An action that is blocked on purpose (no route, hidden button, a server message that always refuses) is `excluded` with the line of code that blocks it, read in this session and not copied from a task note. Record findings and the table in the project's report, update the task file, and leave the database as it was found.
 
 ## 10. Classify every finding by severity
 Each finding gets one class, a reproducibility mark and an origin, so the fixes are ordered by harm and not by the order they were found.
@@ -84,6 +84,16 @@ Each finding gets one class, a reproducibility mark and an origin, so the fixes 
 - **Origin:** client, request rule, controller or service, database (type, length, constraint), or contract (what was sent, what arrived, what was stored differ). Find it by following one record: the body in `payloads`, the row with `query`, the comparison with `check`.
 - **Resisted attempts are recorded too:** an attack from the screen that the server stopped with a 4xx and a clear message goes in the coverage table as `resisted`.
 - Row format in the report: `id | module | class | reproducible | origin | where (file:line or route) | evidence | steps`.
+
+## 11. If part of a pass goes to subagents
+Seen in one session: 13 subagents, 62 failed calls in all, 11 of the 13 wrote their own `window.__*` helpers, two froze Chrome in the same second, and two shared one rate limit (429). The brief of each agent says:
+- **One agent with Chrome at a time.** Several agents on one browser freeze tabs (`timed out after 45000ms`) and share the backend's rate limit. Agents that only read code or the database can run in parallel.
+- **`page` first.** Paste the snippet it returns without removing its guard. After `/mcp` or after `navigate`, run `page(load)` again: the helper lives in the page and its port changes on every reconnect.
+- **No helpers of its own** (`window.__open`, `__pick`…). If `fill` fails, report the failure and the text it gave; do not rewrite it. `fill` takes `{"fields":{label:value}}`.
+- **Look before querying.** `code fields {table}` before a `query` on a table the agent has not seen; a guessed column name is the first cause of failed calls.
+- **Names of tools.** `payloads` is an action of `page`; a screenshot is an action of `computer`; search files with `grep` through Bash when `Grep` is not offered.
+- **No `git stash`, no commit, no push.** The agent reports; the main session decides.
+- **Budget and return.** The number of calls it may spend, the rows it may create (prefix `ZZ_`, ids listed at the end) and the format of its report: tested, excluded with reason, pending, findings with evidence. A report is data to verify, not a conclusion.
 
 ## Cost
 - The cost is the context re-read on every call, not what a tool returns: fewer calls and a smaller context are the only levers. (Measured on a 12 USD session of 431 calls of the old server.)
