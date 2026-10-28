@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"net/url"
 	"path/filepath"
+	"regexp"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -87,9 +89,72 @@ func (s *source) answer(ctx context.Context, in queryArgs) (string, error) {
 	}
 	out, err := runQuery(ctx, db, driver, stmt, rowLimit(in.Limit))
 	if err != nil {
-		return fail(err)
+		return fail(errors.New(err.Error() + columnHint(ctx, db, driver, stmt, err.Error())))
 	}
 	return out, nil
+}
+
+var (
+	fromTable   = regexp.MustCompile("(?i)\\b(?:from|join)\\s+((?:[`\"]?[\\p{L}\\p{N}_$]+[`\"]?\\.)?[`\"]?[\\p{L}\\p{N}_$]+[`\"]?)")
+	badColumn   = regexp.MustCompile(`Unknown column '([^']+)'|no such column: (\S+)`)
+	maxHintCols = 40 // column names shown in all, spread over the tables
+	maxHintTabs = 5
+)
+
+// columnHint is the text appended to an unknown-column or unknown-table error: the real columns of the tables in the statement's FROM and JOIN
+// that exist, those that resemble the missing column first. "" when the error is another one or no table is found; commas in FROM are not read.
+func columnHint(ctx context.Context, db *sql.DB, driver, stmt, msg string) string {
+	if !strings.Contains(msg, "Error 1054") && !strings.Contains(msg, "no such column") && !strings.Contains(msg, "Error 1146") && !strings.Contains(msg, "no such table") {
+		return ""
+	}
+	want := ""
+	if m := badColumn.FindStringSubmatch(msg); m != nil {
+		want = strings.ToLower(m[1] + m[2])
+		want = want[strings.LastIndex(want, ".")+1:]
+	}
+	ctx, cancel := context.WithTimeout(ctx, queryTimeout)
+	defer cancel()
+	q := "SELECT name FROM pragma_table_info(?)"
+	if driver == "mysql" {
+		q = "SELECT COLUMN_NAME FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ? ORDER BY ORDINAL_POSITION"
+	}
+	var names, parts []string
+	for _, m := range fromTable.FindAllStringSubmatch(stmt, -1) {
+		if name := strings.Trim(m[1][strings.LastIndex(m[1], ".")+1:], "`\""); !slices.Contains(names, name) && len(names) < maxHintTabs {
+			names = append(names, name)
+		}
+	}
+	for _, name := range names {
+		rows, err := db.QueryContext(ctx, q, name)
+		if err != nil {
+			continue
+		}
+		var near, rest []string
+		for rows.Next() {
+			var c string
+			if rows.Scan(&c) != nil {
+				break
+			}
+			if l := strings.ToLower(c); want != "" && (strings.Contains(l, want) || strings.Contains(want, l)) {
+				near = append(near, c)
+			} else {
+				rest = append(rest, c)
+			}
+		}
+		rows.Close()
+		cols := append(near, rest...)
+		if len(cols) == 0 {
+			continue
+		}
+		if room := max(10, maxHintCols/len(names)); len(cols) > room {
+			cols = append(cols[:room], "…")
+		}
+		parts = append(parts, name+"("+strings.Join(cols, ", ")+")")
+	}
+	if len(parts) == 0 {
+		return ""
+	}
+	return ". Columns of the tables in FROM/JOIN: " + strings.Join(parts, "; ")
 }
 
 // openDB opens mysql://user:password@host:port/db or sqlite:///path/to/file.db. The SQLite file is opened with query_only on. A non-empty

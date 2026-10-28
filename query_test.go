@@ -225,3 +225,60 @@ func TestTheHeaderOfAnAnswerKeepsEveryColumnName(t *testing.T) {
 		t.Errorf("%q, %v", out, err)
 	}
 }
+
+// withTables adds tables (name → "col type, ...") to the SQLite file behind s.
+func withTables(t *testing.T, s *source, tables map[string]string) {
+	t.Helper()
+	db, err := sql.Open("sqlite", strings.TrimPrefix(s.url, "sqlite://"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	for name, cols := range tables {
+		if _, err := db.Exec("CREATE TABLE `" + name + "` (" + cols + ")"); err != nil {
+			t.Fatal(err)
+		}
+	}
+}
+
+func TestAnUnknownColumnOrTableNamesTheRealColumnsOfTheTablesInTheStatement(t *testing.T) {
+	var wide []string
+	for i := 1; i <= 60; i++ {
+		wide = append(wide, fmt.Sprintf("c%d INTEGER", i))
+	}
+	s := fixture(t)
+	withTables(t, s, map[string]string{"tags": "item INTEGER, label TEXT", "ñandú": "año TEXT", "wide": strings.Join(wide, ", ")})
+	for _, tc := range []struct {
+		name, sql string
+		want      []string
+		not       []string
+	}{
+		{"the ones that resemble the guess come first", "SELECT name_x FROM items", []string{"items(name, id, note, code)"}, nil},
+		{"alias.col, a JOIN and every table listed", "SELECT a.zz FROM items a JOIN tags b ON b.item = a.id", []string{"items(", "tags(item, label)"}, nil},
+		{"a missing table is skipped, the others are listed", "SELECT 1 FROM items JOIN nada ON 1 = 1", []string{"no such table: nada", "items("}, []string{"nada("}},
+		{"non-ASCII names and quoted identifiers", "SELECT x FROM `ñandú`", []string{"ñandú(año)"}, nil},
+		{"a wide table is cut", "SELECT zz FROM wide", []string{"wide(", ", …)"}, []string{"c41"}},
+		{"only a missing table gives no hint", "SELECT 1 FROM nada", []string{"no such table: nada"}, []string{"Columns of"}},
+		{"another error gives no hint", "SELECT FROM items", []string{"syntax error"}, []string{"Columns of"}},
+	} {
+		_, err := ask(t, s, tc.sql, 0)
+		if err == nil {
+			t.Errorf("%s: no error", tc.name)
+			continue
+		}
+		for _, w := range tc.want {
+			if !strings.Contains(err.Error(), w) {
+				t.Errorf("%s: %q lacks %q", tc.name, err, w)
+			}
+		}
+		for _, n := range tc.not {
+			if strings.Contains(err.Error(), n) {
+				t.Errorf("%s: %q has %q", tc.name, err, n)
+			}
+		}
+	}
+	text, isErr := call(t, connect(t, s), "SELECT zz FROM tags")
+	if !isErr || !strings.HasPrefix(text, "Failed: ") || !strings.Contains(text, "tags(item, label). Next: ") {
+		t.Errorf("through the tool: %q, isError = %v", text, isErr)
+	}
+}
