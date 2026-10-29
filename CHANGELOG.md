@@ -1,25 +1,65 @@
 # Changelog
 
-One entry per version, newest first. Tool names are `query`, `page`, `check` and `code`. A change in what a tool prints is listed as a change, because a client may read it.
+One entry per version, newest first. Tool names are `query`, `page`, `check` and `code`. Each change says what it is, what was seen that made it necessary, how it was checked and what was not checked. A change in what a tool prints is listed as a change, because a client may read it.
 
 ## 0.5.25 — 2026-10-29
-- New `page` action `audit {selector?}`: facts the page shows about itself, with no reference screen. It lists unrendered text (`{{ x }}`, `undefined`, `null`, `NaN`, `[object Object]`, `$t(`), controls covered by another element, fields with no label (with their `name`, `id` and a short CSS path), repeated labels and buttons or links with no name. A modal over the page, the wrapper of the control itself and a control scrolled out of its container are not reported as covered. Without findings it says so. `selector` limits it to a part of the screen. It is a hint, not a verdict; the new skill `screen-audit` says how to use it.
-- `page` `state` and `fill` name a field by its `aria-label`, `placeholder`, `name` or `id` when its first `<label>` is empty, where `state` printed `(no label)`. On the legacy quotes list, 7 text fields that read `(no label)` now show their placeholder.
-- New skill `.claude/skills/screen-audit/SKILL.md`: how to review one screen, how to look for fields that are missing or should not be there, and how to compare an old and a new screen.
+
+**New: `page audit {selector?}`.** Lists what the page itself shows wrong, with no reference screen to compare to:
+- `unrendered`: text left as written (`{{ x }}`, `undefined`, `null`, `NaN`, `[object Object]`, `$t(`).
+- `covered`: a control whose centre is under another element. Not reported: a modal over the page, the wrapper of the control itself (Vuetify draws one over its native input) and a control scrolled out of a container that clips.
+- `no label`: fields that nothing names, with their `name`, `id` and a short CSS path so they can be found.
+- `same label`: two fields that answer to the same name (a filter and a form field, say); `fill` takes the first.
+- `no name`: buttons and links with no text, `aria-label` or title.
+
+Without findings it says so. `selector` limits it to a part of the screen, such as a dialog. It is a hint, not a verdict: it cannot say what should be there, which is the job of the new skill below.
+
+How it was checked:
+- A Chrome test page with each situation, plus a clean part, a scrolled-out field and a field under its own wrapper; each case failed before its fix.
+- Legacy quotes list: 3 `select` without label (`lstServicioBC`, `lstIncotermBC`, `sentido`), `Estado` twice and 14 unnamed buttons and links.
+- Modern quotes dialog «Nueva Cotización»: first `covered (2)` (Incoterm and Moneda), a false positive: the dialog's scrolling area ends at y=837 and those fields sit at y=924, where the backdrop shows. After the fix it says `No findings`.
+- Not checked: the legacy with the final build, and whether the 23 unnamed icon buttons of the modern list are useful findings or noise.
+
+**`page state` and `fill`: a field with an empty `<label>` is named by its `aria-label`, `placeholder`, `name` or `id`.** Before, a field whose first `<label>` had no text printed `(no label)` even with a placeholder. On the legacy quotes list `state` showed 10 such fields (7 text, 3 `select`); now it shows none: the text fields take their placeholder and the selects their `name`. What `state` prints for these fields changes, and `fill` can now find them by that name.
+
+**New skill `.claude/skills/screen-audit/SKILL.md`.** How to review one screen with `state` and `audit`, how to look for fields that are missing or should not be there (against `code fields`, `code map_back` and the other version of the screen), how to compare an old and a new screen, and how to report. It keeps the read-only rules and names no customer. Not tried with a real agent yet.
 
 ## 0.5.24 — 2026-10-28
-- `page` now sees the requests of a page that replaced `window.XMLHttpRequest`, as the legacy pages of the app do. Before, `click` said `No effect seen: no request` and `payloads` was empty even though the browser had made the requests. On the legacy quotes list, «Buscar» now reports 4 POSTs to `server/*.php`, with what was sent and what came back.
-- `page` `fill` on a native `<select>` with a missing option answers `no option "X" among N seen: a | b | c` (the first five), like the Vuetify menus, where it answered `no option X`.
+
+**`page` sees the requests of pages that replaced `window.XMLHttpRequest`, as the legacy pages of the app do.**
+- What was seen: on the legacy quotes list, «Buscar» made 4 `xmlhttprequest` requests in the browser, while `click` said `No effect seen: no request` and `payloads` showed 0.
+- Cause: the page replaces the constructor; its instances keep the native prototype and have their own `open`, so patching `XMLHttpRequest.prototype` was never reached.
+- Now the helper patches the prototype the instances really have and, when the constructor is not native, hooks each instance's own `open` and `send`. A send that reaches both hooks is reported once.
+- Result: `click` reports `POST …/grid_ppal.php 200 | …/cotiza_frm.php 200 | …/preliquidacion.php 200 | …/cotiza_listas.php 200`, and `payloads` shows what was sent (form-encoded) and the JSON that came back. `WEBSCOPE_APP_URL` must be the origin of the legacy tab.
+- Checked with a Chrome test page that replaces the constructor the same way; it failed before (`0 requests captured`) and passes now.
+- Not checked: writes on the legacy (`Nuevo` then `Grabar`), forms that send the whole page instead of an XHR, and requests made from an iframe.
+
+**`page fill` on a native `<select>` lists the options when the one asked for is missing.** Before: `no option 25`. Now: `no option "25" among 4 seen: 5 | 10 | 20 | 50` (the first five), the same shape the Vuetify menus already had.
+
+**Tests only:** the Chrome fixtures wait for the helper script before each step. One run on the Ubuntu runner failed with `webscope is not loaded in this page`; the same message appears when `page.js` is served 1.5 s late, and the wait removes it. The package time on that runner varied from 4.9 s to 38.4 s between runs with almost the same code.
 
 ## 0.5.23 — 2026-10-28
-- `page` `click`: when nothing matches, the error now lists the dialog's buttons first, then the page's and the side menu's (as `state` does), where the side menu used to fill the 12 places listed.
-- `page` `click {text}`: when no button, link or menu item has the text, it clicks the plain element (a `span` or `div` with no child elements) whose text is exactly that. Two or more matches still fail and name them. Checked only on the Chrome test page; no real screen needed it yet.
-- `page` `fill` writes into a rich-text editor (`contenteditable`) by its `aria-label` or id, or as `editor` when it has neither, by selecting its content and inserting the text. The same `insertText` was run by hand on the real ProseMirror editor of a quote's terms (the text became `<p>…</p>`, nothing was saved); `fill` itself was checked only on plain `contenteditable` divs, and whether the app's model takes the text was not checked.
-- `page` `state` now lists such an editor under `Fields:` as `[editor] <label> = "<text>"`, where it was not listed before (`editor` when it has no label). It lists the real one of a quote's terms. The help says so.
+
+**`page click`: when nothing matches, the error lists the dialog's buttons first.**
+- What was seen: deleting a test quote, `click {text:"Sí, Eliminar"}` answered `nothing to click` and listed the side menu. The button reads «Si, Eliminar», without the accent, and the typed text had one; the error showed the first 12 buttons in page order, which are the side menu's, so the real text never appeared. (The first reading, that the helper could not see the dialog, was wrong.)
+- Now the list is ordered like `state`: the dialog's buttons, then the page's, then the side menu's.
+
+**`page click {text}`: when no button, link or menu item has the text, it clicks the plain element (a `span` or `div` with no child elements) whose text is exactly that.** Two or more matches still fail and name them. No real screen needed it yet; it is checked only on a Chrome test page.
+
+**`page fill` writes into a rich-text editor (`contenteditable`).** It selects the content and inserts the text, as typing would. The field is found by its `aria-label` or id, or as `editor` when it has neither: the real editor of a quote's terms (ProseMirror) has no label, so `fill {"editor": "…"}` is how to reach it (the first one when there are several).
+- Checked on the real editor of a quote's terms: `fill` answered `editor: ok` and the editor held `<p>…</p>`; the edit was cancelled and no `PUT` or `POST` was captured.
+- Not checked: that the app's own model takes the text, which needs pressing «Guardar» on a row.
+
+**`page state` lists such editors under `Fields:`** as `[editor] <label> = "<text>"` (`editor` when there is no label). Before they were not listed. The help says so.
 
 ## 0.5.22 — 2026-10-28
-- The code is split into `internal/` packages (`db`, `page`, `check`, `code`, `fsx`, `input`); `main.go` only registers the tools. What the tools print is unchanged (`tools/list` is 1443 bytes before and after).
-- New `docs/usage.md`: the contract of each tool and the recommended order of use.
+
+**The code is split into `internal/` packages; `main.go` (95 lines) only registers the four tools.**
+- `db`: the connection, the statement guard and the tenant lookup; `page`: the snippets, the embedded `page.js` and the listener that keeps the captures; `check`: the comparison, which reads the captures through a small interface instead of reaching into the page tool; `code`: the dispatch, `fields`, `consumers`, `snap`, and the two files tied to a stack (`laravel.go`, `vue.go`); `fsx`: the file walk that never follows a link; `input`: the shape of a call and the cap of an answer.
+- Nothing a tool prints changed. `tools/list` is 1443 bytes before and after (`initialize` 1156), and the tests moved next to the code they cover (107 top-level tests).
+- Checked on the real server after the page and the code steps: `query` with a tenant (59 rows), `code fields` (42 columns), `code map` (2 routes), `check` without captures (its error) and `snap_diff` (no changes).
+- Not checked at that moment: a full round trip in the browser. It was done afterwards: create a test quote on the screen, `check`, `snap_diff`, delete it.
+
+**New `docs/usage.md`:** the contract of each tool, what it guarantees and what it cannot do, and the recommended order of use (`code fields`, `code map`, `code snap`, `page`, `check`, `code snap_diff`).
 
 ## 0.5.21 — 2026-10-28
 - `page` accepts its arguments at the top level of the call.
