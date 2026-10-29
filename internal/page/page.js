@@ -116,7 +116,7 @@
     if (e.labels && e.labels.length) return norm(e.labels[0].textContent);
     const box = e.closest('.v-input, .v-field'); // Vuetify keeps the label next to the native input
     const l = box && box.querySelector('label');
-    return norm((l && l.textContent) || e.getAttribute('aria-label') || e.placeholder || e.name || e.id);
+    return norm((l && l.textContent) || e.getAttribute('aria-label') || e.placeholder || e.name || e.id || (e.isContentEditable ? 'editor' : ''));
   };
   const FIELDS = 'input:not([type=hidden]):not([type=button]):not([type=submit]):not([type=reset]),textarea,select,[contenteditable=true],[contenteditable=""]';
   const fields = () => all(FIELDS);
@@ -302,7 +302,7 @@
       if (!els.length) els = all('body *').filter(e => !e.children.length && lower(textOf(e)) === t); // a confirmation whose button is a plain span or div
       if (els.length > 1) return fail(els.length + ' elements match "' + a.text + '": ' + els.slice(0, 6).map(describe).join(', ') + '. Next: click with a selector.');
     } else return fail('click needs text or selector');
-    if (!els.length) return fail('nothing to click for "' + (a.selector || a.text) + '". Buttons here: ' + [...new Set(all(CLICKABLE).map(textOf).filter(Boolean))].slice(0, 12).join(' | '));
+    if (!els.length) return fail('nothing to click for "' + (a.selector || a.text) + '". Buttons here: ' + [...new Set(all(CLICKABLE).filter(textOf).map((e, i) => ({ t: textOf(e), i, r: rank(e) })).sort((x, y) => x.r - y.r || x.i - y.i).map(x => x.t))].slice(0, 12).join(' | '));
     els[0].click();
     return 'clicked ' + describe(els[0]);
   };

@@ -604,13 +604,17 @@ func TestActionsRunInARealChrome(t *testing.T) {
 }
 
 const editorPage = `<!doctype html><meta charset=utf-8><title>Editor</title>
+<nav><button>M1</button><button>M2</button><button>M3</button><button>M4</button><button>M5</button><button>M6</button><button>M7</button><button>M8</button><button>M9</button><button>M10</button><button>M11</button><button>M12</button><button>M13</button><button>M14</button><button>M15</button></nav>
+<div role=dialog><button>Confirmar</button></div>
 <div id=dlg><span id=yes>Sí, Eliminar</span> <span id=no>Cancelar</span></div>
 <div id=ed contenteditable=true aria-label="Descripción"></div>
-<p id=res></p><p id=mir></p><pre id=out></pre>
+<div contenteditable=true></div>
+<p id=res></p><p id=mir></p><p id=mir2></p><pre id=out></pre>
 <script type=application/json id=steps>{{STEPS}}</script>
 <script>
 yes.onclick=()=>res.textContent='eliminada'
 ed.oninput=()=>mir.textContent='input:'+ed.innerText
+const ed2=document.querySelectorAll('[contenteditable]')[1];ed2.oninput=()=>mir2.textContent='input2:'+ed2.innerText
 const steps=JSON.parse(document.getElementById('steps').textContent),res_=[]
 const sleep=ms=>new Promise(r=>setTimeout(r,ms))
 ;(async()=>{for(const s of steps){try{res_.push(String(await (0,eval)("(async()=>("+s+"))()")))}catch(e){res_.push('THROW '+e)}await sleep(300)}out.textContent=JSON.stringify(res_)})()
@@ -646,6 +650,9 @@ func TestClickFindsATextThatIsNoButtonAndFillWritesAContentEditable(t *testing.T
 	add("fill", map[string]any{"fields": map[string]any{"Descripción": "ZZ nota"}}) // 3
 	add("read", map[string]any{"selector": "#mir"})                                 // 4
 	add("state", nil)                                                               // 5
+	add("click", map[string]any{"text": "No existe"})                               // 6: the error lists the dialog's buttons before the side menu's
+	add("fill", map[string]any{"fields": map[string]any{"editor": "texto libre"}})  // 7: an editor with no label, aria-label or id is called "editor"
+	add("read", map[string]any{"selector": "#mir2"})                                // 8
 	raw, _ := json.Marshal(steps)
 	mu.Lock()
 	html_ = strings.Replace(editorPage, "{{STEPS}}", string(raw), 1)
@@ -677,6 +684,12 @@ func TestClickFindsATextThatIsNoButtonAndFillWritesAContentEditable(t *testing.T
 	}
 	if !strings.Contains(out[5], "Descripción") || strings.Contains(out[5], "undefined") {
 		t.Errorf("state must list the editor as a field: %q", out[5])
+	}
+	if !strings.Contains(out[7], "editor: ok") || !strings.Contains(out[8], "input2:texto libre") {
+		t.Errorf("an editor with no label must be reachable as \"editor\": %q then %q", out[7], out[8])
+	}
+	if !strings.Contains(out[6], "nothing to click") || !strings.Contains(out[6], "Confirmar") {
+		t.Errorf("the buttons listed by a failed click must start with the dialog's, not with the 15 of the side menu: %q", out[6])
 	}
 }
 

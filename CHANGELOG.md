@@ -3,9 +3,10 @@
 One entry per version, newest first. Tool names are `query`, `page`, `check` and `code`. A change in what a tool prints is listed as a change, because a client may read it.
 
 ## 0.5.23 — 2026-10-28
-- `page` `click {text}`: when no button, link or menu item has the text, it clicks the plain element (a `span` or `div` with no child elements) whose text is exactly that, such as the «Sí, Eliminar» of a confirmation. Two or more matches still fail and name them.
-- `page` `fill` writes into a rich-text editor (`contenteditable`) by its `aria-label` or id, by selecting its content and inserting the text. Checked on a plain `contenteditable` div in Chrome, not on a real tiptap or ProseMirror editor.
-- `page` `state` now lists such an editor under `Fields:` as `[editor] <label> = "<text>"`, where it was not listed before. The help says so.
+- `page` `click`: when nothing matches, the error now lists the dialog's buttons first, then the page's and the side menu's (as `state` does), where the side menu used to fill the 12 places listed.
+- `page` `click {text}`: when no button, link or menu item has the text, it clicks the plain element (a `span` or `div` with no child elements) whose text is exactly that. Two or more matches still fail and name them. Checked only on the Chrome test page; no real screen needed it yet.
+- `page` `fill` writes into a rich-text editor (`contenteditable`) by its `aria-label` or id, or as `editor` when it has neither, by selecting its content and inserting the text. The same `insertText` was run by hand on the real ProseMirror editor of a quote's terms (the text became `<p>…</p>`, nothing was saved); `fill` itself was checked only on plain `contenteditable` divs, and whether the app's model takes the text was not checked.
+- `page` `state` now lists such an editor under `Fields:` as `[editor] <label> = "<text>"`, where it was not listed before (`editor` when it has no label). It lists the real one of a quote's terms. The help says so.
 
 ## 0.5.22 — 2026-10-28
 - The code is split into `internal/` packages (`db`, `page`, `check`, `code`, `fsx`, `input`); `main.go` only registers the tools. What the tools print is unchanged (`tools/list` is 1443 bytes before and after).
