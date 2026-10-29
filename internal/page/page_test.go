@@ -611,6 +611,7 @@ const editorPage = `<!doctype html><meta charset=utf-8><title>Editor</title>
 <div id=dlg><span id=yes>Sí, Eliminar</span> <span id=no>Cancelar</span></div>
 <div id=ed contenteditable=true aria-label="Descripción"></div>
 <div contenteditable=true></div>
+<label for=sel>Tipo</label><select id=sel><option>uno<option>dos<option>tres</select>
 <p id=res></p><p id=mir></p><p id=mir2></p><pre id=out></pre>
 <script type=application/json id=steps>{{STEPS}}</script>
 <script>
@@ -657,6 +658,7 @@ func TestClickFindsATextThatIsNoButtonAndFillWritesAContentEditable(t *testing.T
 	add("click", map[string]any{"text": "No existe"})                               // 6: the error lists the dialog's buttons before the side menu's
 	add("fill", map[string]any{"fields": map[string]any{"editor": "texto libre"}})  // 7: an editor with no label, aria-label or id is called "editor"
 	add("read", map[string]any{"selector": "#mir2"})                                // 8
+	add("fill", map[string]any{"fields": map[string]any{"Tipo": "cuatro"}})         // 9: a native select that lacks the option lists the ones it has
 	raw, _ := json.Marshal(steps)
 	mu.Lock()
 	html_ = strings.Replace(editorPage, "{{STEPS}}", string(raw), 1)
@@ -692,8 +694,81 @@ func TestClickFindsATextThatIsNoButtonAndFillWritesAContentEditable(t *testing.T
 	if !strings.Contains(out[7], "editor: ok") || !strings.Contains(out[8], "input2:texto libre") {
 		t.Errorf("an editor with no label must be reachable as \"editor\": %q then %q", out[7], out[8])
 	}
+	if !strings.Contains(out[9], `Tipo: no option "cuatro" among 3 seen: uno | dos | tres`) {
+		t.Errorf("a native select must list its options when the one asked is missing: %q", out[9])
+	}
 	if !strings.Contains(out[6], "nothing to click") || !strings.Contains(out[6], "Confirmar") {
 		t.Errorf("the buttons listed by a failed click must start with the dialog's, not with the 15 of the side menu: %q", out[6])
+	}
+}
+
+// xhrPage replaces the XMLHttpRequest constructor before the helper loads, the way the legacy pages of the real app do: each instance gets its own
+// open, which calls the native one that the page saved, and the instances keep the native prototype while the new constructor has its own: a patch
+// of window.XMLHttpRequest.prototype is never reached.
+const xhrPage = `<!doctype html><meta charset=utf-8><title>Legacy</title>
+<script>
+const N=XMLHttpRequest,no=N.prototype.open,ns=N.prototype.send
+window.XMLHttpRequest=function(){const x=new N();x.open=function(){return no.apply(x,arguments)};return x}
+</script>
+<pre id=out></pre>
+<script type=application/json id=steps>{{STEPS}}</script>
+<script>
+const pend=[],_ap=document.head.appendChild.bind(document.head);document.head.appendChild=e=>{if(e.tagName==='SCRIPT')pend.push(new Promise(r=>{e.addEventListener('load',r);e.addEventListener('error',r)}));return _ap(e)}
+const steps=JSON.parse(document.getElementById('steps').textContent),res_=[]
+const sleep=ms=>new Promise(r=>setTimeout(r,ms))
+;(async()=>{for(const s of steps){try{res_.push(String(await (0,eval)("(async()=>("+s+"))()")))}catch(e){res_.push('THROW '+e)}await Promise.all(pend.splice(0));await sleep(300)}out.textContent=JSON.stringify(res_)})()
+</script>`
+
+// TestRequestsOfAPageThatReplacesXMLHttpRequestAreCaptured runs in a real Chrome: the legacy page of the app replaced the constructor, and its
+// requests (jQuery uses XMLHttpRequest) must still reach payloads and the effect of a click.
+func TestRequestsOfAPageThatReplacesXMLHttpRequestAreCaptured(t *testing.T) {
+	var mu sync.Mutex
+	var html_ string
+	app := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		defer mu.Unlock()
+		if r.URL.Path == "/api/ping" {
+			io.WriteString(w, `{"pong":true}`)
+			return
+		}
+		io.WriteString(w, html_)
+	}))
+	app.Start()
+	defer app.Close()
+	p := testPage(t, app.URL)
+	load, err := askPage(t, p, "load", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	steps := []string{load, "new Promise(r=>{const x=new XMLHttpRequest();x.open('GET','/api/ping');x.onloadend=()=>r('status '+x.status);x.send()})"}
+	raw, _ := json.Marshal(steps)
+	mu.Lock()
+	html_ = strings.Replace(xhrPage, "{{STEPS}}", string(raw), 1)
+	mu.Unlock()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+	flags := []string{"--headless=new", "--disable-gpu", "--no-first-run", "--no-default-browser-check", "--user-data-dir=" + t.TempDir(), "--virtual-time-budget=60000", "--dump-dom"}
+	if os.Getenv("CI") != "" {
+		flags = append(flags, "--no-sandbox")
+	}
+	dom, err := exec.CommandContext(ctx, chromePath(t), append(flags, app.URL+"/")...).Output()
+	if err != nil {
+		t.Fatalf("chrome: %v", err)
+	}
+	m := regexp.MustCompile(`(?s)<pre id="out">(.*?)</pre>`).FindSubmatch(dom)
+	if m == nil {
+		t.Fatalf("the page did not finish its steps; DOM tail: %.600s", dom[max(0, len(dom)-600):])
+	}
+	var out []string
+	if err := json.Unmarshal([]byte(html.UnescapeString(string(m[1]))), &out); err != nil || len(out) != len(steps) {
+		t.Fatalf("results %q: %v", m[1], err)
+	}
+	if out[1] != "status 200" {
+		t.Fatalf("the page's own request failed: %q", out[1])
+	}
+	if seen, _ := askPage(t, p, "payloads", nil); !strings.Contains(seen, "GET ") || !strings.Contains(seen, "/api/ping 200") {
+		t.Errorf("a request made through the page's own XMLHttpRequest was not captured: %s", seen)
 	}
 }
 

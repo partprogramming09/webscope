@@ -2,6 +2,10 @@
 
 One entry per version, newest first. Tool names are `query`, `page`, `check` and `code`. A change in what a tool prints is listed as a change, because a client may read it.
 
+## 0.5.24 — 2026-10-28
+- `page` now sees the requests of a page that replaced `window.XMLHttpRequest`, as the legacy pages of the app do. Before, `click` said `No effect seen: no request` and `payloads` was empty even though the browser had made the requests. On the legacy quotes list, «Buscar» now reports 4 POSTs to `server/*.php`, with what was sent and what came back.
+- `page` `fill` on a native `<select>` with a missing option answers `no option "X" among N seen: a | b | c` (the first five), like the Vuetify menus, where it answered `no option X`.
+
 ## 0.5.23 — 2026-10-28
 - `page` `click`: when nothing matches, the error now lists the dialog's buttons first, then the page's and the side menu's (as `state` does), where the side menu used to fill the 12 places listed.
 - `page` `click {text}`: when no button, link or menu item has the text, it clicks the plain element (a `span` or `div` with no child elements) whose text is exactly that. Two or more matches still fail and name them. Checked only on the Chrome test page; no real screen needed it yet.

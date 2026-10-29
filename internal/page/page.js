@@ -74,29 +74,53 @@
   };
 
   // A simulated XMLHttpRequest is sent to the listener's /sim instead, so the app sees a real response with that status.
-  const xhrOpen = XMLHttpRequest.prototype.open;
-  const xhrSend = XMLHttpRequest.prototype.send;
-  XMLHttpRequest.prototype.open = function (m, u) {
-    this.__ws = { m: String(m).toUpperCase(), u: String(u) };
-    return xhrOpen.apply(this, arguments);
-  };
-  XMLHttpRequest.prototype.send = function (body) {
-    const c = this.__ws;
-    if (c && !c.u.startsWith(cfg.base)) {
+  const xhrProto = Object.getPrototypeOf(new XMLHttpRequest()); // the prototype the instances really have: a page that replaced the constructor may give it another one
+  const xhrOpen = xhrProto.open;
+  const xhrSend = xhrProto.send;
+  const xhrNote = (x, m, u) => { x.__ws = { m: String(m).toUpperCase(), u: String(u) }; };
+  const xhrWatch = (x, body, reopen) => {
+    const c = x.__ws;
+    if (c && !x.__wsSeen && !c.u.startsWith(cfg.base)) {
+      x.__wsSeen = true; // a send that reaches both hooks is reported once
       c.req = typeof body === 'string' ? body : body == null ? '' : kind(body);
       const sim = takeSim(c.m, c.u);
       if (sim) {
-        xhrOpen.call(this, c.m, cfg.base + '/sim?t=' + cfg.t + '&status=' + sim.status, true);
-        this.withCredentials = false;
+        reopen(c.m, cfg.base + '/sim?t=' + cfg.t + '&status=' + sim.status);
+        x.withCredentials = false;
       }
       pending++;
-      this.addEventListener('loadend', () => {
-        const text = this.responseType === '' || this.responseType === 'text' ? this.responseText : kind(this.response);
-        report({ m: c.m, u: c.u, s: this.status, req: c.req, res: text }, true);
+      x.addEventListener('loadend', () => {
+        const text = x.responseType === '' || x.responseType === 'text' ? x.responseText : kind(x.response);
+        report({ m: c.m, u: c.u, s: x.status, req: c.req, res: text }, true);
       });
     }
+  };
+  xhrProto.open = function (m, u) {
+    xhrNote(this, m, u);
+    return xhrOpen.apply(this, arguments);
+  };
+  xhrProto.send = function (body) {
+    xhrWatch(this, body, (m, u) => xhrOpen.call(this, m, u, true));
     return xhrSend.apply(this, arguments);
   };
+  // A page that replaced the constructor (the legacy pages do) gives each instance its own open and send, which call the native ones the page saved
+  // and skip the prototype: those instances are hooked here, once, when they are made.
+  const PageXHR = window.XMLHttpRequest;
+  if (!/\[native code\]/.test(Function.prototype.toString.call(PageXHR))) {
+    const own = (x, k) => Object.prototype.hasOwnProperty.call(x, k) && typeof x[k] === 'function';
+    window.XMLHttpRequest = function () {
+      const x = new PageXHR();
+      const open = own(x, 'open') ? x.open : null;
+      if (open) x.open = function (m, u) { xhrNote(x, m, u); return open.apply(x, arguments); };
+      if (own(x, 'send')) {
+        const send = x.send;
+        x.send = function (body) { xhrWatch(x, body, (m, u) => (open || xhrOpen).call(x, m, u, true)); return send.apply(x, arguments); };
+      }
+      return x;
+    };
+    window.XMLHttpRequest.prototype = PageXHR.prototype;
+    Object.setPrototypeOf(window.XMLHttpRequest, PageXHR);
+  }
 
   // ---- what the page logs from now on: console.error and console.warn, uncaught errors and rejected promises
   const clog = [];
@@ -232,7 +256,7 @@
     } else {
       if (e.tagName === 'SELECT') {
         const o = [...e.options].find(o => o.value === String(v) || norm(o.text) === norm(v));
-        if (!o) throw new Error('no option ' + v);
+        if (!o) throw new Error('no option "' + v + '" among ' + e.options.length + ' seen: ' + [...e.options].slice(0, 5).map(o => norm(o.text)).join(' | '));
         e.value = o.value;
       } else {
         const proto = e.tagName === 'TEXTAREA' ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype;
