@@ -2,6 +2,11 @@
 
 One entry per version, newest first. Tool names are `query`, `page`, `check` and `code`. A change in what a tool prints is listed as a change, because a client may read it.
 
+## 0.5.25 — 2026-10-29
+- New `page` action `audit {selector?}`: facts the page shows about itself, with no reference screen. It lists unrendered text (`{{ x }}`, `undefined`, `null`, `NaN`, `[object Object]`, `$t(`), controls covered by another element, fields with no label (with their `name`, `id` and a short CSS path), repeated labels and buttons or links with no name. A modal over the page, the wrapper of the control itself and a control scrolled out of its container are not reported as covered. Without findings it says so. `selector` limits it to a part of the screen. It is a hint, not a verdict; the new skill `screen-audit` says how to use it.
+- `page` `state` and `fill` name a field by its `aria-label`, `placeholder`, `name` or `id` when its first `<label>` is empty, where `state` printed `(no label)`. On the legacy quotes list, 7 text fields that read `(no label)` now show their placeholder.
+- New skill `.claude/skills/screen-audit/SKILL.md`: how to review one screen, how to look for fields that are missing or should not be there, and how to compare an old and a new screen.
+
 ## 0.5.24 — 2026-10-28
 - `page` now sees the requests of a page that replaced `window.XMLHttpRequest`, as the legacy pages of the app do. Before, `click` said `No effect seen: no request` and `payloads` was empty even though the browser had made the requests. On the legacy quotes list, «Buscar» now reports 4 POSTs to `server/*.php`, with what was sent and what came back.
 - `page` `fill` on a native `<select>` with a missing option answers `no option "X" among N seen: a | b | c` (the first five), like the Vuetify menus, where it answered `no option X`.

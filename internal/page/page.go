@@ -37,16 +37,17 @@ const (
 )
 
 // snippetActions are the actions answered with a JavaScript snippet for javascript_tool. Anything else is answered here.
-var snippetActions = []string{"state", "read", "fill", "click", "press", "simulate"}
+var snippetActions = []string{"state", "read", "fill", "click", "press", "simulate", "audit"}
 
 const helpText = `page(action, args?) tests a screen in the user's Chrome through Claude in Chrome.
 Needs a tab of the app (WEBSCOPE_APP_URL) with the session already started: open one with tabs_create_mcp and navigate to a screen; if it shows the login, stop and ask the user for the session (never type credentials).
 load: one line of JavaScript; run it with javascript_tool again after every navigation, reload or /mcp: the helper is lost and the port changes (needs WEBSCOPE_APP_URL).
-state|read|fill|click|press|simulate: return a snippet; run it with javascript_tool, its value is the answer.
+state|read|fill|click|press|simulate|audit: return a snippet; run it with javascript_tool, its value is the answer.
   state {max?}: URL, title, console, headings, fields, buttons (dialog first, side menu last, disabled ones marked), alerts, errors, dialog, tables.
   read {selector?, max?}: text of the first match, or of the page.
   fill {fields:{label:value}} or {label:value}: by label, name, placeholder or id; true/false for checkboxes; select by option text; Vuetify menus too (long lists are scrolled); a rich-text editor (contenteditable) by its aria-label or id, or as "editor" when it has neither.
   click {text} or {selector} (a text that belongs to no button is found as a plain element); press {key, selector?}: both then say what happened (requests with status, new alerts, errors and console errors, URL change, or "No effect seen").
+  audit {selector?}: what the page shows about itself, no reference screen: unrendered text ({{x}}, undefined, null, NaN, [object Object]), controls covered by another element, fields with no label, repeated labels, buttons with no name. A hint to look at, not a verdict; selector limits it to a part of the screen.
   simulate {match, status, times?, method?}: the next requests whose URL contains match answer HTTP status 400-599 without reaching the app; {clear:true} cancels.
 payloads {limit?}: the requests the page sent and their answers (answered here, no snippet).
 Writes only with the user's approval, and rows prefixed ZZ_.`
@@ -99,7 +100,7 @@ func (p *Tool) origin() string {
 // snippet is the JavaScript for action. The arguments enter as JSON (json.Marshal escapes <, > and line separators), never as text.
 func snippet(action string, args map[string]any) (string, error) {
 	if !slices.Contains(snippetActions, action) {
-		return "", fmt.Errorf("unknown action %q (load, state, read, fill, click, press, payloads, simulate or help)", action)
+		return "", fmt.Errorf("unknown action %q (load, state, read, fill, click, press, payloads, simulate, audit or help)", action)
 	}
 	if args == nil {
 		args = map[string]any{}

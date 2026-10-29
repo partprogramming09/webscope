@@ -137,7 +137,7 @@
 
   // ---- reading the screen
   const labelOf = e => {
-    if (e.labels && e.labels.length) return norm(e.labels[0].textContent);
+    if (e.labels && e.labels.length && norm(e.labels[0].textContent)) return norm(e.labels[0].textContent); // an empty label names nothing: the placeholder or the name still can
     const box = e.closest('.v-input, .v-field'); // Vuetify keeps the label next to the native input
     const l = box && box.querySelector('label');
     return norm((l && l.textContent) || e.getAttribute('aria-label') || e.placeholder || e.name || e.id || (e.isContentEditable ? 'editor' : ''));
@@ -357,6 +357,65 @@
     return 'the next ' + times + ' request(s) with "' + a.match + '" answer ' + status;
   };
 
+  // ---- facts the page itself shows about its own screen, with no reference screen to compare to
+  const where = e => {
+    if (e.id && document.querySelectorAll('#' + CSS.escape(e.id)).length === 1) return '#' + CSS.escape(e.id);
+    const p = [];
+    for (let n = e; n && n.nodeType === 1 && n !== document.body && p.length < 4; n = n.parentElement) {
+      let s = n.tagName.toLowerCase();
+      const sib = n.parentElement ? [...n.parentElement.children].filter(c => c.tagName === n.tagName) : [];
+      if (sib.length > 1) s += ':nth-of-type(' + (sib.indexOf(n) + 1) + ')';
+      p.unshift(s);
+    }
+    return p.join(' > ');
+  };
+  const tagId = e => '<' + e.tagName.toLowerCase() + (e.id ? '#' + e.id : '') + '>';
+  const audit = a => {
+    let root = document;
+    if (a.selector) {
+      try { root = document.querySelector(a.selector); } catch (x) { return fail('bad selector ' + a.selector); }
+      if (!root) return fail('nothing matches ' + a.selector);
+    }
+    const q = sel => [...root.querySelectorAll(sel)].filter(vis);
+    const out = [];
+    const add = (name, items) => { if (items.length) out.push(name + ' (' + items.length + '): ' + items.slice(0, 5).join(' | ') + (items.length > 5 ? ' | … +' + (items.length - 5) : '')); };
+    // text the framework or the server left as it was written
+    const bad = [], walker = document.createTreeWalker(root === document ? document.body : root, NodeFilter.SHOW_TEXT);
+    for (let n = walker.nextNode(); n; n = walker.nextNode()) {
+      const p = n.parentElement, t = norm(n.nodeValue);
+      if (!t || !p || p.closest('script,style,noscript,textarea,template') || !vis(p)) continue;
+      if (/\{\{.*?\}\}|\[object Object\]|(^|[^\w.])(undefined|NaN)([^\w]|$)|\$t\(/.test(t) || /^(null|undefined|NaN)$/.test(t)) bad.push(tagId(p) + ' "' + clip(t, 40) + '"');
+    }
+    add('unrendered', bad);
+    // a control that something else sits on: the element at its centre is not it, nor inside it, nor its label
+    const MODAL = '[role=dialog],.v-overlay,.v-menu,.v-tooltip,.modal';
+    const covered = [];
+    new Set(q(FIELDS + ',' + CLICKABLE)).forEach(e => {
+      const r = e.getBoundingClientRect();
+      if (r.width < 2 || r.height < 2 || r.bottom < 0 || r.right < 0 || r.top > innerHeight || r.left > innerWidth) return;
+      const top = document.elementFromPoint(Math.min(innerWidth - 1, r.left + r.width / 2), Math.min(innerHeight - 1, r.top + r.height / 2));
+      if (!top || e.contains(top) || top.contains(e) || (e.labels && [...e.labels].some(l => l.contains(top)))) return;
+      if (top.closest(MODAL) && !e.closest(MODAL)) return; // a modal over the page is expected
+      const cx = r.left + r.width / 2, cy = r.top + r.height / 2;
+      for (let n = e.parentElement; n && n !== document.body; n = n.parentElement) { // scrolled out of a container that clips: out of view, not covered
+        if (getComputedStyle(n).overflow !== 'visible') { const b = n.getBoundingClientRect(); if (cx < b.left || cx > b.right || cy < b.top || cy > b.bottom) return; }
+      }
+      const own = e.closest('.v-input,.v-field,label,.select2-container');
+      if (own && own.contains(top)) return; // the wrapper of the control itself, which sits over its native input
+      covered.push(tagId(e) + ' "' + clip(textOf(e) || labelOf(e), 30) + '" covered by ' + tagId(top));
+    });
+    add('covered', covered);
+    // fields a person or `fill` cannot name
+    const real = e => norm([...(e.labels || [])].map(l => l.textContent).join(' ')) || norm(e.getAttribute('aria-label')) || norm(e.placeholder) || norm(((e.closest('.v-input,.v-field') || document.createElement('i')).querySelector('label') || {}).textContent) || norm((e.closest('label') || {}).textContent); // a label with no text names nothing
+    const fs = q(FIELDS);
+    add('no label', fs.filter(e => !real(e)).map(e => '[' + (e.type || e.tagName.toLowerCase()) + '] ' + [e.name && 'name=' + e.name, e.id && 'id=' + e.id].filter(Boolean).join(' ') + ' @ ' + where(e)));
+    const seen = {};
+    fs.filter(real).forEach(e => { const l = lower(labelOf(e)); if (l) seen[l] = [...(seen[l] || []), labelOf(e)]; });
+    add('same label', Object.values(seen).filter(v => v.length > 1).map(v => v[0] + ' x' + v.length));
+    add('no name', q(CLICKABLE).filter(e => !textOf(e)).map(e => tagId(e) + ' @ ' + where(e)));
+    return out.length ? out.join('\n') : 'No findings: no unrendered text, covered control, unlabeled field, repeated label or unnamed button.';
+  };
+
   const wrap = f => a => { try { const r = f(a || {}); return r && r.then ? r.catch(e => fail(e.message)) : r; } catch (e) { return fail(e.message); } };
-  window.__ws = { state: wrap(state), read: wrap(read), fill: wrap(fill), click: wrap(click), press: wrap(press), simulate: wrap(simulate) };
+  window.__ws = { state: wrap(state), read: wrap(read), fill: wrap(fill), click: wrap(click), press: wrap(press), simulate: wrap(simulate), audit: wrap(audit) };
 })();
