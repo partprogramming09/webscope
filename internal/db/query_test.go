@@ -1,18 +1,18 @@
-package main
+package db
 
 import (
 	"context"
 	"database/sql"
 	"fmt"
+	"github.com/partprogramming09/webscope/internal/input"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
-	"time"
 )
 
 // fixture writes a SQLite file with 122 rows in items and returns a source that opens it read-only.
-func fixture(t *testing.T) *source {
+func fixture(t *testing.T) *Source {
 	t.Helper()
 	path := filepath.Join(t.TempDir(), "app.db")
 	db, err := sql.Open("sqlite", path)
@@ -34,12 +34,12 @@ func fixture(t *testing.T) *source {
 			t.Fatal(err)
 		}
 	}
-	return &source{url: "sqlite://" + path}
+	return &Source{URL: "sqlite://" + path}
 }
 
-func ask(t *testing.T, s *source, q string, limit int) (string, error) {
+func ask(t *testing.T, s *Source, q string, limit int) (string, error) {
 	t.Helper()
-	return s.answer(context.Background(), queryArgs{SQL: q, Limit: limit})
+	return s.Answer(context.Background(), QueryArgs{SQL: q, Limit: limit})
 }
 
 func TestQueryReturnsTSVWithHeaderNullAndNoControlCharacters(t *testing.T) {
@@ -91,7 +91,7 @@ func TestQueryStopsAtTheByteCap(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(out) > maxBytes+200 || !strings.Contains(out, "cut at 8000 bytes") {
+	if len(out) > input.MaxAnswer+200 || !strings.Contains(out, "cut at 8000 bytes") {
 		t.Fatalf("%d bytes, last line %q", len(out), out[strings.LastIndex(out, "\n")+1:])
 	}
 }
@@ -119,23 +119,23 @@ func TestQueryOnAMissingTableSaysSo(t *testing.T) {
 }
 
 func TestUnsetOrUnsupportedURLIsAClearError(t *testing.T) {
-	if _, err := ask(t, &source{}, "SELECT 1", 0); err == nil || !strings.Contains(err.Error(), "WEBSCOPE_DB_URL") {
+	if _, err := ask(t, &Source{}, "SELECT 1", 0); err == nil || !strings.Contains(err.Error(), "WEBSCOPE_DB_URL") {
 		t.Errorf("unset: %v", err)
 	}
-	if _, err := ask(t, &source{url: "oracle://u:p@h/db"}, "SELECT 1", 0); err == nil || !strings.Contains(err.Error(), "mysql or sqlite") {
+	if _, err := ask(t, &Source{URL: "oracle://u:p@h/db"}, "SELECT 1", 0); err == nil || !strings.Contains(err.Error(), "mysql or sqlite") {
 		t.Errorf("unsupported: %v", err)
 	}
 }
 
 func TestThePasswordNeverAppearsInAnError(t *testing.T) {
-	_, err := ask(t, &source{url: "mysql://user:s3cr3t-pw@127.0.0.1:1/db"}, "SELECT 1", 0)
+	_, err := ask(t, &Source{URL: "mysql://user:s3cr3t-pw@127.0.0.1:1/db"}, "SELECT 1", 0)
 	if err == nil {
 		t.Fatal("a closed port gave no error")
 	}
 	if strings.Contains(err.Error(), "s3cr3t-pw") {
 		t.Fatalf("the password leaked: %v", err)
 	}
-	if got := redact("denied for s3cr3t-pw and again s3cr3t-pw", "s3cr3t-pw"); strings.Contains(got, "s3cr3t-pw") || got != "denied for *** and again ***" {
+	if got := Redact("denied for s3cr3t-pw and again s3cr3t-pw", "s3cr3t-pw"); strings.Contains(got, "s3cr3t-pw") || got != "denied for *** and again ***" {
 		t.Fatalf("redact = %q", got)
 	}
 }
@@ -152,7 +152,7 @@ func TestQueryRefusesStatementsThatHideAWriteFromTheMask(t *testing.T) {
 		if _, err := ask(t, s, q, 0); err == nil {
 			t.Errorf("%s: the guard let %q through", name, q)
 		}
-		db, err := sql.Open("sqlite", strings.TrimPrefix(s.url, "sqlite://"))
+		db, err := sql.Open("sqlite", strings.TrimPrefix(s.URL, "sqlite://"))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -167,7 +167,7 @@ func TestQueryRefusesStatementsThatHideAWriteFromTheMask(t *testing.T) {
 
 func TestSQLiteIsOpenedReadOnlyAndAMissingFileIsNotCreated(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "nope.db")
-	if _, err := ask(t, &source{url: "sqlite://" + path}, "SELECT 1", 0); err == nil {
+	if _, err := ask(t, &Source{URL: "sqlite://" + path}, "SELECT 1", 0); err == nil {
 		t.Error("a database that does not exist must be an error")
 	}
 	if _, err := os.Stat(path); err == nil {
@@ -192,28 +192,24 @@ func TestQueryStopsAtMaxBytesEvenWithAFirstRowThatIsTooBig(t *testing.T) {
 	if _, err := db.Exec("INSERT INTO w VALUES (" + strings.Join(vals, ",") + ")"); err != nil {
 		t.Fatal(err)
 	}
-	out, err := ask(t, &source{url: "sqlite://" + path}, "SELECT * FROM w", 0)
-	if err != nil || len(out) > maxBytes+200 || !strings.Contains(out, "cut at") {
+	out, err := ask(t, &Source{URL: "sqlite://" + path}, "SELECT * FROM w", 0)
+	if err != nil || len(out) > input.MaxAnswer+200 || !strings.Contains(out, "cut at") {
 		t.Errorf("%d bytes, %v", len(out), err)
 	}
 }
 
 func TestTheGuardRefusesTheFunctionsThatReadServerFilesOrTakeNamedLocks(t *testing.T) {
 	for _, q := range []string{"SELECT LOAD_FILE('/etc/hosts')", "select load_file(0x2f)", "SELECT GET_LOCK('a', 1)", "SELECT get_lock('a',1)"} {
-		if _, err := checkSQL(q); err == nil {
+		if _, err := CheckSQL(q); err == nil {
 			t.Errorf("%q was let through", q)
 		}
 	}
-	if _, err := checkSQL("SELECT 'LOAD_FILE and GET_LOCK in a text' AS a"); err != nil {
+	if _, err := CheckSQL("SELECT 'LOAD_FILE and GET_LOCK in a text' AS a"); err != nil {
 		t.Errorf("the words inside a string are text: %v", err)
 	}
 }
 
-func TestACellKeepsTheTimeZoneAndTheFractionOfATime(t *testing.T) {
-	got := rawCell(time.Date(2026, 1, 2, 3, 4, 5, 123456789, time.UTC))
-	if !strings.Contains(got, ".123456789") || !strings.Contains(got, "Z") {
-		t.Errorf("%q: a change of a fraction of a second or of the zone must be visible to snap", got)
-	}
+func TestAHugeCellIsCutBeforeItIsConverted(t *testing.T) {
 	if len(cell(strings.Repeat("ñ", 5_000_000))) > 4*maxCell {
 		t.Error("a huge cell must be cut before it is converted")
 	}
@@ -227,9 +223,9 @@ func TestTheHeaderOfAnAnswerKeepsEveryColumnName(t *testing.T) {
 }
 
 // withTables adds tables (name → "col type, ...") to the SQLite file behind s.
-func withTables(t *testing.T, s *source, tables map[string]string) {
+func withTables(t *testing.T, s *Source, tables map[string]string) {
 	t.Helper()
-	db, err := sql.Open("sqlite", strings.TrimPrefix(s.url, "sqlite://"))
+	db, err := sql.Open("sqlite", strings.TrimPrefix(s.URL, "sqlite://"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -277,8 +273,8 @@ func TestAnUnknownColumnOrTableNamesTheRealColumnsOfTheTablesInTheStatement(t *t
 			}
 		}
 	}
-	text, isErr := call(t, connect(t, s), "SELECT zz FROM tags")
-	if !isErr || !strings.HasPrefix(text, "Failed: ") || !strings.Contains(text, "tags(item, label). Next: ") {
-		t.Errorf("through the tool: %q, isError = %v", text, isErr)
+	_, err := ask(t, s, "SELECT zz FROM tags", 0)
+	if text := Failure(err, ""); !strings.HasPrefix(text, "Failed: ") || !strings.Contains(text, "tags(item, label). Next: ") {
+		t.Errorf("as the tool says it: %q", text)
 	}
 }

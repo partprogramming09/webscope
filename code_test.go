@@ -12,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/partprogramming09/webscope/internal/db"
 	"github.com/partprogramming09/webscope/internal/input"
 )
 
@@ -48,22 +49,22 @@ func codeSetup(t *testing.T) *coder {
 		t.Fatal(err)
 	}
 	path := filepath.Join(t.TempDir(), "app.db")
-	db, err := sql.Open("sqlite", path)
+	conn, err := sql.Open("sqlite", path)
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer db.Close()
+	defer conn.Close()
 	for _, q := range []string{
 		"CREATE TABLE quotes (id TEXT, estado TEXT NOT NULL DEFAULT 'X', code TEXT, empty_col TEXT, nota TEXT)",
 		"INSERT INTO quotes VALUES ('1', 'A', '007', NULL, 'SECRET_CELL_VALUE')",
 		"INSERT INTO quotes VALUES ('2', 'B', '', NULL, NULL)",
 		"INSERT INTO quotes VALUES ('3', 'C', NULL, NULL, '')",
 	} {
-		if _, err := db.Exec(q); err != nil {
+		if _, err := conn.Exec(q); err != nil {
 			t.Fatal(err)
 		}
 	}
-	return &coder{s: &source{url: "sqlite://" + path}, backend: root}
+	return &coder{s: &db.Source{URL: "sqlite://" + path}, backend: root}
 }
 
 func code(t *testing.T, c *coder, action string, args map[string]any) (string, error) {
@@ -228,21 +229,21 @@ func TestCodeAcceptsTheArgumentsAtTheTopLevelToo(t *testing.T) {
 
 func TestFieldsCutsAnAnswerThatIsTooBigAndSaysSo(t *testing.T) {
 	c := codeSetup(t)
-	path := strings.TrimPrefix(c.s.url, "sqlite://")
-	db, err := sql.Open("sqlite", path)
+	path := strings.TrimPrefix(c.s.URL, "sqlite://")
+	conn, err := sql.Open("sqlite", path)
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer db.Close()
+	defer conn.Close()
 	cols := make([]string, 400)
 	for i := range cols {
 		cols[i] = fmt.Sprintf("column_number_%03d_with_a_long_name TEXT", i)
 	}
-	if _, err := db.Exec("CREATE TABLE wide (" + strings.Join(cols, ", ") + ")"); err != nil {
+	if _, err := conn.Exec("CREATE TABLE wide (" + strings.Join(cols, ", ") + ")"); err != nil {
 		t.Fatal(err)
 	}
 	out, err := code(t, c, "fields", map[string]any{"table": "wide"})
-	if err != nil || len(out) > maxBytes+200 || !strings.Contains(out, "columns shown") {
+	if err != nil || len(out) > input.MaxAnswer+200 || !strings.Contains(out, "columns shown") {
 		t.Errorf("%d bytes: %v\n%.300s", len(out), err, out)
 	}
 }
@@ -250,12 +251,12 @@ func TestFieldsCutsAnAnswerThatIsTooBigAndSaysSo(t *testing.T) {
 // writeDB is a writable connection to the SQLite file of c: the tool itself only reads, the test plays the part of "an action on the screen".
 func writeDB(t *testing.T, c *coder) *sql.DB {
 	t.Helper()
-	db, err := sql.Open("sqlite", strings.TrimPrefix(c.s.url, "sqlite://"))
+	conn, err := sql.Open("sqlite", strings.TrimPrefix(c.s.URL, "sqlite://"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { db.Close() })
-	return db
+	t.Cleanup(func() { conn.Close() })
+	return conn
 }
 
 func TestSnapSaysNothingChangedWhenNothingDid(t *testing.T) {
@@ -274,14 +275,14 @@ func TestSnapShowsNewDeletedAndChangedRowsWithBeforeAndAfter(t *testing.T) {
 	if _, err := code(t, c, "snap", map[string]any{"name": "q", "sql": "SELECT id, estado, nota, code FROM quotes", "key": "id"}); err != nil {
 		t.Fatal(err)
 	}
-	db := writeDB(t, c)
+	conn := writeDB(t, c)
 	for _, q := range []string{
 		"UPDATE quotes SET estado = 'Z' WHERE id = '1'",
 		"UPDATE quotes SET nota = '' WHERE id = '2'", // NULL to empty: a change, and it must be visible
 		"DELETE FROM quotes WHERE id = '3'",
 		"INSERT INTO quotes (id, estado, nota, code) VALUES ('4', 'N', 'ñandú 😀', '9')",
 	} {
-		if _, err := db.Exec(q); err != nil {
+		if _, err := conn.Exec(q); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -323,8 +324,8 @@ func TestSnapRefusesWhatItCannotCompareNorKeepSafely(t *testing.T) {
 
 func TestSnapRefusesAResultTooBigToKeepAndCutsAnAnswerThatIsTooBig(t *testing.T) {
 	c := codeSetup(t)
-	db := writeDB(t, c)
-	tx, _ := db.Begin()
+	conn := writeDB(t, c)
+	tx, _ := conn.Begin()
 	for i := 0; i < maxSnapRows+1; i++ {
 		tx.Exec("INSERT INTO quotes (id, estado) VALUES (?, 'B')", fmt.Sprintf("big%05d", i))
 	}
@@ -339,7 +340,7 @@ func TestSnapRefusesAResultTooBigToKeepAndCutsAnAnswerThatIsTooBig(t *testing.T)
 	if _, err := code(t, c, "snap", map[string]any{"name": "few", "sql": "SELECT id, estado, nota FROM quotes WHERE id IN ('1','2','3')", "key": "id"}); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := db.Exec("UPDATE quotes SET nota = ? WHERE id = '1'", strings.Repeat("y", 500)); err != nil {
+	if _, err := conn.Exec("UPDATE quotes SET nota = ? WHERE id = '1'", strings.Repeat("y", 500)); err != nil {
 		t.Fatal(err)
 	}
 	out, _ := code(t, c, "snap_diff", map[string]any{"name": "few"})
@@ -367,25 +368,25 @@ func TestAModelWithAnOddFileNameDoesNotBreakTheSearch(t *testing.T) {
 // writeDBFor is a writable connection to the SQLite file behind c.s, for the tests of other tools.
 func writeDBFor(t *testing.T, c *checker) *sql.DB {
 	t.Helper()
-	db, err := sql.Open("sqlite", strings.TrimPrefix(c.s.url, "sqlite://"))
+	conn, err := sql.Open("sqlite", strings.TrimPrefix(c.s.URL, "sqlite://"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { db.Close() })
-	return db
+	t.Cleanup(func() { conn.Close() })
+	return conn
 }
 
 func TestSnapSeesAChangeThatIsFarInsideAVeryLongValue(t *testing.T) {
 	c := codeSetup(t)
-	db := writeDB(t, c)
+	conn := writeDB(t, c)
 	long := strings.Repeat("a", 20000)
-	if _, err := db.Exec("UPDATE quotes SET nota = ? WHERE id = '1'", long+"X"); err != nil {
+	if _, err := conn.Exec("UPDATE quotes SET nota = ? WHERE id = '1'", long+"X"); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := code(t, c, "snap", map[string]any{"name": "L", "sql": "SELECT id, nota FROM quotes WHERE id = '1'", "key": "id"}); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := db.Exec("UPDATE quotes SET nota = ? WHERE id = '1'", long+"Y"); err != nil {
+	if _, err := conn.Exec("UPDATE quotes SET nota = ? WHERE id = '1'", long+"Y"); err != nil {
 		t.Fatal(err)
 	}
 	out, err := code(t, c, "snap_diff", map[string]any{"name": "L"})
@@ -456,5 +457,12 @@ func TestConsumersByTableAlsoSearchesTheResourcesOfTheModelsModule(t *testing.T)
 	}
 	if strings.Contains(out, "NotAResource.php") || strings.Contains(out, "Other.php") {
 		t.Errorf("only the Resources of the module are added, not every file:\n%s", out)
+	}
+}
+
+func TestACellKeepsTheTimeZoneAndTheFractionOfATime(t *testing.T) {
+	got := rawCell(time.Date(2026, 1, 2, 3, 4, 5, 123456789, time.UTC))
+	if !strings.Contains(got, ".123456789") || !strings.Contains(got, "Z") {
+		t.Errorf("%q: a change of a fraction of a second or of the zone must be visible to snap", got)
 	}
 }

@@ -1,4 +1,4 @@
-package main
+package db
 
 import (
 	"context"
@@ -7,14 +7,14 @@ import (
 	"regexp"
 )
 
-// validName is what a tenant's database name may be: it ends up in a connection, so it must not carry anything else.
-var validName = regexp.MustCompile(`^[A-Za-z0-9_]+$`)
+// ValidName is what a tenant's database name may be: it ends up in a connection, so it must not carry anything else.
+var ValidName = regexp.MustCompile(`^[A-Za-z0-9_]+$`)
 
 // tenantDatabase asks the central database for the database of tenant. lookup has one ? (the tenant) and returns the database name in its
 // first column; if a second column has a value the tenant is managed some other way, which this version does not support.
 // No row, more than one row and an invalid name are errors: nothing is chosen for the caller.
 func tenantDatabase(ctx context.Context, db *sql.DB, driver, lookup, tenant string) (string, error) {
-	ctx, cancel := context.WithTimeout(ctx, queryTimeout)
+	ctx, cancel := context.WithTimeout(ctx, QueryTimeout)
 	defer cancel()
 	tx, err := db.BeginTx(ctx, &sql.TxOptions{ReadOnly: driver == "mysql"})
 	if err != nil {
@@ -56,7 +56,7 @@ func tenantDatabase(ctx context.Context, db *sql.DB, driver, lookup, tenant stri
 		return "", fmt.Errorf("tenant %q is ambiguous: more than one database matches", tenant)
 	case managed.Valid:
 		return "", fmt.Errorf("tenant %q uses managed_by_database_connection (%s): not supported", tenant, managed.String)
-	case !validName.MatchString(names[0]):
+	case !ValidName.MatchString(names[0]):
 		return "", fmt.Errorf("the database name of tenant %q is not valid", tenant)
 	}
 	return names[0], nil

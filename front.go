@@ -127,17 +127,17 @@ func slicesContains(s []string, v string) bool {
 	return false
 }
 
-// capOut cuts an answer at maxBytes, on a line, and says so.
+// capOut cuts an answer at input.MaxAnswer, on a line, and says so.
 func capOut(s string) string {
-	if len(s) <= maxBytes {
+	if len(s) <= input.MaxAnswer {
 		return s
 	}
-	cut := strings.LastIndex(s[:maxBytes], "\n")
-	if cut < 0 { // no line break in the first maxBytes: cut at a character
-		for cut = maxBytes; cut > 0 && !utf8.RuneStart(s[cut]); cut-- {
+	cut := strings.LastIndex(s[:input.MaxAnswer], "\n")
+	if cut < 0 { // no line break in the first input.MaxAnswer: cut at a character
+		for cut = input.MaxAnswer; cut > 0 && !utf8.RuneStart(s[cut]); cut-- {
 		}
 	}
-	return s[:cut] + fmt.Sprintf("\n(cut at %d bytes: ask for a narrower module)", maxBytes)
+	return s[:cut] + fmt.Sprintf("\n(cut at %d bytes: ask for a narrower module)", input.MaxAnswer)
 }
 
 // mapFront is map: the routes, calls, composables and stores of the modules whose name contains module; with walkthrough, what can be clicked.

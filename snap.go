@@ -6,6 +6,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"github.com/partprogramming09/webscope/internal/db"
 	"github.com/partprogramming09/webscope/internal/input"
 	"regexp"
 	"slices"
@@ -58,13 +59,13 @@ func capCell(s string) string {
 
 // readAll runs a checked read-only statement and returns its columns and rows; more than maxSnapRows is an error, not a partial snapshot.
 func (c *coder) readAll(ctx context.Context, stmt, tenant string) ([]string, [][]string, error) {
-	db, driver, err := c.s.open(ctx, tenant)
+	conn, driver, err := c.s.Open(ctx, tenant)
 	if err != nil {
 		return nil, nil, err
 	}
-	ctx, cancel := context.WithTimeout(ctx, queryTimeout)
+	ctx, cancel := context.WithTimeout(ctx, db.QueryTimeout)
 	defer cancel()
-	tx, err := db.BeginTx(ctx, &sql.TxOptions{ReadOnly: driver == "mysql"})
+	tx, err := conn.BeginTx(ctx, &sql.TxOptions{ReadOnly: driver == "mysql"})
 	if err != nil {
 		return nil, nil, err
 	}
@@ -120,7 +121,7 @@ func (c *coder) snapSave(ctx context.Context, args map[string]any) (string, erro
 	if !snapName.MatchString(name) {
 		return "", fmt.Errorf("the snapshot name %q is not valid: letters, digits, _ and - up to 40", name)
 	}
-	stmt, err := checkSQL(input.Str(args, "sql"))
+	stmt, err := db.CheckSQL(input.Str(args, "sql"))
 	if err != nil {
 		return "", err
 	}

@@ -1,9 +1,8 @@
-package main
+package db
 
 import (
 	"context"
 	"database/sql"
-	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
@@ -11,7 +10,7 @@ import (
 )
 
 // tenants writes a central SQLite file with the two tables of Hyn Tenancy and one file per tenant database, each with its own items.
-func tenants(t *testing.T) (*source, string) {
+func tenants(t *testing.T) (*Source, string) {
 	t.Helper()
 	dir := t.TempDir()
 	write := func(name string, stmts ...string) {
@@ -36,12 +35,12 @@ func tenants(t *testing.T) (*source, string) {
 	for uuid, who := range map[string]string{"aaa111": "from-aaa", "bbb222": "from-bbb"} {
 		write(uuid+".db", "CREATE TABLE items (id INTEGER, name TEXT)", "INSERT INTO items VALUES (1, '"+who+"')", "INSERT INTO items VALUES (2, 'second')")
 	}
-	return &source{url: "sqlite://" + filepath.Join(dir, "central.db"), tenantQuery: hynTenantQuery}, dir
+	return &Source{URL: "sqlite://" + filepath.Join(dir, "central.db"), TenantQuery: HynTenantQuery}, dir
 }
 
-func askTenant(t *testing.T, s *source, tenant, q string) (string, error) {
+func askTenant(t *testing.T, s *Source, tenant, q string) (string, error) {
 	t.Helper()
-	return s.answer(context.Background(), queryArgs{SQL: q, Tenant: tenant})
+	return s.Answer(context.Background(), QueryArgs{SQL: q, Tenant: tenant})
 }
 
 func TestATenantQueryReadsThatTenantsDatabase(t *testing.T) {
@@ -96,38 +95,17 @@ func TestTheWriteLayersStillHoldInATenantDatabase(t *testing.T) {
 
 func TestTheTenantLookupCanBeReplacedWithAQueryThatReturnsOneColumn(t *testing.T) {
 	s, _ := tenants(t)
-	s.tenantQuery = "SELECT uuid FROM websites WHERE id = (SELECT website_id FROM hostnames WHERE fqdn = ? AND deleted_at IS NULL LIMIT 1)"
+	s.TenantQuery = "SELECT uuid FROM websites WHERE id = (SELECT website_id FROM hostnames WHERE fqdn = ? AND deleted_at IS NULL LIMIT 1)"
 	out, err := askTenant(t, s, "two.test", "SELECT name FROM items WHERE id = 1")
 	if err != nil || out != "name\nfrom-bbb\n(1 rows)" {
 		t.Fatalf("%q, %v", out, err)
 	}
 }
 
-func TestTheToolOffersTheTenantArgumentAndStaysSmall(t *testing.T) {
-	s, _ := tenants(t)
-	res, err := connect(t, s).ListTools(context.Background(), nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	raw, _ := json.Marshal(res)
-	if !strings.Contains(string(raw), `"tenant"`) {
-		t.Errorf("the schema has no tenant argument: %s", raw)
-	}
-	if !strings.Contains(string(raw), `"check"`) {
-		t.Errorf("the check tool is not listed: %s", raw)
-	}
-	if !strings.Contains(string(raw), `"code"`) {
-		t.Errorf("the code tool is not listed: %s", raw)
-	}
-	if len(raw) > 1800 {
-		t.Errorf("tools/list is %d bytes, the budget for this version is 1800", len(raw))
-	}
-}
-
 func TestAMalformedTenantLookupFailsWithAnErrorAndFindsNothing(t *testing.T) {
 	s, _ := tenants(t)
 	for name, q := range map[string]string{"no placeholder": "SELECT uuid FROM websites", "two placeholders": "SELECT uuid FROM websites WHERE id = ? OR id = ?", "not a select": "DELETE FROM websites WHERE id = ?"} {
-		s.tenantQuery = q
+		s.TenantQuery = q
 		if out, err := askTenant(t, s, "one.test", "SELECT 1"); err == nil {
 			t.Errorf("%s: a lookup that does not take exactly one tenant must fail, got %q", name, out)
 		}

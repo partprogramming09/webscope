@@ -357,7 +357,7 @@ func (c *coder) mapBack(args map[string]any) (string, error) {
 		return fmt.Sprintf("no module or route contains «%s». Next: query is the path of a front module (crm/quotes) or words of an API address (quote approve); the names in the code are in English, so a query in another language finds nothing", echo(query)), nil
 	}
 	// The endpoints are the long part: when they do not fit, the last ones go and the services and tables stay.
-	room := maxBytes - len(strings.Join(head, "\n")) - len(strings.Join(out, "\n")) - 120
+	room := input.MaxAnswer - len(strings.Join(head, "\n")) - len(strings.Join(out, "\n")) - 120
 	var shown []string
 	for _, l := range apis {
 		if room -= len(l) + 1; room < 0 {

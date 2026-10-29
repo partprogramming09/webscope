@@ -1,4 +1,4 @@
-package main
+package db
 
 import (
 	"database/sql"
@@ -20,7 +20,7 @@ func TestCheckSQLAccepts(t *testing.T) {
 		"-- note\nSELECT 1",                                // a comment before the statement
 		"SELECT updated_at FROM t WHERE action = 'delete'", // words that merely contain or sit next to a verb
 	} {
-		if _, err := checkSQL(q); err != nil {
+		if _, err := CheckSQL(q); err != nil {
 			t.Errorf("%q was refused: %v", q, err)
 		}
 	}
@@ -49,7 +49,7 @@ func TestCheckSQLRefuses(t *testing.T) {
 		"SELECT 'unterminated":                  "unterminated",
 		"SELECT 1 /* open":                      "unterminated",
 	} {
-		_, err := checkSQL(q)
+		_, err := CheckSQL(q)
 		if err == nil {
 			t.Errorf("%q was accepted", q)
 		} else if !strings.Contains(err.Error(), want) {
@@ -59,7 +59,7 @@ func TestCheckSQLRefuses(t *testing.T) {
 }
 
 func TestCheckSQLReturnsTheStatementWithoutTrailingSemicolons(t *testing.T) {
-	got, err := checkSQL("  SELECT 1 ;; ")
+	got, err := CheckSQL("  SELECT 1 ;; ")
 	if err != nil || got != "SELECT 1" {
 		t.Fatalf("got %q, %v; want %q", got, err, "SELECT 1")
 	}
@@ -71,12 +71,12 @@ func TestTheGuardReadsAStatementUnderTheRulesOfBothEngines(t *testing.T) {
 		"SELECT 'a\\'; DELETE FROM t; SELECT 'b\\'",                                      // SQLite: no backslash escape, so these are three statements
 		"SELECT [unterminated",
 	} {
-		if out, err := checkSQL(q); err == nil {
+		if out, err := CheckSQL(q); err == nil {
 			t.Errorf("%q was let through as %q", q, out)
 		}
 	}
 	for _, q := range []string{"SELECT '[x]' AS a, \"[y]\" AS b", "SELECT 'it''s' ; ", "SELECT json_extract(j, '$[0]') FROM t"} {
-		if _, err := checkSQL(q); err != nil {
+		if _, err := CheckSQL(q); err != nil {
 			t.Errorf("%q is one read and was refused: %v", q, err)
 		}
 	}
@@ -84,50 +84,50 @@ func TestTheGuardReadsAStatementUnderTheRulesOfBothEngines(t *testing.T) {
 
 func TestIntoStuckToAnAtSignIsStillInto(t *testing.T) {
 	for _, q := range []string{"SELECT 1 INTO@x", "select 1 into@@session.x", "SELECT 1 FROM t INTO OUTFILE'/tmp/x'", "SELECT 1 INTO/**/DUMPFILE'/tmp/x'"} {
-		if out, err := checkSQL(q); err == nil {
+		if out, err := CheckSQL(q); err == nil {
 			t.Errorf("%q was let through as %q", q, out)
 		}
 	}
-	if _, err := checkSQL("SELECT @a, @@version, 'INTO' AS w"); err != nil {
+	if _, err := CheckSQL("SELECT @a, @@version, 'INTO' AS w"); err != nil {
 		t.Errorf("variables and the word in a string are reads: %v", err)
 	}
 }
 
 func TestADoubleDashIsACommentForSQLiteEvenWithoutASpaceAfterIt(t *testing.T) {
 	for _, q := range []string{"SELECT 1 --'\n;DELETE FROM items;'", "SELECT 1 --\"\n;DELETE FROM items;\"", "SELECT 1 --`\n;DELETE FROM items;`", "SELECT 1 --[\n;DELETE FROM items;]"} {
-		if out, err := checkSQL(q); err == nil {
+		if out, err := CheckSQL(q); err == nil {
 			t.Errorf("%q was let through as %q", q, out)
 		}
 	}
-	if _, err := checkSQL("SELECT 1 -- a comment\n, 2"); err != nil {
+	if _, err := CheckSQL("SELECT 1 -- a comment\n, 2"); err != nil {
 		t.Errorf("a comment with a space is a comment: %v", err)
 	}
 }
 
 func TestPragmaIsRefusedWhereverItAppears(t *testing.T) {
 	for _, q := range []string{"EXPLAIN PRAGMA query_only=0", "explain pragma writable_schema=1", "EXPLAIN PRAGMA journal_mode=wal"} {
-		if _, err := checkSQL(q); err == nil {
+		if _, err := CheckSQL(q); err == nil {
 			t.Errorf("%q was let through", q)
 		}
 	}
-	if _, err := checkSQL("SELECT name FROM pragma_table_info('items')"); err != nil {
+	if _, err := CheckSQL("SELECT name FROM pragma_table_info('items')"); err != nil {
 		t.Errorf("the table function pragma_table_info is a read: %v", err)
 	}
 }
 
 func TestAFunctionNameBetweenQuotesIsStillTheFunction(t *testing.T) {
 	for _, q := range []string{"SELECT `load_file`('/etc/hosts')", "SELECT `GET_LOCK`('a', 1)", "SELECT \"load_file\"('/etc/hosts')", "SELECT [pragma]"} {
-		if _, err := checkSQL(q); err == nil {
+		if _, err := CheckSQL(q); err == nil {
 			t.Errorf("%q was let through", q)
 		}
 	}
-	if _, err := checkSQL("SELECT `name` FROM `items` WHERE `code` = 'x'"); err != nil {
+	if _, err := CheckSQL("SELECT `name` FROM `items` WHERE `code` = 'x'"); err != nil {
 		t.Errorf("ordinary quoted names are fine: %v", err)
 	}
 }
 
 // Whatever the guard accepts must not write, even without the read-only open of SQLite: every combination of quote and comment characters
-// around a hidden DELETE is run on a scratch in-memory database when checkSQL lets it through.
+// around a hidden DELETE is run on a scratch in-memory database when CheckSQL lets it through.
 func TestNoStatementTheGuardAcceptsWritesInSQLite(t *testing.T) {
 	alphabet := []string{"'", "\"", "`", "[", "]", "-", "#", "/", "*", "\\", "\n", " ", "!"}
 	var words []string
@@ -160,7 +160,7 @@ func TestNoStatementTheGuardAcceptsWritesInSQLite(t *testing.T) {
 		for _, q := range tails {
 			for _, stmt := range []string{"SELECT 1 " + p + ";\nDELETE FROM t;\n" + q, "SELECT 1 " + p + "\n;DELETE FROM t;" + q, "SELECT 1 " + p + "\nDELETE FROM t;" + q} {
 				tried++
-				if _, err := checkSQL(stmt); err != nil {
+				if _, err := CheckSQL(stmt); err != nil {
 					continue
 				}
 				accepted++
@@ -174,7 +174,7 @@ func TestNoStatementTheGuardAcceptsWritesInSQLite(t *testing.T) {
 				var n int
 				db.QueryRow("SELECT count(*) FROM t").Scan(&n)
 				if n == 0 {
-					t.Fatalf("checkSQL accepted %q and it deleted the rows", stmt)
+					t.Fatalf("CheckSQL accepted %q and it deleted the rows", stmt)
 				}
 				db.Exec("DELETE FROM t")
 				db.Exec("CREATE TABLE IF NOT EXISTS t (a)")
@@ -189,7 +189,7 @@ func TestAWithThatEndsInAWriteIsRefusedByTheGuardItselfAndATableFunctionIsNot(t 
 		"WITH x AS (SELECT 1) DELETE FROM t", "with x as (select 1) update t set a = 99", "WITH x AS (SELECT 1) INSERT t SELECT * FROM x",
 		"WITH x AS (SELECT 1) REPLACE t SELECT * FROM x", "EXPLAIN ATTACH DATABASE 'f.db' AS evil", "SELECT 1 FROM t FOR UPDATE", "SELECT 1; DETACH evil",
 	} {
-		if out, err := checkSQL(q); err == nil {
+		if out, err := CheckSQL(q); err == nil {
 			t.Errorf("%q was let through as %q", q, out)
 		}
 	}
@@ -197,7 +197,7 @@ func TestAWithThatEndsInAWriteIsRefusedByTheGuardItselfAndATableFunctionIsNot(t 
 		"WITH x AS (SELECT 1 AS a) SELECT REPLACE(a, '1', '2'), INSERT('abc', 1, 1, 'x') FROM x", "WITH updates AS (SELECT 1 AS deleted) SELECT deleted FROM updates",
 		"SELECT `update`, `delete` FROM t", "WITH x AS (SELECT 'DELETE UPDATE' AS w) SELECT w FROM x",
 	} {
-		if _, err := checkSQL(q); err != nil {
+		if _, err := CheckSQL(q); err != nil {
 			t.Errorf("%q is a read and was refused: %v", q, err)
 		}
 	}

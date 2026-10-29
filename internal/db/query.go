@@ -1,10 +1,11 @@
-package main
+package db
 
 import (
 	"context"
 	"database/sql"
 	"errors"
 	"fmt"
+	"github.com/partprogramming09/webscope/internal/input"
 	"net/url"
 	"path/filepath"
 	"regexp"
@@ -21,37 +22,37 @@ import (
 const (
 	defaultLimit = 50
 	maxLimit     = 500
-	maxCell      = 200  // runes in one cell
-	maxBytes     = 8000 // bytes of rows in one answer
-	queryTimeout = 15 * time.Second
+	maxCell      = 200 // runes in one cell
+	QueryTimeout = 15 * time.Second
 )
 
-// source is the database named by WEBSCOPE_DB_URL, opened the first time a query needs it.
-type source struct {
-	url         string
-	tenantQuery string
+// Source is the database named by WEBSCOPE_DB_URL, opened the first time a query needs it.
+type Source struct {
+	URL         string
+	TenantQuery string
 	mu          sync.Mutex
 	dbs         map[string]*sql.DB // by database name; "" is the one in the URL
 	driver      string
 }
 
-type queryArgs struct {
+// QueryArgs are the arguments of the query tool.
+type QueryArgs struct {
 	SQL    string `json:"sql" jsonschema:"one read-only statement"`
 	Tenant string `json:"tenant,omitempty" jsonschema:"tenant fqdn; omit for the URL's database"`
 	Limit  int    `json:"limit,omitempty" jsonschema:"rows, default 50, max 500"`
 }
 
-// hynTenantQuery is the default way to find a tenant's database: Hyn Tenancy keeps it in websites.uuid. WEBSCOPE_TENANT_QUERY replaces it.
-const hynTenantQuery = `SELECT w.uuid, w.managed_by_database_connection FROM hostnames h JOIN websites w ON w.id = h.website_id WHERE h.fqdn = ? AND h.deleted_at IS NULL AND w.deleted_at IS NULL`
+// HynTenantQuery is the default way to find a tenant's database: Hyn Tenancy keeps it in websites.uuid. WEBSCOPE_TENANT_QUERY replaces it.
+const HynTenantQuery = `SELECT w.uuid, w.managed_by_database_connection FROM hostnames h JOIN websites w ON w.id = h.website_id WHERE h.fqdn = ? AND h.deleted_at IS NULL AND w.deleted_at IS NULL`
 
 // conn returns the connection to database, opened the first time; "" is the database in the URL.
-func (s *source) conn(database string) (*sql.DB, string, error) {
+func (s *Source) conn(database string) (*sql.DB, string, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if db, ok := s.dbs[database]; ok {
 		return db, s.driver, nil
 	}
-	db, driver, err := openDB(s.url, database)
+	db, driver, err := openDB(s.URL, database)
 	if err != nil {
 		return nil, "", err
 	}
@@ -62,28 +63,28 @@ func (s *source) conn(database string) (*sql.DB, string, error) {
 	return db, driver, nil
 }
 
-// open is the connection to the URL's database, or to the database of tenant (an fqdn) found in the central one.
-func (s *source) open(ctx context.Context, tenant string) (*sql.DB, string, error) {
+// Open is the connection to the URL's database, or to the database of tenant (an fqdn) found in the central one.
+func (s *Source) Open(ctx context.Context, tenant string) (*sql.DB, string, error) {
 	db, driver, err := s.conn("")
 	if err != nil || tenant == "" {
 		return db, driver, err
 	}
-	name, err := tenantDatabase(ctx, db, driver, s.tenantQuery, tenant)
+	name, err := tenantDatabase(ctx, db, driver, s.TenantQuery, tenant)
 	if err != nil {
 		return nil, "", err
 	}
 	return s.conn(name)
 }
 
-// answer checks the statement, runs it and returns the text for the agent; no error text carries the password of the URL.
-func (s *source) answer(ctx context.Context, in queryArgs) (string, error) {
-	pw := password(s.url)
-	fail := func(err error) (string, error) { return "", errors.New(redact(err.Error(), pw)) }
-	stmt, err := checkSQL(in.SQL)
+// Answer checks the statement, runs it and returns the text for the agent; no error text carries the password of the URL.
+func (s *Source) Answer(ctx context.Context, in QueryArgs) (string, error) {
+	pw := Password(s.URL)
+	fail := func(err error) (string, error) { return "", errors.New(Redact(err.Error(), pw)) }
+	stmt, err := CheckSQL(in.SQL)
 	if err != nil {
 		return fail(err)
 	}
-	db, driver, err := s.open(ctx, in.Tenant)
+	db, driver, err := s.Open(ctx, in.Tenant)
 	if err != nil {
 		return fail(err)
 	}
@@ -112,7 +113,7 @@ func columnHint(ctx context.Context, db *sql.DB, driver, stmt, msg string) strin
 		want = strings.ToLower(m[1] + m[2])
 		want = want[strings.LastIndex(want, ".")+1:]
 	}
-	ctx, cancel := context.WithTimeout(ctx, queryTimeout)
+	ctx, cancel := context.WithTimeout(ctx, QueryTimeout)
 	defer cancel()
 	q := "SELECT name FROM pragma_table_info(?)"
 	if driver == "mysql" {
@@ -176,7 +177,7 @@ func openDB(raw, database string) (*sql.DB, string, error) {
 		if database != "" {
 			cfg.DBName = database
 		}
-		cfg.Timeout, cfg.ReadTimeout = 5*time.Second, queryTimeout
+		cfg.Timeout, cfg.ReadTimeout = 5*time.Second, QueryTimeout
 		c, err := mysql.NewConnector(cfg)
 		if err != nil {
 			return nil, "", err
@@ -193,8 +194,8 @@ func openDB(raw, database string) (*sql.DB, string, error) {
 	return nil, "", fmt.Errorf("unsupported database URL scheme %q: use mysql or sqlite", u.Scheme)
 }
 
-// password is the password inside a database URL, or "".
-func password(raw string) string {
+// Password is the password inside a database URL, or "".
+func Password(raw string) string {
 	if u, err := url.Parse(raw); err == nil && u.User != nil {
 		pw, _ := u.User.Password()
 		return pw
@@ -202,8 +203,8 @@ func password(raw string) string {
 	return ""
 }
 
-// redact hides every occurrence of secret in msg.
-func redact(msg, secret string) string {
+// Redact hides every occurrence of secret in msg.
+func Redact(msg, secret string) string {
 	if secret == "" {
 		return msg
 	}
@@ -221,11 +222,11 @@ func rowLimit(n int) int {
 	return n
 }
 
-// runQuery runs one checked statement in a read-only transaction that is always rolled back (the second layer after checkSQL: on MySQL the
+// runQuery runs one checked statement in a read-only transaction that is always rolled back (the second layer after CheckSQL: on MySQL the
 // transaction is READ ONLY, on SQLite the file is opened with query_only) and returns a TSV table with a header and a closing line that says
 // whether rows were left out.
 func runQuery(ctx context.Context, db *sql.DB, driver, stmt string, limit int) (string, error) {
-	ctx, cancel := context.WithTimeout(ctx, queryTimeout)
+	ctx, cancel := context.WithTimeout(ctx, QueryTimeout)
 	defer cancel()
 	tx, err := db.BeginTx(ctx, &sql.TxOptions{ReadOnly: driver == "mysql"})
 	if err != nil {
@@ -243,8 +244,8 @@ func runQuery(ctx context.Context, db *sql.DB, driver, stmt string, limit int) (
 	}
 	var b strings.Builder
 	header := strings.Join(cols, "\t") // every column name stays: the values are positional; only an absurd header is cut
-	if len(header) > maxBytes/2 {
-		n := maxBytes / 2
+	if len(header) > input.MaxAnswer/2 {
+		n := input.MaxAnswer / 2
 		for n > 0 && !utf8.RuneStart(header[n]) {
 			n--
 		}
@@ -269,9 +270,9 @@ func runQuery(ctx context.Context, db *sql.DB, driver, stmt string, limit int) (
 			cells[i] = cell(v)
 		}
 		row := strings.Join(cells, "\t") + "\n"
-		if b.Len()+len(row) > maxBytes {
-			if n == 0 { // the first row alone is too big: show its start rather than nothing, and never more than maxBytes
-				room := max(0, maxBytes-b.Len())
+		if b.Len()+len(row) > input.MaxAnswer {
+			if n == 0 { // the first row alone is too big: show its start rather than nothing, and never more than input.MaxAnswer
+				room := max(0, input.MaxAnswer-b.Len())
 				for room > 0 && !utf8.RuneStart(row[room]) {
 					room--
 				}
@@ -289,7 +290,7 @@ func runQuery(ctx context.Context, db *sql.DB, driver, stmt string, limit int) (
 	}
 	switch {
 	case cut:
-		fmt.Fprintf(&b, "(%d rows shown, cut at %d bytes: select fewer columns or add WHERE)", n, maxBytes)
+		fmt.Fprintf(&b, "(%d rows shown, cut at %d bytes: select fewer columns or add WHERE)", n, input.MaxAnswer)
 	case more:
 		fmt.Fprintf(&b, "(%d rows shown, more exist: add WHERE or select fewer rows)", n)
 	default:
@@ -326,4 +327,19 @@ func cell(v any) string {
 		s = string(r[:maxCell]) + "…"
 	}
 	return s
+}
+
+// Failure is the text of a failed call: what happened and what to do next. tenant is the one the call named, if any.
+func Failure(err error, tenant string) string {
+	next := "fix the statement or the connection (WEBSCOPE_DB_URL) and call again."
+	switch msg := err.Error(); {
+	case strings.Contains(msg, "Error 1054") || strings.Contains(msg, "no such column"):
+		next = "that column does not exist: code(fields {table}) or SHOW COLUMNS FROM table lists the real ones; then call again."
+	case strings.Contains(msg, "Error 1146") || strings.Contains(msg, "no such table"):
+		next = "that table does not exist: SHOW TABLES LIKE '%word%' lists the tables; then call again."
+		if tenant != "" {
+			next = "that table does not exist in the database of tenant " + tenant + ": SHOW TABLES LIKE '%word%' lists its tables; a central table is read by calling without tenant."
+		}
+	}
+	return "Failed: " + strings.TrimRight(err.Error(), ". ") + ". Next: " + next
 }

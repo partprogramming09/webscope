@@ -14,11 +14,12 @@ import (
 	"context"
 	"errors"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
+	"github.com/partprogramming09/webscope/internal/db"
 )
 
 // checker compares what the screen sent, what the database stored and what the screen read afterwards.
 type checker struct {
-	s *source
+	s *db.Source
 	p *pageTool
 }
 
@@ -142,7 +143,7 @@ func show(s string) string {
 
 // row reads the one row of table that where picks, only the columns asked for, in a read-only transaction.
 func (c *checker) row(ctx context.Context, in checkArgs, cols []string) (map[string]*string, error) {
-	db, driver, err := c.s.open(ctx, in.Tenant)
+	conn, driver, err := c.s.Open(ctx, in.Tenant)
 	if err != nil {
 		return nil, err
 	}
@@ -152,9 +153,9 @@ func (c *checker) row(ctx context.Context, in checkArgs, cols []string) (map[str
 		conds = append(conds, "`"+k+"` = ?")
 		vals = append(vals, in.Where[k])
 	}
-	ctx, cancel := context.WithTimeout(ctx, queryTimeout)
+	ctx, cancel := context.WithTimeout(ctx, db.QueryTimeout)
 	defer cancel()
-	tx, err := db.BeginTx(ctx, &sql.TxOptions{ReadOnly: driver == "mysql"})
+	tx, err := conn.BeginTx(ctx, &sql.TxOptions{ReadOnly: driver == "mysql"})
 	if err != nil {
 		return nil, err
 	}
@@ -197,10 +198,10 @@ func (c *checker) row(ctx context.Context, in checkArgs, cols []string) (map[str
 }
 
 func (c *checker) run(ctx context.Context, in checkArgs) (string, error) {
-	pw := password(c.s.url)
+	pw := db.Password(c.s.URL)
 	out, err := c.compare(ctx, in)
 	if err != nil {
-		return "", errors.New(redact(err.Error(), pw))
+		return "", errors.New(db.Redact(err.Error(), pw))
 	}
 	return out, nil
 }
@@ -218,7 +219,7 @@ func (c *checker) compare(ctx context.Context, in checkArgs) (string, error) {
 		return "", errors.New("where and map need at least one entry each")
 	}
 	for _, n := range names {
-		if !validName.MatchString(n) {
+		if !db.ValidName.MatchString(n) {
 			return "", fmt.Errorf("the name %q is not valid: letters, digits and _ only", n)
 		}
 	}

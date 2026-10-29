@@ -3,6 +3,9 @@ package input
 
 import "encoding/json"
 
+// MaxAnswer is the most bytes that one answer of a tool carries.
+const MaxAnswer = 8000
+
 // Schema is written by hand, like the one of check: the generated one costs twice the bytes of tools/list.
 var Schema = map[string]any{
 	"type": "object",

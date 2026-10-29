@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"database/sql"
+	"github.com/partprogramming09/webscope/internal/db"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -12,11 +13,11 @@ import (
 func checkSetup(t *testing.T) (*checker, *pageTool) {
 	t.Helper()
 	path := filepath.Join(t.TempDir(), "app.db")
-	db, err := sql.Open("sqlite", path)
+	conn, err := sql.Open("sqlite", path)
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer db.Close()
+	defer conn.Close()
 	for _, q := range []string{
 		"CREATE TABLE quotes (id TEXT, sub TEXT, office TEXT, notes TEXT, code TEXT, note2 TEXT)",
 		"INSERT INTO quotes VALUES ('059', 'AI', 'MIA', 'secret note', '007', NULL)",
@@ -24,12 +25,12 @@ func checkSetup(t *testing.T) (*checker, *pageTool) {
 		"INSERT INTO quotes VALUES ('061', 'AI', 'MIA', 'x', '1', NULL)",
 		"INSERT INTO quotes VALUES ('061', 'AI', 'MIA', 'y', '1', NULL)",
 	} {
-		if _, err := db.Exec(q); err != nil {
+		if _, err := conn.Exec(q); err != nil {
 			t.Fatal(err)
 		}
 	}
 	p := newPage("http://app.test")
-	return &checker{s: &source{url: "sqlite://" + path}, p: p}, p
+	return &checker{s: &db.Source{URL: "sqlite://" + path}, p: p}, p
 }
 
 func sent(p *pageTool, method, path, req, res string) {
@@ -227,8 +228,8 @@ func TestCheckAnswerFitsTheBudgetEvenWhenEverythingDiffers(t *testing.T) {
 func TestCheckSaysWhenOnlyTheSpacesDiffer(t *testing.T) {
 	c, p := checkSetup(t)
 	sent(p, "POST", "/api/quotes", `{"notes":"  a  \t  b "}`, "")
-	db := writeDBFor(t, c)
-	if _, err := db.Exec("UPDATE quotes SET notes = 'a b' WHERE id = '059'"); err != nil {
+	conn := writeDBFor(t, c)
+	if _, err := conn.Exec("UPDATE quotes SET notes = 'a b' WHERE id = '059'"); err != nil {
 		t.Fatal(err)
 	}
 	out, err := run(t, c, args("059", map[string]string{"notes": "notes"}))

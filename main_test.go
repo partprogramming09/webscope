@@ -2,14 +2,34 @@ package main
 
 import (
 	"context"
-	"errors"
+	"database/sql"
+	"encoding/json"
+	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
+	"github.com/partprogramming09/webscope/internal/db"
 )
 
-func connect(t *testing.T, s *source) *mcp.ClientSession {
+// fixture writes a SQLite file with one row in items and returns a source that opens it.
+func fixture(t *testing.T) *db.Source {
+	t.Helper()
+	path := filepath.Join(t.TempDir(), "app.db")
+	conn, err := sql.Open("sqlite", path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer conn.Close()
+	for _, q := range []string{"CREATE TABLE items (id INTEGER PRIMARY KEY)", "INSERT INTO items VALUES (1)"} {
+		if _, err := conn.Exec(q); err != nil {
+			t.Fatal(err)
+		}
+	}
+	return &db.Source{URL: "sqlite://" + path}
+}
+
+func connect(t *testing.T, s *db.Source) *mcp.ClientSession {
 	t.Helper()
 	st, ct := mcp.NewInMemoryTransports()
 	if _, err := newServer(s, newPage(appOrigin)).Connect(context.Background(), st, nil); err != nil {
@@ -24,7 +44,7 @@ func connect(t *testing.T, s *source) *mcp.ClientSession {
 }
 
 func TestOnlyQueryPageCheckAndCodeAreOffered(t *testing.T) {
-	res, err := connect(t, &source{}).ListTools(context.Background(), nil)
+	res, err := connect(t, &db.Source{}).ListTools(context.Background(), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -70,46 +90,6 @@ func TestAnAnswerIsPlainTextAndAFailureIsMarkedAndNamesTheNextStep(t *testing.T)
 	}
 }
 
-func TestFailureSaysHowToSeeTheRealColumnsAndTables(t *testing.T) {
-	for _, tc := range []struct{ err, want string }{
-		{"Error 1054 (42S22): Unknown column 'pantalla' in 'field list'", "code(fields"},
-		{"SQL logic error: no such column: pantalla (1)", "code(fields"},
-		{"Error 1146 (42S02): Table 'db.nada' doesn't exist", "SHOW TABLES"},
-		{"SQL logic error: no such table: nada (1)", "SHOW TABLES"},
-		{"Error 1064 (42000): You have an error in your SQL syntax", "fix the statement"},
-	} {
-		got := failure(errors.New(tc.err), "")
-		if !strings.HasPrefix(got, "Failed: "+tc.err) || !strings.Contains(got, "Next: ") || !strings.Contains(got, tc.want) {
-			t.Errorf("%s: %q lacks %q", tc.err, got, tc.want)
-		}
-	}
-}
-
-func TestFailureOfAMissingTableWithATenantSaysACentralTableIsReadWithoutIt(t *testing.T) {
-	for _, e := range []string{"Error 1146 (42S02): Table 'db.customers' doesn't exist", "SQL logic error: no such table: customers (1)"} {
-		with := failure(errors.New(e), "demo.localhost")
-		if !strings.Contains(with, "without tenant") || !strings.Contains(with, "SHOW TABLES") {
-			t.Errorf("%s with a tenant: %q", e, with)
-		}
-		if without := failure(errors.New(e), ""); strings.Contains(without, "tenant") {
-			t.Errorf("%s without a tenant must not mention it: %q", e, without)
-		}
-	}
-	if got := failure(errors.New("Error 1054 (42S22): Unknown column 'x' in 'field list'"), "demo.localhost"); strings.Contains(got, "without tenant") {
-		t.Errorf("a missing column is not a central table: %q", got)
-	}
-}
-
-func TestFailureTextHasNoDoubledPeriodWhenTheErrorEndsInOne(t *testing.T) {
-	got := failure(errors.New("Error 1792 (25006): Cannot execute statement in a READ ONLY transaction."), "")
-	if strings.Contains(got, "..") {
-		t.Fatalf("doubled period in %q", got)
-	}
-	if !strings.HasPrefix(got, "Failed: Error 1792") || !strings.Contains(got, "transaction. Next: ") {
-		t.Fatalf("unexpected text %q", got)
-	}
-}
-
 func TestAToolThatPanicsAnswersAnErrorInsteadOfTakingTheServerDown(t *testing.T) {
 	h := guarded(func(context.Context, *mcp.CallToolRequest, struct{}) (*mcp.CallToolResult, any, error) {
 		var s []int
@@ -119,5 +99,25 @@ func TestAToolThatPanicsAnswersAnErrorInsteadOfTakingTheServerDown(t *testing.T)
 	res, _, err := h(context.Background(), nil, struct{}{})
 	if err != nil || res == nil || !res.IsError || !strings.Contains(res.Content[0].(*mcp.TextContent).Text, "Failed") {
 		t.Errorf("%+v, %v", res, err)
+	}
+}
+
+func TestTheToolOffersTheTenantArgumentAndStaysSmall(t *testing.T) {
+	res, err := connect(t, &db.Source{}).ListTools(context.Background(), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	raw, _ := json.Marshal(res)
+	if !strings.Contains(string(raw), `"tenant"`) {
+		t.Errorf("the schema has no tenant argument: %s", raw)
+	}
+	if !strings.Contains(string(raw), `"check"`) {
+		t.Errorf("the check tool is not listed: %s", raw)
+	}
+	if !strings.Contains(string(raw), `"code"`) {
+		t.Errorf("the code tool is not listed: %s", raw)
+	}
+	if len(raw) > 1800 {
+		t.Errorf("tools/list is %d bytes, the budget for this version is 1800", len(raw))
 	}
 }

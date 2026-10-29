@@ -13,13 +13,14 @@ import (
 	"sync"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
+	"github.com/partprogramming09/webscope/internal/db"
 	"github.com/partprogramming09/webscope/internal/fsx"
 	"github.com/partprogramming09/webscope/internal/input"
 )
 
 // coder reads the code of the project: the PHP under WEBSCOPE_BACKEND, and the columns of a table through the same read-only connection as query.
 type coder struct {
-	s       *source
+	s       *db.Source
 	backend string
 	front   string
 
@@ -93,7 +94,7 @@ func slicesCompact(s []string) []string {
 func (c *coder) run(ctx context.Context, in input.Args) (string, error) {
 	out, err := c.do(ctx, in)
 	if err != nil {
-		return "", errors.New(redact(err.Error(), password(c.s.url)))
+		return "", errors.New(db.Redact(err.Error(), db.Password(c.s.URL)))
 	}
 	return out, nil
 }
@@ -128,7 +129,7 @@ func (c *coder) consumers(args map[string]any) (string, error) {
 	if col == "" || (only == "" && table == "") {
 		return "", errors.New("consumers needs table and column, or column_only")
 	}
-	if only == "" && !validName.MatchString(table) {
+	if only == "" && !db.ValidName.MatchString(table) {
 		return "", fmt.Errorf("the table name %q is not valid: letters, digits and _ only", table)
 	}
 	files, real, err := fsx.PHPFiles(c.backend)
@@ -205,16 +206,16 @@ func show70(s string) string {
 // and write each one. Counts only: no stored value is returned.
 func (c *coder) fields(ctx context.Context, args map[string]any) (string, error) {
 	table := input.Str(args, "table")
-	if !validName.MatchString(table) {
+	if !db.ValidName.MatchString(table) {
 		return "", fmt.Errorf("the table name %q is not valid: letters, digits and _ only", table)
 	}
-	db, driver, err := c.s.open(ctx, input.Str(args, "tenant"))
+	conn, driver, err := c.s.Open(ctx, input.Str(args, "tenant"))
 	if err != nil {
 		return "", err
 	}
-	ctx, cancel := context.WithTimeout(ctx, queryTimeout)
+	ctx, cancel := context.WithTimeout(ctx, db.QueryTimeout)
 	defer cancel()
-	tx, err := db.BeginTx(ctx, &sql.TxOptions{ReadOnly: driver == "mysql"})
+	tx, err := conn.BeginTx(ctx, &sql.TxOptions{ReadOnly: driver == "mysql"})
 	if err != nil {
 		return "", err
 	}
@@ -262,7 +263,7 @@ func (c *coder) fields(ctx context.Context, args map[string]any) (string, error)
 	}
 	sel := []string{"COUNT(*)"}
 	for _, k := range cols {
-		if validName.MatchString(k.name) {
+		if db.ValidName.MatchString(k.name) {
 			sel = append(sel, "SUM(CASE WHEN `"+k.name+"` IS NOT NULL AND CAST(`"+k.name+"` AS CHAR) <> '' THEN 1 ELSE 0 END)")
 		} else {
 			sel = append(sel, "NULL")
@@ -302,7 +303,7 @@ func (c *coder) fields(ctx context.Context, args map[string]any) (string, error)
 		with := "?"
 		if vals[i+1].Valid {
 			with = vals[i+1].String
-		} else if validName.MatchString(k.name) {
+		} else if db.ValidName.MatchString(k.name) {
 			with = "0"
 		}
 		users, note := "-", ""
@@ -338,9 +339,9 @@ func (c *coder) fields(ctx context.Context, args map[string]any) (string, error)
 		b.WriteString("\n" + line)
 	}
 	out := b.String()
-	if len(out) > maxBytes {
-		cut := strings.LastIndex(out[:maxBytes], "\n")
-		out = out[:cut] + fmt.Sprintf("\n(%d of %d columns shown, cut at %d bytes)", strings.Count(out[:cut], "\n")-1, len(cols), maxBytes)
+	if len(out) > input.MaxAnswer {
+		cut := strings.LastIndex(out[:input.MaxAnswer], "\n")
+		out = out[:cut] + fmt.Sprintf("\n(%d of %d columns shown, cut at %d bytes)", strings.Count(out[:cut], "\n")-1, len(cols), input.MaxAnswer)
 	}
 	return out, nil
 }

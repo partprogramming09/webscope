@@ -7,9 +7,9 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
-	"strings"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
+	"github.com/partprogramming09/webscope/internal/db"
 	"github.com/partprogramming09/webscope/internal/input"
 )
 
@@ -19,36 +19,23 @@ const (
 )
 
 // query answers a query call: plain text on success, and on failure a text that starts with "Failed:" and names the next step, marked as an error.
-func (s *source) query(ctx context.Context, _ *mcp.CallToolRequest, in queryArgs) (*mcp.CallToolResult, any, error) {
-	text, err := s.answer(ctx, in)
-	if err != nil {
-		text = failure(err, in.Tenant)
-	}
-	return &mcp.CallToolResult{IsError: err != nil, Content: []mcp.Content{&mcp.TextContent{Text: text}}}, nil, nil
-}
-
-// failure is the text of a failed call: what happened and what to do next. tenant is the one the call named, if any.
-func failure(err error, tenant string) string {
-	next := "fix the statement or the connection (WEBSCOPE_DB_URL) and call again."
-	switch msg := err.Error(); {
-	case strings.Contains(msg, "Error 1054") || strings.Contains(msg, "no such column"):
-		next = "that column does not exist: code(fields {table}) or SHOW COLUMNS FROM table lists the real ones; then call again."
-	case strings.Contains(msg, "Error 1146") || strings.Contains(msg, "no such table"):
-		next = "that table does not exist: SHOW TABLES LIKE '%word%' lists the tables; then call again."
-		if tenant != "" {
-			next = "that table does not exist in the database of tenant " + tenant + ": SHOW TABLES LIKE '%word%' lists its tables; a central table is read by calling without tenant."
+func query(s *db.Source) mcp.ToolHandlerFor[db.QueryArgs, any] {
+	return func(ctx context.Context, _ *mcp.CallToolRequest, in db.QueryArgs) (*mcp.CallToolResult, any, error) {
+		text, err := s.Answer(ctx, in)
+		if err != nil {
+			text = db.Failure(err, in.Tenant)
 		}
+		return &mcp.CallToolResult{IsError: err != nil, Content: []mcp.Content{&mcp.TextContent{Text: text}}}, nil, nil
 	}
-	return "Failed: " + strings.TrimRight(err.Error(), ". ") + ". Next: " + next
 }
 
-func newServer(s *source, p *pageTool) *mcp.Server {
+func newServer(s *db.Source, p *pageTool) *mcp.Server {
 	srv := mcp.NewServer(&mcp.Implementation{Name: "webscope", Version: version}, &mcp.ServerOptions{Instructions: instructions})
 	mcp.AddTool(srv, &mcp.Tool{
 		Name:        "query",
 		Description: "Read-only SQL on the project database. One statement. Answer: TSV with header, capped.",
 		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true},
-	}, guarded(s.query))
+	}, guarded(query(s)))
 	mcp.AddTool(srv, &mcp.Tool{
 		Name:        "page",
 		Description: "Test a screen in Chrome (Claude in Chrome): returns text or JavaScript to run with javascript_tool. page(help) lists the actions.",
@@ -76,7 +63,7 @@ func tenantLookup() string {
 	if q := os.Getenv("WEBSCOPE_TENANT_QUERY"); q != "" {
 		return q
 	}
-	return hynTenantQuery
+	return db.HynTenantQuery
 }
 
 func main() {
@@ -85,7 +72,7 @@ func main() {
 	fmt.Fprintf(os.Stderr, "webscope %s\n", version)
 	page := newPage(os.Getenv("WEBSCOPE_APP_URL"))
 	page.life = ctx
-	if err := newServer(&source{url: os.Getenv("WEBSCOPE_DB_URL"), tenantQuery: tenantLookup()}, page).Run(ctx, &mcp.StdioTransport{}); err != nil && ctx.Err() == nil {
+	if err := newServer(&db.Source{URL: os.Getenv("WEBSCOPE_DB_URL"), TenantQuery: tenantLookup()}, page).Run(ctx, &mcp.StdioTransport{}); err != nil && ctx.Err() == nil {
 		fmt.Fprintln(os.Stderr, "webscope:", err)
 		os.Exit(1)
 	}

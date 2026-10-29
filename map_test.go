@@ -2,6 +2,8 @@ package main
 
 import (
 	"fmt"
+	"github.com/partprogramming09/webscope/internal/db"
+	"github.com/partprogramming09/webscope/internal/input"
 	"os"
 	"path/filepath"
 	"strings"
@@ -59,7 +61,7 @@ import { useQuotes } from '../composables/useQuotes'
 		t.Fatal(err)
 	}
 	write(back, "app/Modules/Crm/Quotes/Routes/leak.php", "<?php\nuse App\\Modules\\Crm\\Quotes\\Controllers\\LeakController;\nRoute::get('leak', [LeakController::class, 'index']);\n")
-	return &coder{s: &source{}, backend: back, front: front}
+	return &coder{s: &db.Source{}, backend: back, front: front}
 }
 
 func TestMapListsRoutesCallsComposablesAndStores(t *testing.T) {
@@ -168,7 +170,7 @@ func TestMapBackKeepsTheTablesWhenThereAreMoreEndpointsThanFit(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(out) > maxBytes+200 || !strings.Contains(out, "model app/Modules/Crm/Quotes/Models/Quote.php -> table app_cotizaciones") || !strings.Contains(out, "more endpoints") {
+	if len(out) > input.MaxAnswer+200 || !strings.Contains(out, "model app/Modules/Crm/Quotes/Models/Quote.php -> table app_cotizaciones") || !strings.Contains(out, "more endpoints") {
 		t.Errorf("%d bytes: the model and its table must survive and the cut must be said:\n...%s", len(out), out[max(0, len(out)-400):])
 	}
 	if !strings.Contains(out, "api GET quotes -> QuoteController@index") {
@@ -184,10 +186,10 @@ func TestMapBackNeverReadsAModelThroughALinkedFolderNorPanicsOnALongQuery(t *tes
 	}
 	long := strings.TrimSpace(strings.Repeat("quotes ", 1500))
 	out, err = code(t, c, "map_back", map[string]any{"query": long})
-	if err != nil || len(out) > maxBytes+300 {
+	if err != nil || len(out) > input.MaxAnswer+300 {
 		t.Errorf("a query of %d bytes: %d bytes back, %v", len(long), len(out), err)
 	}
-	if out, err = code(t, c, "map", map[string]any{"module": long}); err != nil || len(out) > maxBytes+300 {
+	if out, err = code(t, c, "map", map[string]any{"module": long}); err != nil || len(out) > input.MaxAnswer+300 {
 		t.Errorf("map with a long module: %d bytes back, %v", len(out), err)
 	}
 }

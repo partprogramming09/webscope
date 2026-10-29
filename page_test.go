@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
+	"github.com/partprogramming09/webscope/internal/db"
 	"github.com/partprogramming09/webscope/internal/input"
 )
 
@@ -84,7 +85,7 @@ func TestSnippetCarriesArgsOnlyAsJSON(t *testing.T) {
 }
 
 func TestPageAcceptsTheArgumentsAtTheTopLevelToo(t *testing.T) {
-	res, err := connect(t, &source{}).CallTool(context.Background(), &mcp.CallToolParams{Name: "page", Arguments: map[string]any{"action": "fill", "Nombre": "Ana"}})
+	res, err := connect(t, &db.Source{}).CallTool(context.Background(), &mcp.CallToolParams{Name: "page", Arguments: map[string]any{"action": "fill", "Nombre": "Ana"}})
 	if err != nil || res.IsError {
 		t.Fatalf("the schema refused a top-level argument: %v %+v", err, res)
 	}
@@ -625,7 +626,7 @@ func TestPayloadsAreBoundedAndACaptureCannotFakeALine(t *testing.T) {
 		p.caps = append(p.caps, capture{M: "GET", U: "http://a.test/" + strings.Repeat("v", 5000), S: 200})
 	}
 	out := p.payloads(map[string]any{"limit": float64(50)})
-	if len(out) > maxBytes+300 {
+	if len(out) > input.MaxAnswer+300 {
 		t.Errorf("payloads answered %d bytes", len(out))
 	}
 	for _, l := range strings.Split(out, "\n") {

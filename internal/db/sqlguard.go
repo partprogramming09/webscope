@@ -1,4 +1,4 @@
-package main
+package db
 
 import (
 	"errors"
@@ -11,10 +11,10 @@ import (
 // allowed are the words a read-only statement may start with.
 var allowed = map[string]bool{"SELECT": true, "SHOW": true, "DESCRIBE": true, "DESC": true, "EXPLAIN": true, "WITH": true}
 
-// checkSQL returns stmt without trailing whitespace and semicolons when it is one statement that starts with an allowed word and has no INTO
+// CheckSQL returns stmt without trailing whitespace and semicolons when it is one statement that starts with an allowed word and has no INTO
 // outside quotes and comments. It is the first of two layers: the database session is read-only as well (see runQuery), which also stops a
 // write that starts with WITH, since this check cannot tell it apart from a read.
-func checkSQL(stmt string) (string, error) {
+func CheckSQL(stmt string) (string, error) {
 	// The text is read under the rules of both engines (MySQL escapes with a backslash, SQLite has [bracket] identifiers and no backslash escape):
 	// it must be one safe read under each, because the guard does not know which engine will run it.
 	out, err := checkDialect(stmt, false)
@@ -124,7 +124,7 @@ func firstWord(code string) string {
 
 // mask returns s with the inside of quoted text and the comments replaced by spaces, byte for byte, so a ';' or a verb in a string or comment
 // is not read as code. It refuses an unterminated quote or comment, and the executable comments /*! ... */ that MySQL runs as code.
-// With sqlite the rules are SQLite's: [bracket] identifiers, and no backslash escapes. checkSQL reads a statement under both.
+// With sqlite the rules are SQLite's: [bracket] identifiers, and no backslash escapes. CheckSQL reads a statement under both.
 func mask(s string, sqlite bool) (string, error) {
 	b := []byte(s)
 	blank := func(from, to int) {

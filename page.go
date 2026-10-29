@@ -254,7 +254,7 @@ func (p *pageTool) payloads(args map[string]any) string {
 		if c.Res != "" {
 			e += fmt.Sprintf("  got: %s\n", oneLine(clip(c.Res, showClip)))
 		}
-		if b.Len()+len(e) > maxBytes {
+		if b.Len()+len(e) > input.MaxAnswer {
 			fmt.Fprintf(&b, "(… %d more requests not shown: ask for fewer with limit)", len(list)-i)
 			return b.String()
 		}
