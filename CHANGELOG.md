@@ -2,6 +2,10 @@
 
 One entry per version, newest first. Tool names are `query`, `page`, `check` and `code`. A change in what a tool prints is listed as a change, because a client may read it.
 
+## 0.5.22 — 2026-10-28
+- The code is split into `internal/` packages (`db`, `page`, `check`, `code`, `fsx`, `input`); `main.go` only registers the tools. What the tools print is unchanged (`tools/list` is 1443 bytes before and after).
+- New `docs/usage.md`: the contract of each tool and the recommended order of use.
+
 ## 0.5.21 — 2026-10-28
 - `page` accepts its arguments at the top level of the call.
 - `page` `fill` takes `{label: value}` without `fields`; its error shows an example and the help says how.

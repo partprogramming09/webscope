@@ -49,7 +49,7 @@ In Acme (development), `map crm/quotes` gives 2 routes and 53 calls, the same as
 
 ## Docs
 
-`docs/module-testing.md` and `docs/patterns.md` are the procedure for testing a module and the list of patterns found, written for the old server and copied unchanged; `docs/old-to-new-tools.md` says which tool of this server replaces each tool they name, and which ones no longer exist.
+`docs/usage.md` is the contract of each tool and the order to use them in. `docs/module-testing.md` and `docs/patterns.md` are the procedure for testing a module and the list of patterns found, written for the old server and copied unchanged; `docs/old-to-new-tools.md` says which tool of this server replaces each tool they name, and which ones no longer exist.
 
 ## Known limits
 

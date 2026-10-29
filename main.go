@@ -1,5 +1,5 @@
-// Command webscope is an MCP server over stdio. Two tools: query, read-only SQL against the database in WEBSCOPE_DB_URL answered as short TSV,
-// and page, snippets for testing a screen in Chrome (WEBSCOPE_APP_URL) so the agent spends few tokens.
+// Command webscope is an MCP server over stdio with four tools that keep the agent's token use low: query (read-only SQL answered as short TSV),
+// page (snippets for testing a screen in Chrome), check (what the screen sent against what was stored and read back) and code (the project's code).
 package main
 
 import (
@@ -17,7 +17,7 @@ import (
 )
 
 const (
-	version      = "0.5.21"
+	version      = "0.5.22"
 	instructions = `query(sql): one read-only statement (SELECT, SHOW, DESCRIBE, EXPLAIN, WITH). The answer is TSV with a header; \N is NULL; rows and cells are capped, so refine with WHERE or fewer columns. page(action,args?): test a screen in Chrome; start with page(help). check(sent,table,where,map,after?,at?,tenant?): sent is a request page captured ("POST /api/quotes"), where {column:value} picks one row, map {sent field:column}, after a later captured read; only differences are shown. code(action,args?): fields {table,tenant?} is the sheet of a table (counts, never values); consumers {table,column} lists who reads and writes a column in the backend (an estimate); map {module,walkthrough?} the routes, calls and screens of a front module; map_back {query} from them to endpoint, controller, service and table; snap {name,sql,key?,tenant?} keeps a query and snap_diff {name} shows what changed since (new, deleted, before → after). If a tool fails, report it as is.`
 )
 
