@@ -416,6 +416,23 @@
     return out.length ? out.join('\n') : 'No findings: no unrendered text, covered control, unlabeled field, repeated label or unnamed button.';
   };
 
+  // shape keeps what the screen offers (no values) in the listener, under a name, for parity; the side menu and the top bar are left out
+  const shape = async a => {
+    const name = String(a.name || '').trim();
+    if (!name) return fail('shape needs a name, such as legacy or modern. Next: page(shape, {name: "legacy"}).');
+    const uniq = l => [...new Set(l.filter(Boolean))];
+    const s = {
+      fields: fields().map(e => ({ l: labelOf(e), t: e.isContentEditable ? 'editor' : e.type || e.tagName.toLowerCase() })).filter(f => f.l),
+      buttons: uniq(all(CLICKABLE).filter(e => rank(e) < 2 && !e.matches('[role=tab]')).map(textOf)),
+      columns: uniq(all('th').map(e => norm(e.innerText))),
+      tabs: uniq(all('[role=tab]').map(textOf)),
+      headings: uniq(all('h1,h2,h3').map(e => norm(e.innerText))),
+    };
+    const r = await realFetch(cfg.base + '/shape?t=' + cfg.t + '&name=' + encodeURIComponent(name), { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(s) });
+    if (!r.ok) return fail('the listener refused the shape (' + r.status + '). Next: page(load) again and check WEBSCOPE_APP_URL.');
+    return 'shape «' + clip(name, 40) + '» saved: ' + s.fields.length + ' fields, ' + s.buttons.length + ' buttons, ' + s.columns.length + ' columns, ' + s.tabs.length + ' tabs, ' + s.headings.length + ' headings. Next: open the other screen, page(shape) with another name, then page(parity, {a, b}).';
+  };
+
   const wrap = f => a => { try { const r = f(a || {}); return r && r.then ? r.catch(e => fail(e.message)) : r; } catch (e) { return fail(e.message); } };
-  window.__ws = { state: wrap(state), read: wrap(read), fill: wrap(fill), click: wrap(click), press: wrap(press), simulate: wrap(simulate), audit: wrap(audit) };
+  window.__ws = { state: wrap(state), read: wrap(read), fill: wrap(fill), click: wrap(click), press: wrap(press), simulate: wrap(simulate), audit: wrap(audit), shape: wrap(shape) };
 })();

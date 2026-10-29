@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/exec"
 	"regexp"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -901,5 +902,137 @@ func TestTheOriginOfTheAppIsHowTheBrowserWritesIt(t *testing.T) {
 func TestTheEmbeddedHelperIsThePageScript(t *testing.T) {
 	if len(pageJS) < 10000 || !strings.Contains(pageJS, "__ws") {
 		t.Errorf("page.js is not embedded as expected: %d bytes", len(pageJS))
+	}
+}
+
+// postShape sends a shape to the listener the way page.js does.
+func postShape(t *testing.T, base, token, name, body string) *http.Response {
+	t.Helper()
+	return send(t, http.MethodPost, base+"/shape?t="+token+"&name="+name, "", body)
+}
+
+func TestParityShowsOnlyWhatIsMissingExtraOrChanged(t *testing.T) {
+	p := testPage(t, appOrigin)
+	if _, err := askPage(t, p, "load", nil); err != nil {
+		t.Fatal(err)
+	}
+	old := `{"fields":[{"l":"Cliente","t":"text"},{"l":"Estado","t":"select-one"},{"l":"Notas","t":"textarea"}],"buttons":["Guardar","Cancelar"],"columns":["Código","Total"],"tabs":[],"headings":["Cotizaciones"]}`
+	nu := `{"fields":[{"l":"cliente","t":"text"},{"l":"Estado","t":"text"},{"l":"Moneda","t":"text"}],"buttons":["Guardar","Exportar"],"columns":["Código","Total"],"tabs":["Líneas"],"headings":["Cotizaciones"]}`
+	for name, body := range map[string]string{"legacy": old, "modern": nu} {
+		if res := postShape(t, p.base, p.token, name, body); res.StatusCode != http.StatusNoContent {
+			t.Fatalf("shape %s: status %d", name, res.StatusCode)
+		}
+	}
+	out, err := askPage(t, p, "parity", map[string]any{"a": "legacy", "b": "modern"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{"only in legacy", "field Notas", "button Cancelar", "only in modern", "field Moneda", "button Exportar", "tab Líneas", "changes", "field Estado: select-one → text"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("lacks %q:\n%s", want, out)
+		}
+	}
+	for _, not := range []string{"Código", "Total", "Cliente", "Guardar", "Cotizaciones"} {
+		if strings.Contains(out, not) {
+			t.Errorf("%q is the same on both sides and must not appear:\n%s", not, out)
+		}
+	}
+	same, _ := askPage(t, p, "parity", map[string]any{"a": "legacy", "b": "legacy"})
+	if !strings.Contains(same, "no differences") {
+		t.Errorf("a shape against itself has no differences: %s", same)
+	}
+}
+
+func TestParityNeedsTwoSavedShapesAndSaysWhich(t *testing.T) {
+	p := testPage(t, appOrigin)
+	if _, err := askPage(t, p, "parity", map[string]any{"a": "legacy"}); err == nil {
+		t.Error("parity without b must fail")
+	}
+	_, err := askPage(t, p, "parity", map[string]any{"a": "legacy", "b": "modern"})
+	if err == nil || !strings.Contains(err.Error(), "legacy") || !strings.Contains(err.Error(), "page(shape") {
+		t.Errorf("want a failure that names the missing shape and page(shape): %v", err)
+	}
+}
+
+func TestShapeRefusesWhatIsNotAShapeOrHasNoName(t *testing.T) {
+	p := testPage(t, appOrigin)
+	if _, err := askPage(t, p, "load", nil); err != nil {
+		t.Fatal(err)
+	}
+	if res := postShape(t, p.base, p.token, "a", "no json"); res.StatusCode != http.StatusBadRequest {
+		t.Errorf("not a shape: %d", res.StatusCode)
+	}
+	if res := postShape(t, p.base, p.token, "", `{"fields":[]}`); res.StatusCode != http.StatusBadRequest {
+		t.Errorf("no name: %d", res.StatusCode)
+	}
+	if res := postShape(t, p.base, "wrong", "a", `{"fields":[]}`); res.StatusCode != http.StatusForbidden {
+		t.Errorf("no token: %d", res.StatusCode)
+	}
+}
+
+// TestShapeSavesWhatTheScreenOffersInTheListener runs in a real Chrome: the shape reaches the listener across origins, with labels and kinds but no values.
+func TestShapeSavesWhatTheScreenOffersInTheListener(t *testing.T) {
+	var mu sync.Mutex
+	var html_ string
+	app := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		defer mu.Unlock()
+		io.WriteString(w, html_)
+	}))
+	app.Start()
+	defer app.Close()
+	p := testPage(t, app.URL)
+	load, err := askPage(t, p, "load", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	steps := []string{load}
+	for _, args := range []map[string]any{{"name": "old"}, nil} {
+		s, err := snippet("shape", args)
+		if err != nil {
+			t.Fatal(err)
+		}
+		steps = append(steps, s)
+	}
+	raw, _ := json.Marshal(steps)
+	mu.Lock()
+	html_ = strings.Replace(auditPage, "{{STEPS}}", string(raw), 1)
+	mu.Unlock()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+	flags := []string{"--headless=new", "--disable-gpu", "--no-first-run", "--no-default-browser-check", "--user-data-dir=" + t.TempDir(), "--virtual-time-budget=60000", "--dump-dom"}
+	if os.Getenv("CI") != "" {
+		flags = append(flags, "--no-sandbox")
+	}
+	dom, err := exec.CommandContext(ctx, chromePath(t), append(flags, app.URL+"/")...).Output()
+	if err != nil {
+		t.Fatalf("chrome: %v", err)
+	}
+	m := regexp.MustCompile(`(?s)<pre id="out">(.*?)</pre>`).FindSubmatch(dom)
+	if m == nil {
+		t.Fatalf("the page did not finish its steps; DOM tail: %.600s", dom[max(0, len(dom)-600):])
+	}
+	var out []string
+	if err := json.Unmarshal([]byte(html.UnescapeString(string(m[1]))), &out); err != nil || len(out) != len(steps) {
+		t.Fatalf("results %q: %v", m[1], err)
+	}
+	if !strings.Contains(out[1], "shape «old» saved") || !strings.Contains(out[2], "Failed: shape needs a name") {
+		t.Errorf("answers: %q", out[1:])
+	}
+	p.mu.Lock()
+	s, ok := p.shapes["old"]
+	p.mu.Unlock()
+	if !ok {
+		t.Fatal("the listener holds no shape named old")
+	}
+	var hasEstado bool
+	for _, f := range s.Fields {
+		if f.L == "Estado" && f.T == "select-one" {
+			hasEstado = true
+		}
+	}
+	if !hasEstado || !slices.Contains(s.Buttons, "Guardar") || !slices.Contains(s.Buttons, "Cerrar") {
+		t.Errorf("shape lacks the field Estado (select-one) or the buttons Guardar and Cerrar: %+v", s)
 	}
 }

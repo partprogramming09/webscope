@@ -2,6 +2,26 @@
 
 One entry per version, newest first. Tool names are `query`, `page`, `check` and `code`. Each change says what it is, what was seen that made it necessary, how it was checked and what was not checked. A change in what a tool prints is listed as a change, because a client may read it.
 
+## 0.5.27 — 2026-10-29
+
+**New: `page shape {name}` and `page parity {a, b}`. Put the old screen and the new one side by side and read only what is different.**
+
+`shape {name}` (a snippet, like `state`) saves what the screen in front of you offers, under a name, in the local listener and in memory: field labels with their kind (`text`, `select-one`, `checkbox`, `editor`), buttons, table columns, tabs and headings. No values. The side menu and the top bar are left out (and tabs are listed as tabs, not as buttons), so a menu that differs between the two apps does not drown the result. It answers with the counts and the next step.
+
+`parity {a, b}` is answered by the server, with no snippet. It compares two saved shapes by name, ignoring case and spaces, and prints:
+- `only in a` and `only in b`, one line per `field`, `button`, `column`, `tab` or `heading`;
+- `changes`: a field that kept its label and changed kind (`field Estado: select-one → text`);
+- `no differences …` when there are none, with the reminder that it compares names, not behaviour.
+
+It lives in `page` and not in `code` (the plan said `code parity`): the shapes are kept by the listener that `page` already runs, and `code` would need a new link to it. Up to 20 shapes, each up to 64 KiB; the 21st name is refused with 409. They are lost when the server restarts.
+
+What was seen that made it necessary: the `screen-audit` skill told the agent to `state` both screens and compare the two lists by eye, which costs two long answers and misses a field in a list of thirty. The comparison now costs one short answer.
+
+How it was checked:
+- Four tests written first and failing (`404` on `/shape`, `unknown action "parity"`): the diff with case differences, a kind change and the same-on-both-sides names that must not appear; the two missing-shape errors; the refusals (not JSON, no name, no token); and a real Chrome test where the shape travels from another origin to the listener and holds `Estado` as `select-one` and the buttons `Guardar` and `Cerrar`.
+- `go test -race ./...` passes (116 tests); `tools/list` is unchanged in size apart from the word `parity`.
+- Not checked: on the real legacy and modern quotes list (needs the helper loaded in your Chrome and the two screens opened with the same filters); a screen whose fields are drawn after a delay (the shape is a photo of the moment); two screens that name the same field in two languages (they show as one `only in` on each side, and the skill says to read them as a pair).
+
 ## 0.5.26 — 2026-10-29
 
 **New: `code flows {module}`.** One answer with the evidence for the user stories of a front module: `## screens` (what `map {module, walkthrough}` prints: routes, actions with their `v-if`, permissions, links, fields, statuses) and `## endpoints` (what `map_back {module}` prints: endpoint, controller with `file:line`, the front call, services, models and tables). It drops the duplicated headers and routes of the second part. Without `WEBSCOPE_BACKEND` it gives the screens and says `not available: WEBSCOPE_BACKEND is not set`. A module that does not exist gets the same «no module contains» text as `map`. It prints no stories: it is evidence, and says so in its first line.
