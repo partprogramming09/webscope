@@ -1,4 +1,4 @@
-package main
+package code
 
 import (
 	"context"
@@ -18,7 +18,7 @@ import (
 
 // codeSetup is a small Laravel-like tree with traps: a .env that names the column, a vendor folder, a symlinked file and a symlinked folder that
 // point outside the root, and a SQLite table. outside holds a file with the column that must never be listed.
-func codeSetup(t *testing.T) *coder {
+func codeSetup(t *testing.T) *Tool {
 	t.Helper()
 	root, outside := t.TempDir(), t.TempDir()
 	write := func(base, rel, body string) {
@@ -64,10 +64,10 @@ func codeSetup(t *testing.T) *coder {
 			t.Fatal(err)
 		}
 	}
-	return &coder{s: &db.Source{URL: "sqlite://" + path}, backend: root}
+	return &Tool{Src: &db.Source{URL: "sqlite://" + path}, Backend: root}
 }
 
-func code(t *testing.T, c *coder, action string, args map[string]any) (string, error) {
+func code(t *testing.T, c *Tool, action string, args map[string]any) (string, error) {
 	t.Helper()
 	return c.run(context.Background(), input.Args{Action: action, Args: args})
 }
@@ -151,7 +151,7 @@ func TestConsumersRefusesWhatItCannotSearch(t *testing.T) {
 	if _, err := code(t, c, "consumers", map[string]any{"table": "quotes; DROP", "column": "estado"}); err == nil || !strings.Contains(err.Error(), "not valid") {
 		t.Errorf("the table name: %v", err)
 	}
-	if _, err := code(t, &coder{s: c.s}, "consumers", map[string]any{"table": "quotes", "column": "estado"}); err == nil || !strings.Contains(err.Error(), "WEBSCOPE_BACKEND") {
+	if _, err := code(t, &Tool{Src: c.Src}, "consumers", map[string]any{"table": "quotes", "column": "estado"}); err == nil || !strings.Contains(err.Error(), "WEBSCOPE_BACKEND") {
 		t.Errorf("without WEBSCOPE_BACKEND: %v", err)
 	}
 	if out, err := code(t, c, "consumers", map[string]any{"table": "quotes", "column": "id"}); err != nil || !strings.Contains(out, "short") {
@@ -179,7 +179,7 @@ func TestFieldsGivesTypeNullCountsAndWhoUsesEachColumnButNeverAValue(t *testing.
 
 func TestFieldsWorksWithoutTheBackendAndSaysSo(t *testing.T) {
 	c := codeSetup(t)
-	c.backend = ""
+	c.Backend = ""
 	out, err := code(t, c, "fields", map[string]any{"table": "quotes"})
 	if err != nil || !strings.Contains(out, "WEBSCOPE_BACKEND") || !strings.Contains(out, "estado") {
 		t.Errorf("%q, %v", out, err)
@@ -229,7 +229,7 @@ func TestCodeAcceptsTheArgumentsAtTheTopLevelToo(t *testing.T) {
 
 func TestFieldsCutsAnAnswerThatIsTooBigAndSaysSo(t *testing.T) {
 	c := codeSetup(t)
-	path := strings.TrimPrefix(c.s.URL, "sqlite://")
+	path := strings.TrimPrefix(c.Src.URL, "sqlite://")
 	conn, err := sql.Open("sqlite", path)
 	if err != nil {
 		t.Fatal(err)
@@ -249,9 +249,9 @@ func TestFieldsCutsAnAnswerThatIsTooBigAndSaysSo(t *testing.T) {
 }
 
 // writeDB is a writable connection to the SQLite file of c: the tool itself only reads, the test plays the part of "an action on the screen".
-func writeDB(t *testing.T, c *coder) *sql.DB {
+func writeDB(t *testing.T, c *Tool) *sql.DB {
 	t.Helper()
-	conn, err := sql.Open("sqlite", strings.TrimPrefix(c.s.URL, "sqlite://"))
+	conn, err := sql.Open("sqlite", strings.TrimPrefix(c.Src.URL, "sqlite://"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -352,7 +352,7 @@ func TestSnapRefusesAResultTooBigToKeepAndCutsAnAnswerThatIsTooBig(t *testing.T)
 func TestAModelWithAnOddFileNameDoesNotBreakTheSearch(t *testing.T) {
 	c := codeSetup(t)
 	for rel, body := range map[string]string{"app/Models/Foo (old.php": "<?php\nclass Foo { protected $table = 'quotes'; }\n", "app/Models/Dq.php": "<?php\nclass Dq { protected $table = \"quotes\"; }\n", "app/Models/.php": "<?php\n$table = 'quotes';\n"} {
-		if err := os.WriteFile(filepath.Join(c.backend, rel), []byte(body), 0o644); err != nil {
+		if err := os.WriteFile(filepath.Join(c.Backend, rel), []byte(body), 0o644); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -389,7 +389,7 @@ func TestSnapSeesAChangeThatIsFarInsideAVeryLongValue(t *testing.T) {
 
 func TestTheWalkSkipsWhatIsNotARegularFileAndTheNamesInAnyCase(t *testing.T) {
 	c := codeSetup(t)
-	if err := syscall.Mkfifo(filepath.Join(c.backend, "app/Models/Pipe.php"), 0o644); err != nil { // reading it would block for ever
+	if err := syscall.Mkfifo(filepath.Join(c.Backend, "app/Models/Pipe.php"), 0o644); err != nil { // reading it would block for ever
 		t.Skip("no fifo here:", err)
 	}
 	done := make(chan string, 1)

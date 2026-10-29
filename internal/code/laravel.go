@@ -1,4 +1,4 @@
-package main
+package code
 
 import (
 	"errors"
@@ -210,19 +210,19 @@ func importsOf(file, folder string) []string {
 }
 
 // mapBack is map_back: from the screens of the front to the endpoint, controller (with line), service, model and table.
-func (c *coder) mapBack(args map[string]any) (string, error) {
+func (c *Tool) mapBack(args map[string]any) (string, error) {
 	query := input.Str(args, "query")
 	if query == "" {
 		return "", errors.New("map_back needs a query: a front module or a part of an API address")
 	}
-	if c.backend == "" {
+	if c.Backend == "" {
 		return "", errors.New("WEBSCOPE_BACKEND is not set")
 	}
 	base, froot, err := c.frontBase()
 	if err != nil {
 		return "", err
 	}
-	files, root, err := fsx.PHPFiles(c.backend)
+	files, root, err := fsx.PHPFiles(c.Backend)
 	if err != nil {
 		return "", err
 	}

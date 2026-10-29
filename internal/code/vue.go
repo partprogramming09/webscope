@@ -1,4 +1,4 @@
-package main
+package code
 
 import (
 	"errors"
@@ -38,11 +38,11 @@ type frontModule struct {
 }
 
 // frontBase is the folder of the modules: WEBSCOPE_FRONT/src/modules when it exists, else WEBSCOPE_FRONT; and the real root.
-func (c *coder) frontBase() (base, root string, err error) {
-	if c.front == "" {
+func (c *Tool) frontBase() (base, root string, err error) {
+	if c.Front == "" {
 		return "", "", errors.New("WEBSCOPE_FRONT is not set")
 	}
-	if root, err = filepath.EvalSymlinks(c.front); err != nil {
+	if root, err = filepath.EvalSymlinks(c.Front); err != nil {
 		return "", "", err
 	}
 	base = root
@@ -141,7 +141,7 @@ func capOut(s string) string {
 }
 
 // mapFront is map: the routes, calls, composables and stores of the modules whose name contains module; with walkthrough, what can be clicked.
-func (c *coder) mapFront(args map[string]any) (string, error) {
+func (c *Tool) mapFront(args map[string]any) (string, error) {
 	filter := input.Str(args, "module")
 	if filter == "" {
 		return "", errors.New("map needs a module, a part of the path such as configs/templates")

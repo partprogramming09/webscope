@@ -1,4 +1,4 @@
-package main
+package code
 
 import (
 	"fmt"
@@ -11,7 +11,7 @@ import (
 )
 
 // mapSetup is a small Vue and Laravel tree with traps: a node_modules and a .env with secrets, and a symlinked folder that leads outside the root.
-func mapSetup(t *testing.T) *coder {
+func mapSetup(t *testing.T) *Tool {
 	t.Helper()
 	back, front, outside := t.TempDir(), t.TempDir(), t.TempDir()
 	write := func(base, rel, body string) {
@@ -61,7 +61,7 @@ import { useQuotes } from '../composables/useQuotes'
 		t.Fatal(err)
 	}
 	write(back, "app/Modules/Crm/Quotes/Routes/leak.php", "<?php\nuse App\\Modules\\Crm\\Quotes\\Controllers\\LeakController;\nRoute::get('leak', [LeakController::class, 'index']);\n")
-	return &coder{s: &db.Source{}, backend: back, front: front}
+	return &Tool{Src: &db.Source{}, Backend: back, Front: front}
 }
 
 func TestMapListsRoutesCallsComposablesAndStores(t *testing.T) {
@@ -145,12 +145,12 @@ func TestMapBackDoesNotOpenAControllerThatIsALinkOutOfTheRoot(t *testing.T) {
 
 func TestMapNeedsItsFolderAndSaysWhich(t *testing.T) {
 	c := mapSetup(t)
-	c.front = ""
+	c.Front = ""
 	if _, err := code(t, c, "map", map[string]any{"module": "quotes"}); err == nil || !strings.Contains(err.Error(), "WEBSCOPE_FRONT") {
 		t.Errorf("map without WEBSCOPE_FRONT: %v", err)
 	}
 	c = mapSetup(t)
-	c.backend = ""
+	c.Backend = ""
 	if _, err := code(t, c, "map_back", map[string]any{"query": "quotes"}); err == nil || !strings.Contains(err.Error(), "WEBSCOPE_BACKEND") {
 		t.Errorf("map_back without WEBSCOPE_BACKEND: %v", err)
 	}
@@ -163,7 +163,7 @@ func TestMapBackKeepsTheTablesWhenThereAreMoreEndpointsThanFit(t *testing.T) {
 	for i := 0; i < 400; i++ {
 		fmt.Fprintf(&b, "Route::get('quotes/extra-endpoint-number-%03d', [QuoteController::class, 'index']);\n", i)
 	}
-	if err := os.WriteFile(filepath.Join(c.backend, "app/Modules/Crm/Quotes/Routes/many.php"), []byte(b.String()), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(c.Backend, "app/Modules/Crm/Quotes/Routes/many.php"), []byte(b.String()), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	out, err := code(t, c, "map_back", map[string]any{"query": "quotes"})

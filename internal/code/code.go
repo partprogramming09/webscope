@@ -1,4 +1,4 @@
-package main
+package code
 
 import (
 	"context"
@@ -18,11 +18,11 @@ import (
 	"github.com/partprogramming09/webscope/internal/input"
 )
 
-// coder reads the code of the project: the PHP under WEBSCOPE_BACKEND, and the columns of a table through the same read-only connection as query.
-type coder struct {
-	s       *db.Source
-	backend string
-	front   string
+// Tool reads the code of the project: the PHP under WEBSCOPE_BACKEND, and the columns of a table through the same read-only connection as query.
+type Tool struct {
+	Src     *db.Source
+	Backend string
+	Front   string
 
 	snapMu sync.Mutex
 	snaps  map[string]*snapshot // in memory only: they are lost when the server restarts
@@ -91,15 +91,15 @@ func slicesCompact(s []string) []string {
 	return out
 }
 
-func (c *coder) run(ctx context.Context, in input.Args) (string, error) {
+func (c *Tool) run(ctx context.Context, in input.Args) (string, error) {
 	out, err := c.do(ctx, in)
 	if err != nil {
-		return "", errors.New(db.Redact(err.Error(), db.Password(c.s.URL)))
+		return "", errors.New(db.Redact(err.Error(), db.Password(c.Src.URL)))
 	}
 	return out, nil
 }
 
-func (c *coder) do(ctx context.Context, in input.Args) (string, error) {
+func (c *Tool) do(ctx context.Context, in input.Args) (string, error) {
 	switch in.Action {
 	case "consumers":
 		return c.consumers(in.Args)
@@ -118,8 +118,8 @@ func (c *coder) do(ctx context.Context, in input.Args) (string, error) {
 }
 
 // consumers lists who reads and who writes a column in the PHP of WEBSCOPE_BACKEND.
-func (c *coder) consumers(args map[string]any) (string, error) {
-	if c.backend == "" {
+func (c *Tool) consumers(args map[string]any) (string, error) {
+	if c.Backend == "" {
 		return "", errors.New("WEBSCOPE_BACKEND is not set")
 	}
 	table, col, only := input.Str(args, "table"), input.Str(args, "column"), input.Str(args, "column_only")
@@ -132,7 +132,7 @@ func (c *coder) consumers(args map[string]any) (string, error) {
 	if only == "" && !db.ValidName.MatchString(table) {
 		return "", fmt.Errorf("the table name %q is not valid: letters, digits and _ only", table)
 	}
-	files, real, err := fsx.PHPFiles(c.backend)
+	files, real, err := fsx.PHPFiles(c.Backend)
 	if err != nil {
 		return "", err
 	}
@@ -204,12 +204,12 @@ func show70(s string) string {
 
 // fields is the sheet of a table: type, null, default, rows with a value of each column and, if WEBSCOPE_BACKEND is set, how many PHP files read
 // and write each one. Counts only: no stored value is returned.
-func (c *coder) fields(ctx context.Context, args map[string]any) (string, error) {
+func (c *Tool) fields(ctx context.Context, args map[string]any) (string, error) {
 	table := input.Str(args, "table")
 	if !db.ValidName.MatchString(table) {
 		return "", fmt.Errorf("the table name %q is not valid: letters, digits and _ only", table)
 	}
-	conn, driver, err := c.s.Open(ctx, input.Str(args, "tenant"))
+	conn, driver, err := c.Src.Open(ctx, input.Str(args, "tenant"))
 	if err != nil {
 		return "", err
 	}
@@ -283,10 +283,10 @@ func (c *coder) fields(ctx context.Context, args map[string]any) (string, error)
 	all := fsx.Lines{}
 	head := fmt.Sprintf("%s: %s rows", table, total)
 	var models []string
-	if c.backend == "" {
+	if c.Backend == "" {
 		head += " · WEBSCOPE_BACKEND is not set, so no readers or writers"
 	} else {
-		php, real, err := fsx.PHPFiles(c.backend)
+		php, real, err := fsx.PHPFiles(c.Backend)
 		if err != nil {
 			return "", err
 		}
@@ -307,7 +307,7 @@ func (c *coder) fields(ctx context.Context, args map[string]any) (string, error)
 			with = "0"
 		}
 		users, note := "-", ""
-		if c.backend != "" {
+		if c.Backend != "" {
 			var uses []fsx.Hit
 			if len(files) > 0 && len([]rune(k.name)) >= 3 {
 				q := regexp.QuoteMeta(k.name)
@@ -346,7 +346,8 @@ func (c *coder) fields(ctx context.Context, args map[string]any) (string, error)
 	return out, nil
 }
 
-func (c *coder) tool(ctx context.Context, _ *mcp.CallToolRequest, in input.Args) (*mcp.CallToolResult, any, error) {
+// Handle answers a code call: text on success, and on failure a text that starts with "Failed:" and names the next step, marked as an error.
+func (c *Tool) Handle(ctx context.Context, _ *mcp.CallToolRequest, in input.Args) (*mcp.CallToolResult, any, error) {
 	text, err := c.run(ctx, in)
 	if err != nil {
 		text = "Failed: " + strings.TrimRight(err.Error(), ". ") + ". Next: code(help) lists the actions."

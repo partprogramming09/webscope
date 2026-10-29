@@ -1,4 +1,4 @@
-package main
+package code
 
 import (
 	"context"
@@ -58,8 +58,8 @@ func capCell(s string) string {
 }
 
 // readAll runs a checked read-only statement and returns its columns and rows; more than maxSnapRows is an error, not a partial snapshot.
-func (c *coder) readAll(ctx context.Context, stmt, tenant string) ([]string, [][]string, error) {
-	conn, driver, err := c.s.Open(ctx, tenant)
+func (c *Tool) readAll(ctx context.Context, stmt, tenant string) ([]string, [][]string, error) {
+	conn, driver, err := c.Src.Open(ctx, tenant)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -116,7 +116,7 @@ func keyed(cols []string, rows [][]string, key string) (map[string][]string, err
 	return out, nil
 }
 
-func (c *coder) snapSave(ctx context.Context, args map[string]any) (string, error) {
+func (c *Tool) snapSave(ctx context.Context, args map[string]any) (string, error) {
 	name := input.Str(args, "name")
 	if !snapName.MatchString(name) {
 		return "", fmt.Errorf("the snapshot name %q is not valid: letters, digits, _ and - up to 40", name)
@@ -161,7 +161,7 @@ func val(s string) string {
 	return input.Show(strings.NewReplacer("\t", " ", "\n", " ", "\r", " ").Replace(s))
 }
 
-func (c *coder) snapDiff(ctx context.Context, args map[string]any) (string, error) {
+func (c *Tool) snapDiff(ctx context.Context, args map[string]any) (string, error) {
 	name := input.Str(args, "name")
 	c.snapMu.Lock()
 	s, ok := c.snaps[name]
