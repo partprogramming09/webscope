@@ -1,4 +1,5 @@
-package main
+// Package page is the page tool: snippets for testing a screen in Chrome, and the local listener that keeps the requests the page sends.
+package page
 
 import (
 	"context"
@@ -50,8 +51,8 @@ state|read|fill|click|press|simulate: return a snippet; run it with javascript_t
 payloads {limit?}: the requests the page sent and their answers (answered here, no snippet).
 Writes only with the user's approval, and rows prefixed ZZ_.`
 
-// capture is one request the page sent, as reported by page.js.
-type capture struct {
+// Capture is one request the page sent, as reported by page.js.
+type Capture struct {
 	M   string `json:"m"`
 	U   string `json:"u"`
 	S   int    `json:"s"`
@@ -59,27 +60,27 @@ type capture struct {
 	Res string `json:"res"`
 }
 
-// pageTool hands out snippets and runs the local listener that serves page.js and keeps what the page captures. life ends the listener.
-type pageTool struct {
+// Tool hands out snippets and runs the local listener that serves page.js and keeps what the page captures. Life ends the listener.
+type Tool struct {
 	appURL string
 	token  string
-	life   context.Context
+	Life   context.Context
 
 	mu   sync.Mutex
 	base string
-	caps []capture
+	caps []Capture
 
 	refused bool // a request that held the token came from another origin than the app's
 }
 
-func newPage(appURL string) *pageTool {
+func New(appURL string) *Tool {
 	b := make([]byte, 16)
 	rand.Read(b)
-	return &pageTool{appURL: appURL, token: hex.EncodeToString(b), life: context.Background()}
+	return &Tool{appURL: appURL, token: hex.EncodeToString(b), Life: context.Background()}
 }
 
 // origin is scheme://host of the app: the only origin the listener answers.
-func (p *pageTool) origin() string {
+func (p *Tool) origin() string {
 	u, err := url.Parse(p.appURL)
 	if err != nil || u.Host == "" {
 		return ""
@@ -110,7 +111,7 @@ func snippet(action string, args map[string]any) (string, error) {
 	return fmt.Sprintf(`await (window.__ws?window.__ws.%s(%s):"Failed: webscope is not loaded in this page. Next: page(load) and run it.")`, action, raw), nil // await: fill waits for menus
 }
 
-func (p *pageTool) answer(in input.Args) (string, error) {
+func (p *Tool) answer(in input.Args) (string, error) {
 	switch in.Action {
 	case "help":
 		return helpText, nil
@@ -129,8 +130,8 @@ func (p *pageTool) answer(in input.Args) (string, error) {
 	return snippet(in.Action, in.Args)
 }
 
-// tool answers a page call: text on success, and on failure a text that starts with "Failed:" and names the next step, marked as an error.
-func (p *pageTool) tool(_ context.Context, _ *mcp.CallToolRequest, in input.Args) (*mcp.CallToolResult, any, error) {
+// Handle answers a page call: text on success, and on failure a text that starts with "Failed:" and names the next step, marked as an error.
+func (p *Tool) Handle(_ context.Context, _ *mcp.CallToolRequest, in input.Args) (*mcp.CallToolResult, any, error) {
 	text, err := p.answer(in)
 	if err != nil {
 		text = "Failed: " + strings.TrimRight(err.Error(), ". ") + ". Next: page(help) lists the actions and their arguments."
@@ -139,7 +140,7 @@ func (p *pageTool) tool(_ context.Context, _ *mcp.CallToolRequest, in input.Args
 }
 
 // start opens the listener on 127.0.0.1 the first time it is needed and returns its address.
-func (p *pageTool) start() (string, error) {
+func (p *Tool) start() (string, error) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	if p.base != "" {
@@ -151,13 +152,13 @@ func (p *pageTool) start() (string, error) {
 	}
 	srv := &http.Server{Handler: p.handler(), ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 15 * time.Second}
 	go srv.Serve(ln)
-	go func() { <-p.life.Done(); srv.Close() }()
+	go func() { <-p.Life.Done(); srv.Close() }()
 	p.base = "http://" + ln.Addr().String()
 	return p.base, nil
 }
 
 // guard lets a request through only with the token and, if it names an origin, the app's. It answers the CORS headers and the preflight.
-func (p *pageTool) guard(next http.HandlerFunc) http.HandlerFunc {
+func (p *Tool) guard(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if subtle.ConstantTimeCompare([]byte(r.URL.Query().Get("t")), []byte(p.token)) != 1 {
 			http.Error(w, "forbidden", http.StatusForbidden)
@@ -186,7 +187,7 @@ func (p *pageTool) guard(next http.HandlerFunc) http.HandlerFunc {
 	}
 }
 
-func (p *pageTool) handler() http.Handler {
+func (p *Tool) handler() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/page.js", p.guard(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "text/javascript; charset=utf-8")
@@ -206,7 +207,7 @@ func (p *pageTool) handler() http.Handler {
 	return mux
 }
 
-func (p *pageTool) capture(w http.ResponseWriter, r *http.Request) {
+func (p *Tool) capture(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "POST only", http.StatusMethodNotAllowed)
 		return
@@ -217,7 +218,7 @@ func (p *pageTool) capture(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "too large", http.StatusRequestEntityTooLarge)
 		return
 	}
-	var c capture
+	var c Capture
 	if err != nil || json.Unmarshal(body, &c) != nil || c.U == "" {
 		http.Error(w, "bad capture", http.StatusBadRequest)
 		return
@@ -232,7 +233,7 @@ func (p *pageTool) capture(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
-func (p *pageTool) payloads(args map[string]any) string {
+func (p *Tool) payloads(args map[string]any) string {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	n := defaultShown
@@ -274,4 +275,11 @@ func clip(s string, n int) string {
 		n--
 	}
 	return s[:n] + "…(+" + strconv.Itoa(len(s)-n) + " bytes)"
+}
+
+// Captures is a copy of the requests the page sent, oldest first.
+func (p *Tool) Captures() []Capture {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return slices.Clone(p.caps)
 }

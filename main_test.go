@@ -10,7 +10,11 @@ import (
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/partprogramming09/webscope/internal/db"
+	"github.com/partprogramming09/webscope/internal/input"
+	"github.com/partprogramming09/webscope/internal/page"
 )
+
+const appOrigin = "http://localhost:5173"
 
 // fixture writes a SQLite file with one row in items and returns a source that opens it.
 func fixture(t *testing.T) *db.Source {
@@ -32,7 +36,7 @@ func fixture(t *testing.T) *db.Source {
 func connect(t *testing.T, s *db.Source) *mcp.ClientSession {
 	t.Helper()
 	st, ct := mcp.NewInMemoryTransports()
-	if _, err := newServer(s, newPage(appOrigin)).Connect(context.Background(), st, nil); err != nil {
+	if _, err := newServer(s, page.New(appOrigin)).Connect(context.Background(), st, nil); err != nil {
 		t.Fatal(err)
 	}
 	cs, err := mcp.NewClient(&mcp.Implementation{Name: "test", Version: "1"}, nil).Connect(context.Background(), ct, nil)
@@ -119,5 +123,19 @@ func TestTheToolOffersTheTenantArgumentAndStaysSmall(t *testing.T) {
 	}
 	if len(raw) > 1800 {
 		t.Errorf("tools/list is %d bytes, the budget for this version is 1800", len(raw))
+	}
+}
+
+func TestPageAcceptsTheArgumentsAtTheTopLevelToo(t *testing.T) {
+	res, err := connect(t, &db.Source{}).CallTool(context.Background(), &mcp.CallToolParams{Name: "page", Arguments: map[string]any{"action": "fill", "Nombre": "Ana"}})
+	if err != nil || res.IsError {
+		t.Fatalf("the schema refused a top-level argument: %v %+v", err, res)
+	}
+	if got := res.Content[0].(*mcp.TextContent).Text; !strings.Contains(got, `__ws.fill({"Nombre":"Ana"})`) {
+		t.Errorf("the top-level argument did not reach the snippet: %q", got)
+	}
+	var in input.Args
+	if err := json.Unmarshal([]byte(`{"action":"fill","Nombre":"x","args":{"Nombre":"Ana"}}`), &in); err != nil || in.Args["Nombre"] != "Ana" {
+		t.Errorf("a key inside args must win: %+v, %v", in, err)
 	}
 }

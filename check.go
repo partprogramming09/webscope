@@ -15,12 +15,16 @@ import (
 	"errors"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/partprogramming09/webscope/internal/db"
+	"github.com/partprogramming09/webscope/internal/page"
 )
 
 // checker compares what the screen sent, what the database stored and what the screen read afterwards.
+// captureSource is where the requests the screen sent come from: the page tool.
+type captureSource interface{ Captures() []page.Capture }
+
 type checker struct {
 	s *db.Source
-	p *pageTool
+	p captureSource
 }
 
 // checkSchema is written by hand: the one generated from checkArgs costs twice the bytes of tools/list. sent is a captured request
@@ -49,10 +53,10 @@ type checkArgs struct {
 var cutMark = regexp.MustCompile(`…\(\+\d+ (bytes|chars)\)$`)
 
 // find is the last captured request, at index from or later, that matches "METHOD /path": the path of the URL, or its end after a "/".
-func (c *checker) find(caps []capture, spec string, from int) (capture, int, error) {
+func (c *checker) find(caps []page.Capture, spec string, from int) (page.Capture, int, error) {
 	method, path, ok := strings.Cut(strings.TrimSpace(spec), " ")
 	if !ok || path == "" {
-		return capture{}, 0, fmt.Errorf("%q is not METHOD /path", spec)
+		return page.Capture{}, 0, fmt.Errorf("%q is not METHOD /path", spec)
 	}
 	path = "/" + strings.TrimPrefix(path, "/")
 	for i := len(caps) - 1; i >= from; i-- {
@@ -62,9 +66,9 @@ func (c *checker) find(caps []capture, spec string, from int) (capture, int, err
 		}
 	}
 	if from > 0 {
-		return capture{}, 0, fmt.Errorf("no captured request matches %q after the save (%d captured, page(payloads) lists them)", spec, len(caps))
+		return page.Capture{}, 0, fmt.Errorf("no captured request matches %q after the save (%d captured, page(payloads) lists them)", spec, len(caps))
 	}
-	return capture{}, 0, fmt.Errorf("no captured request matches %q (%d captured, page(payloads) lists them)", spec, len(caps))
+	return page.Capture{}, 0, fmt.Errorf("no captured request matches %q (%d captured, page(payloads) lists them)", spec, len(caps))
 }
 
 // object is the JSON object of a captured body, at a path like "quote" or "data.0" when at is not empty.
@@ -223,9 +227,7 @@ func (c *checker) compare(ctx context.Context, in checkArgs) (string, error) {
 			return "", fmt.Errorf("the name %q is not valid: letters, digits and _ only", n)
 		}
 	}
-	c.p.mu.Lock()
-	caps := slices.Clone(c.p.caps) // one copy for both searches: the buffer may be trimmed between them
-	c.p.mu.Unlock()
+	caps := c.p.Captures() // one copy for both searches: the buffer may be trimmed between them
 	req, at, err := c.find(caps, in.Sent, 0)
 	if err != nil {
 		return "", err

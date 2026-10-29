@@ -4,13 +4,14 @@ import (
 	"context"
 	"database/sql"
 	"github.com/partprogramming09/webscope/internal/db"
+	"github.com/partprogramming09/webscope/internal/page"
 	"path/filepath"
 	"strings"
 	"testing"
 )
 
 // checkSetup is a SQLite table (no primary key, so two rows can share an id) and a page tool holding the requests the screen "made".
-func checkSetup(t *testing.T) (*checker, *pageTool) {
+func checkSetup(t *testing.T) (*checker, *fakeCaps) {
 	t.Helper()
 	path := filepath.Join(t.TempDir(), "app.db")
 	conn, err := sql.Open("sqlite", path)
@@ -29,12 +30,17 @@ func checkSetup(t *testing.T) (*checker, *pageTool) {
 			t.Fatal(err)
 		}
 	}
-	p := newPage("http://app.test")
+	p := &fakeCaps{}
 	return &checker{s: &db.Source{URL: "sqlite://" + path}, p: p}, p
 }
 
-func sent(p *pageTool, method, path, req, res string) {
-	p.caps = append(p.caps, capture{M: method, U: "http://demo.localhost:8001" + path, S: 200, Req: req, Res: res})
+// fakeCaps holds the requests the screen "made".
+type fakeCaps struct{ caps []page.Capture }
+
+func (f *fakeCaps) Captures() []page.Capture { return append([]page.Capture(nil), f.caps...) }
+
+func sent(p *fakeCaps, method, path, req, res string) {
+	p.caps = append(p.caps, page.Capture{M: method, U: "http://demo.localhost:8001" + path, S: 200, Req: req, Res: res})
 }
 
 func args(id string, m map[string]string) checkArgs {
@@ -163,7 +169,7 @@ func TestCheckRefusesWhatItCannotCompareHonestly(t *testing.T) {
 	if _, err := run(t, c, args("059", fourFields)); err == nil || !strings.Contains(err.Error(), "no captured request matches") {
 		t.Errorf("nothing captured: %v", err)
 	}
-	sent(p, "POST", "/api/quotes", clip(`{"notes":"`+strings.Repeat("a", storeClip+500)+`"}`, storeClip), "")
+	sent(p, "POST", "/api/quotes", `{"notes":"`+strings.Repeat("a", 100)+"…(+500 bytes)", "")
 	if _, err := run(t, c, args("059", map[string]string{"notes": "notes"})); err == nil || !strings.Contains(err.Error(), "cut") {
 		t.Errorf("a body that was cut must not be compared as if it were whole: %v", err)
 	}
@@ -240,7 +246,7 @@ func TestCheckSaysWhenOnlyTheSpacesDiffer(t *testing.T) {
 
 func TestCheckComparesOnlyASaveThatSucceededAndAReadThatCameAfterIt(t *testing.T) {
 	c, p := checkSetup(t)
-	p.caps = append(p.caps, capture{M: "POST", U: "http://demo.localhost:8001/api/quotes", S: 422, Req: `{"notes":"x"}`})
+	p.caps = append(p.caps, page.Capture{M: "POST", U: "http://demo.localhost:8001/api/quotes", S: 422, Req: `{"notes":"x"}`})
 	if _, err := run(t, c, args("059", map[string]string{"notes": "notes"})); err == nil || !strings.Contains(err.Error(), "422") {
 		t.Errorf("a save that answered 422 saved nothing: %v", err)
 	}

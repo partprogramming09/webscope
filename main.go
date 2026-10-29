@@ -11,6 +11,7 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/partprogramming09/webscope/internal/db"
 	"github.com/partprogramming09/webscope/internal/input"
+	"github.com/partprogramming09/webscope/internal/page"
 )
 
 const (
@@ -29,7 +30,7 @@ func query(s *db.Source) mcp.ToolHandlerFor[db.QueryArgs, any] {
 	}
 }
 
-func newServer(s *db.Source, p *pageTool) *mcp.Server {
+func newServer(s *db.Source, p *page.Tool) *mcp.Server {
 	srv := mcp.NewServer(&mcp.Implementation{Name: "webscope", Version: version}, &mcp.ServerOptions{Instructions: instructions})
 	mcp.AddTool(srv, &mcp.Tool{
 		Name:        "query",
@@ -40,7 +41,7 @@ func newServer(s *db.Source, p *pageTool) *mcp.Server {
 		Name:        "page",
 		Description: "Test a screen in Chrome (Claude in Chrome): returns text or JavaScript to run with javascript_tool. page(help) lists the actions.",
 		InputSchema: input.Schema,
-	}, guarded(p.tool))
+	}, guarded(p.Handle))
 	cd := &coder{s: s, backend: os.Getenv("WEBSCOPE_BACKEND"), front: os.Getenv("WEBSCOPE_FRONT")}
 	mcp.AddTool(srv, &mcp.Tool{
 		Name:        "code",
@@ -70,9 +71,9 @@ func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer stop()
 	fmt.Fprintf(os.Stderr, "webscope %s\n", version)
-	page := newPage(os.Getenv("WEBSCOPE_APP_URL"))
-	page.life = ctx
-	if err := newServer(&db.Source{URL: os.Getenv("WEBSCOPE_DB_URL"), TenantQuery: tenantLookup()}, page).Run(ctx, &mcp.StdioTransport{}); err != nil && ctx.Err() == nil {
+	pg := page.New(os.Getenv("WEBSCOPE_APP_URL"))
+	pg.Life = ctx
+	if err := newServer(&db.Source{URL: os.Getenv("WEBSCOPE_DB_URL"), TenantQuery: tenantLookup()}, pg).Run(ctx, &mcp.StdioTransport{}); err != nil && ctx.Err() == nil {
 		fmt.Fprintln(os.Stderr, "webscope:", err)
 		os.Exit(1)
 	}
