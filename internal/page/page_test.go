@@ -354,9 +354,11 @@ df.onmousedown=()=>{oc.innerHTML='<div class=v-overlay--active><div class=v-list
 on.oninput=()=>nn.textContent='outside';dn.oninput=()=>nn.textContent='dialog'
 n.onkeydown=e=>{if(e.key==='Escape')al.textContent='esc'}
 document.body.insertAdjacentHTML('afterbegin','<nav>'+Array.from({length:35},(_,i)=>'<button type=button>Menu '+i+'</button>').join('')+'</nav>') // a side menu comes first in the DOM and holds more buttons than state lists
+// the helper script loads from another origin: every step waits for the scripts it added to the page, so a slow machine cannot run a step before the helper is there
+const pend=[],_ap=document.head.appendChild.bind(document.head);document.head.appendChild=e=>{if(e.tagName==='SCRIPT')pend.push(new Promise(r=>{e.addEventListener('load',r);e.addEventListener('error',r)}));return _ap(e)}
 const steps=JSON.parse(document.getElementById('steps').textContent),res=[]
 const sleep=ms=>new Promise(r=>setTimeout(r,ms))
-;(async()=>{for(const s of steps){try{res.push(String(await (0,eval)("(async()=>("+s+"))()")))}catch(e){res.push('THROW '+e)}await sleep(300)}out.textContent=JSON.stringify(res)})()
+;(async()=>{for(const s of steps){try{res.push(String(await (0,eval)("(async()=>("+s+"))()")))}catch(e){res.push('THROW '+e)}await Promise.all(pend.splice(0));await sleep(300)}out.textContent=JSON.stringify(res)})()
 </script>`
 
 // TestActionsRunInARealChrome loads a form from one origin, the webscope listener is another one (so CORS is real), runs every action the way
@@ -615,9 +617,11 @@ const editorPage = `<!doctype html><meta charset=utf-8><title>Editor</title>
 yes.onclick=()=>res.textContent='eliminada'
 ed.oninput=()=>mir.textContent='input:'+ed.innerText
 const ed2=document.querySelectorAll('[contenteditable]')[1];ed2.oninput=()=>mir2.textContent='input2:'+ed2.innerText
+// the helper script loads from another origin: every step waits for the scripts it added to the page, so a slow machine cannot run a step before the helper is there
+const pend=[],_ap=document.head.appendChild.bind(document.head);document.head.appendChild=e=>{if(e.tagName==='SCRIPT')pend.push(new Promise(r=>{e.addEventListener('load',r);e.addEventListener('error',r)}));return _ap(e)}
 const steps=JSON.parse(document.getElementById('steps').textContent),res_=[]
 const sleep=ms=>new Promise(r=>setTimeout(r,ms))
-;(async()=>{for(const s of steps){try{res_.push(String(await (0,eval)("(async()=>("+s+"))()")))}catch(e){res_.push('THROW '+e)}await sleep(300)}out.textContent=JSON.stringify(res_)})()
+;(async()=>{for(const s of steps){try{res_.push(String(await (0,eval)("(async()=>("+s+"))()")))}catch(e){res_.push('THROW '+e)}await Promise.all(pend.splice(0));await sleep(300)}out.textContent=JSON.stringify(res_)})()
 </script>`
 
 // TestClickFindsATextThatIsNoButtonAndFillWritesAContentEditable runs in a real Chrome: a confirmation whose button is a plain span, and a rich-text
