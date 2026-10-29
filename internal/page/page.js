@@ -118,9 +118,10 @@
     const l = box && box.querySelector('label');
     return norm((l && l.textContent) || e.getAttribute('aria-label') || e.placeholder || e.name || e.id);
   };
-  const FIELDS = 'input:not([type=hidden]):not([type=button]):not([type=submit]):not([type=reset]),textarea,select';
+  const FIELDS = 'input:not([type=hidden]):not([type=button]):not([type=submit]):not([type=reset]),textarea,select,[contenteditable=true],[contenteditable=""]';
   const fields = () => all(FIELDS);
   const valueOf = e => {
+    if (e.isContentEditable) return e.innerText.replace(/\n$/, '');
     if (e.type === 'checkbox' || e.type === 'radio') return e.checked ? 'on' : 'off';
     if (e.tagName === 'SELECT') return norm(e.selectedOptions[0] && e.selectedOptions[0].text);
     return e.value;
@@ -144,7 +145,7 @@
     const f = fields();
     if (f.length) {
       out.push('Fields:');
-      f.forEach(e => out.push('  [' + (e.type || e.tagName.toLowerCase()) + '] ' + (labelOf(e) || '(no label)') + ' = "' + valueOf(e).replace(/\n/g, '⏎') + '"'));
+      f.forEach(e => out.push('  [' + (e.isContentEditable ? 'editor' : e.type || e.tagName.toLowerCase()) + '] ' + (labelOf(e) || '(no label)') + ' = "' + valueOf(e).replace(/\n/g, '⏎') + '"'));
     }
     const b = [...new Set(all(CLICKABLE).filter(textOf).map((e, i) => ({ i, t: textOf(e) + (disabled(e) ? ' (disabled)' : ''), r: rank(e) })).sort((x, y) => x.r - y.r || x.i - y.i).map(x => x.t))].slice(0, 30);
     if (b.length) out.push('Buttons (dialog first, side menu last): ' + b.join(' | '));
@@ -216,6 +217,15 @@
   const setValue = async (e, v) => {
     e.focus();
     if (e.closest(MENU)) return choose(e, v);
+    if (e.isContentEditable) { // a rich-text editor has no value setter: select its content and insert the text, as typing would
+      const r = document.createRange();
+      r.selectNodeContents(e);
+      getSelection().removeAllRanges();
+      getSelection().addRange(r);
+      document.execCommand(String(v) === '' ? 'delete' : 'insertText', false, String(v));
+      e.blur();
+      return;
+    }
     if (e.type === 'checkbox' || e.type === 'radio') {
       const want = v === true || /^(true|on|1|yes|si|sí)$/i.test(String(v));
       if (e.checked !== want) e.click();
@@ -289,6 +299,7 @@
       const t = lower(a.text), c = all(CLICKABLE);
       els = c.filter(e => lower(textOf(e)) === t);
       if (!els.length) els = c.filter(e => lower(textOf(e)).includes(t));
+      if (!els.length) els = all('body *').filter(e => !e.children.length && lower(textOf(e)) === t); // a confirmation whose button is a plain span or div
       if (els.length > 1) return fail(els.length + ' elements match "' + a.text + '": ' + els.slice(0, 6).map(describe).join(', ') + '. Next: click with a selector.');
     } else return fail('click needs text or selector');
     if (!els.length) return fail('nothing to click for "' + (a.selector || a.text) + '". Buttons here: ' + [...new Set(all(CLICKABLE).map(textOf).filter(Boolean))].slice(0, 12).join(' | '));

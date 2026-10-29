@@ -2,6 +2,11 @@
 
 One entry per version, newest first. Tool names are `query`, `page`, `check` and `code`. A change in what a tool prints is listed as a change, because a client may read it.
 
+## 0.5.23 — 2026-10-28
+- `page` `click {text}`: when no button, link or menu item has the text, it clicks the plain element (a `span` or `div` with no child elements) whose text is exactly that, such as the «Sí, Eliminar» of a confirmation. Two or more matches still fail and name them.
+- `page` `fill` writes into a rich-text editor (`contenteditable`) by its `aria-label` or id, by selecting its content and inserting the text. Checked on a plain `contenteditable` div in Chrome, not on a real tiptap or ProseMirror editor.
+- `page` `state` now lists such an editor under `Fields:` as `[editor] <label> = "<text>"`, where it was not listed before. The help says so.
+
 ## 0.5.22 — 2026-10-28
 - The code is split into `internal/` packages (`db`, `page`, `check`, `code`, `fsx`, `input`); `main.go` only registers the tools. What the tools print is unchanged (`tools/list` is 1443 bytes before and after).
 - New `docs/usage.md`: the contract of each tool and the recommended order of use.
