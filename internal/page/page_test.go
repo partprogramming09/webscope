@@ -1036,3 +1036,60 @@ func TestShapeSavesWhatTheScreenOffersInTheListener(t *testing.T) {
 		t.Errorf("shape lacks the field Estado (select-one) or the buttons Guardar and Cerrar: %+v", s)
 	}
 }
+
+// postCapture sends a captured request to the listener the way page.js does.
+func postCapture(t *testing.T, p *Tool, c Capture) {
+	t.Helper()
+	raw, _ := json.Marshal(c)
+	if res := send(t, http.MethodPost, p.base+"/capture?t="+p.token, "", string(raw)); res.StatusCode != http.StatusNoContent {
+		t.Fatalf("capture: status %d", res.StatusCode)
+	}
+}
+
+func parityRequestsPage(t *testing.T) *Tool {
+	t.Helper()
+	p := testPage(t, appOrigin)
+	if _, err := askPage(t, p, "load", nil); err != nil {
+		t.Fatal(err)
+	}
+	postCapture(t, p, Capture{M: "POST", U: "/legacy/save.php", S: 200, Req: "DESCRIPCION=secretvalue&OFICINA=MIA&id=3", Res: `{"ok":true,"id":3}`})
+	postCapture(t, p, Capture{M: "POST", U: "/api/quotes", S: 201, Req: `{"notes":"secretvalue","office":"MIA","id":3,"lines":[{"qty":1}]}`, Res: `{"data":{"id":3,"status":"X"}}`})
+	return p
+}
+
+func TestParityOfTwoRequestsShowsOnlyFieldNamesThatDiffer(t *testing.T) {
+	p := parityRequestsPage(t)
+	out, err := askPage(t, p, "parity", map[string]any{"req_a": "POST save.php", "req_b": "POST /api/quotes", "map": map[string]any{"DESCRIPCION": "notes", "OFICINA": "office"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{"/legacy/save.php 200", "/api/quotes 201", "status: 200 → 201", "sent only in b: lines[].qty", "got only in a: id, ok", "got only in b: data.id, data.status"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("lacks %q:\n%s", want, out)
+		}
+	}
+	for _, not := range []string{"secretvalue", "sent only in a", "DESCRIPCION", "OFICINA"} {
+		if strings.Contains(out, not) {
+			t.Errorf("%q must not appear (a value, or a name the map made equal):\n%s", not, out)
+		}
+	}
+	raw, _ := askPage(t, p, "parity", map[string]any{"req_a": "POST save.php", "req_b": "POST /api/quotes"})
+	if !strings.Contains(raw, "sent only in a: DESCRIPCION, OFICINA") || !strings.Contains(raw, "sent only in b: lines[].qty, notes, office") {
+		t.Errorf("without a map the names differ:\n%s", raw)
+	}
+}
+
+func TestParityOfRequestsSaysWhatItCouldNotFindOrRead(t *testing.T) {
+	p := parityRequestsPage(t)
+	if _, err := askPage(t, p, "parity", map[string]any{"req_a": "POST nothing.php", "req_b": "POST /api/quotes"}); err == nil || !strings.Contains(err.Error(), "nothing.php") {
+		t.Errorf("want a failure that names the request not found: %v", err)
+	}
+	if _, err := askPage(t, p, "parity", map[string]any{"req_a": "POST save.php"}); err == nil {
+		t.Error("req_a without req_b must fail")
+	}
+	postCapture(t, p, Capture{M: "POST", U: "/api/cut", S: 200, Req: `{"a":1,"b":…(+9000 bytes)`})
+	out, err := askPage(t, p, "parity", map[string]any{"req_a": "POST save.php", "req_b": "POST /api/cut"})
+	if err != nil || !strings.Contains(out, "cut") {
+		t.Errorf("a clipped body must be called cut, not compared as complete: %v\n%s", err, out)
+	}
+}

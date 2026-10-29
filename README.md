@@ -19,6 +19,7 @@ With the server registered, ask in plain words:
 - «Make the quotes list answer a 500 and tell me what the screen shows.» (`page simulate`)
 - «Audit this screen: text that was not rendered, controls covered by something, fields nobody can name.» (`page audit`)
 - «What does the old screen send when I press Search?» (`page payloads`, also on legacy pages that use jQuery)
+- «Does the new screen send and receive the same fields as the old one?» (`page parity {req_a, req_b}`)
 - «Compare the old and the new version of this screen.» (`page shape` on each, then `page parity`; the `screen-audit` skill, see below)
 - «Which endpoint, controller and table does this screen use?» (`code map_back`)
 - «What are the flows and user stories of this module?» (`code flows`, then the `module-flows` skill)
@@ -107,6 +108,8 @@ With `tenant` (an fqdn) the query runs in that tenant's database, found in the c
 `fill` also writes into a rich-text editor (`contenteditable`), found by its `aria-label` or id or, when it has neither, as `editor`. A field whose `<label>` is empty is named by its `aria-label`, `placeholder`, `name` or `id`. `click {text}` falls back to the plain element with exactly that text when no button or link has it, and when nothing matches the error lists the dialog's buttons first.
 
 `shape {name}` saves what the screen offers under a name, in the local listener and in memory (field labels and kinds, buttons, table columns, tabs and headings; no values; the side menu and the top bar are left out). `parity {a, b}` (answered by the server, no snippet) compares two saved shapes and prints only `only in a`, `only in b` and the fields that kept their label but changed kind; names are compared ignoring case and spaces. It compares names, so it cannot say two screens behave the same. Shapes are lost when the server restarts; up to 20 are kept.
+
+`parity {req_a, req_b, map?}` compares instead two captured requests, for example the same action on the old and the new screen: each spec is a method and a part of the address (`POST save.php`), and the latest capture that matches is used. It prints the two requests, the status if it differs, and the field names only one side sent (`sent only in a`) or received (`got only in b`); never a value. It reads JSON (nested names with a dot, a list by its first element as `lines[].qty`) and forms (`a=1&b=2`, what the old jQuery pages send); a body that was cut or that is neither says so and is not compared. `map {name in a: name in b}` renames the names of a first, so `DESCRIPCION` and `notes` count as the same field.
 
 `audit {selector?}` lists, without any reference screen: unrendered text (`{{ x }}`, `undefined`, `null`, `NaN`, `[object Object]`), controls covered by another element, fields with no label (with their `name`, `id` and a short CSS path), repeated labels, and buttons or links with no name. It says so when it finds nothing, and `selector` limits it to a part of the screen. It is a hint to look at, not a verdict.
 

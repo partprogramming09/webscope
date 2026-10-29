@@ -51,7 +51,7 @@ state|read|fill|click|press|simulate|audit|shape: return a snippet; run it with 
   shape {name}: saves what the screen offers under a name (field labels and kinds, buttons, table columns, tabs, headings; no values) for parity.
   simulate {match, status, times?, method?}: the next requests whose URL contains match answer HTTP status 400-599 without reaching the app; {clear:true} cancels.
 payloads {limit?}: the requests the page sent and their answers (answered here, no snippet).
-parity {a, b}: compares two saved shapes (say the old and the new screen) and shows only what one has and the other lacks, and fields whose kind changed (answered here, no snippet).
+parity {a, b}: compares two saved shapes (say the old and the new screen) and shows only what one has and the other lacks, and fields whose kind changed (answered here, no snippet). parity {req_a, req_b, map?} compares instead the latest captured request that matches each ("POST save.php": the method, then a part of the address): status and the field names sent and received, never values; map {name in a: name in b} renames a's names first.
 Writes only with the user's approval, and rows prefixed ZZ_.`
 
 // Capture is one request the page sent, as reported by page.js.

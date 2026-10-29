@@ -89,6 +89,9 @@ func diff(a, b []string) (onlyA, onlyB []string) {
 
 // parity shows only what a screen has and the other lacks (fields, buttons, columns, tabs) and the fields that kept their label but changed kind.
 func (p *Tool) parity(args map[string]any) (string, error) {
+	if input.Str(args, "req_a") != "" || input.Str(args, "req_b") != "" {
+		return p.parityRequests(args)
+	}
 	an, bn := input.Str(args, "a"), input.Str(args, "b")
 	if an == "" || bn == "" {
 		return "", errors.New("parity needs a and b, the names of two saved shapes")

@@ -2,6 +2,27 @@
 
 One entry per version, newest first. Tool names are `query`, `page`, `check` and `code`. Each change says what it is, what was seen that made it necessary, how it was checked and what was not checked. A change in what a tool prints is listed as a change, because a client may read it.
 
+## 0.5.28 — 2026-10-29
+
+**New: `page parity {req_a, req_b, map?}`. Same button on the old screen and the new one: do they send and receive the same fields?**
+
+Press the same action on both screens, then name the two requests: each spec is a method and a part of the address (`POST save.php`, `POST /api/quotes`), and the latest capture that matches is used. The answer has the two request lines, `status: 200 → 201` only if it differs, and the field names that only one side sent (`sent only in a`, `sent only in b`) or received (`got only in a`, `got only in b`). **Never a value**: a test with a value in each body checks that it does not come out.
+
+- JSON bodies: nested names with a dot (`data.status`), a list by its first element (`lines[].qty`), four levels deep, 200 names at most.
+- Form bodies (`DESCRIPCION=x&OFICINA=MIA`), which is what the old jQuery pages send.
+- A body that was cut by the capture limit says `cut` and is not compared as if it were whole; one that is neither JSON nor a form says `not JSON or form`.
+- `map {name in a: name in b}` renames a's names first, because the old pages name fields their own way (`DESCRIPCION` is `notes`). Without a map, every renamed field shows on both sides, which is true but noisy; the skill says to build the map from `code fields` and the screen's field list.
+- If no capture matches, it names the spec it could not find and says to run the action and look at `payloads`.
+
+`parity` with `a` and `b` still compares two saved screen shapes (0.5.27); with `req_a` and `req_b` it compares requests.
+
+What was seen that made it necessary: `check` compares what was sent with what was saved, but a migration asks something before that: does the new screen send what the old one sent? Until now the agent read two `payloads` and compared by eye.
+
+How it was checked:
+- Two tests written first and failing (`parity needs a and b`): a form request against a JSON one with and without `map` (status, names on each side, no value leaks, a mapped name does not appear); and the failures (no capture matches, `req_b` missing, a cut body called `cut`).
+- `go test -race ./...` passes (118 tests).
+- Not checked: on the real legacy and modern «Buscar», where the names will not all map; a legacy page that answers HTML (it says `not JSON or form`, but I did not see it on a real answer); a body that holds a JSON string inside a form field (it is one name, not opened).
+
 ## 0.5.27 — 2026-10-29
 
 **New: `page shape {name}` and `page parity {a, b}`. Put the old screen and the new one side by side and read only what is different.**
