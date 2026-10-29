@@ -229,3 +229,36 @@ func TestAMapBackThatFindsNothingSaysWhatToTry(t *testing.T) {
 		t.Errorf("map must say what a module is: %q, %v", out, err)
 	}
 }
+
+func TestFlowsJoinsTheScreenActionsWithTheirEndpointsInOneAnswer(t *testing.T) {
+	out, err := code(t, mapSetup(t), "flows", map[string]any{"module": "crm/quotes"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{"Flows of «crm/quotes»", "evidence, not user stories", "## screens", "route /crm/quotes (quotes)", "## endpoints",
+		"api GET quotes -> QuoteController@index", "model app/Modules/Crm/Quotes/Models/Quote.php -> table app_cotizaciones"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("lacks %q:\n%s", want, out)
+		}
+	}
+	for _, secret := range []string{"SECRET_IN_ENV", "SECRET_IN_NODE_MODULES", "SECRET_OUTSIDE"} {
+		if strings.Contains(out, secret) {
+			t.Errorf("flows leaked %s", secret)
+		}
+	}
+	if _, err := code(t, mapSetup(t), "flows", map[string]any{}); err == nil {
+		t.Error("flows without a module must say what it needs")
+	}
+}
+
+func TestFlowsWithoutABackendStillGivesTheScreensAndSaysSo(t *testing.T) {
+	c := mapSetup(t)
+	c.Backend = ""
+	out, err := code(t, c, "flows", map[string]any{"module": "crm/quotes"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out, "## screens") || !strings.Contains(out, "WEBSCOPE_BACKEND is not set") {
+		t.Errorf("want the screens and the missing backend named:\n%s", out)
+	}
+}

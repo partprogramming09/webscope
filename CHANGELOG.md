@@ -2,6 +2,18 @@
 
 One entry per version, newest first. Tool names are `query`, `page`, `check` and `code`. Each change says what it is, what was seen that made it necessary, how it was checked and what was not checked. A change in what a tool prints is listed as a change, because a client may read it.
 
+## 0.5.26 — 2026-10-29
+
+**New: `code flows {module}`.** One answer with the evidence for the user stories of a front module: `## screens` (what `map {module, walkthrough}` prints: routes, actions with their `v-if`, permissions, links, fields, statuses) and `## endpoints` (what `map_back {module}` prints: endpoint, controller with `file:line`, the front call, services, models and tables). It drops the duplicated headers and routes of the second part. Without `WEBSCOPE_BACKEND` it gives the screens and says `not available: WEBSCOPE_BACKEND is not set`. A module that does not exist gets the same «no module contains» text as `map`. It prints no stories: it is evidence, and says so in its first line.
+
+**New skill `.claude/skills/module-flows/SKILL.md`.** How to write the stories from that evidence (one per action that changes something or leads to another screen, with the endpoint, controller and table as evidence, and the unknowns marked), how to check one flow in the real screen with `page` and `check`, and that a person confirms each story before tests are written from it. Not tried with a real agent yet.
+
+**Also:** `ROADMAP.md` has a new section, «Migraciones: paridad, flujos y pruebas», with the versions 0.5.26 to 0.5.31 and three open questions about the legacy system.
+
+How it was checked:
+- Two tests on the fixture of the `map` tests, written first and failing with `unknown action "flows"`: the join (sections, an endpoint, a table, no secret of a `.env`, `node_modules` or a symlinked folder) and the missing backend. `go test -race ./...` passes (112 tests). `tools/list` is 1526 bytes.
+- Not checked: against the real application (the registered server has to be rebuilt and reconnected with `/mcp` first); the size of the answer on a large module (it is cut at 8000 bytes, so the end of `## endpoints` can be missing); that the stories the skill produces are good.
+
 ## 0.5.25 — 2026-10-29
 
 **New: `page audit {selector?}`.** Lists what the page itself shows wrong, with no reference screen to compare to:
