@@ -6,6 +6,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"github.com/partprogramming09/webscope/internal/input"
 	"regexp"
 	"slices"
 	"sort"
@@ -115,15 +116,15 @@ func keyed(cols []string, rows [][]string, key string) (map[string][]string, err
 }
 
 func (c *coder) snapSave(ctx context.Context, args map[string]any) (string, error) {
-	name := str(args, "name")
+	name := input.Str(args, "name")
 	if !snapName.MatchString(name) {
 		return "", fmt.Errorf("the snapshot name %q is not valid: letters, digits, _ and - up to 40", name)
 	}
-	stmt, err := checkSQL(str(args, "sql"))
+	stmt, err := checkSQL(input.Str(args, "sql"))
 	if err != nil {
 		return "", err
 	}
-	tenant := str(args, "tenant")
+	tenant := input.Str(args, "tenant")
 	cols, rows, err := c.readAll(ctx, stmt, tenant)
 	if err != nil {
 		return "", err
@@ -131,7 +132,7 @@ func (c *coder) snapSave(ctx context.Context, args map[string]any) (string, erro
 	if len(cols) == 0 {
 		return "", errors.New("the query returns no columns")
 	}
-	key := str(args, "key")
+	key := input.Str(args, "key")
 	if key == "" {
 		key = cols[0]
 	}
@@ -160,7 +161,7 @@ func val(s string) string {
 }
 
 func (c *coder) snapDiff(ctx context.Context, args map[string]any) (string, error) {
-	name := str(args, "name")
+	name := input.Str(args, "name")
 	c.snapMu.Lock()
 	s, ok := c.snaps[name]
 	var known []string

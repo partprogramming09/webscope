@@ -1,14 +1,10 @@
 package main
 
 import (
-	"bufio"
 	"context"
 	"database/sql"
-	"encoding/json"
 	"errors"
 	"fmt"
-	"io/fs"
-	"os"
 	"path/filepath"
 	"regexp"
 	"sort"
@@ -17,15 +13,9 @@ import (
 	"sync"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
+	"github.com/partprogramming09/webscope/internal/fsx"
+	"github.com/partprogramming09/webscope/internal/input"
 )
-
-// codeSchema is written by hand, like checkSchema: the generated one costs twice the bytes of tools/list. page uses it too.
-var codeSchema = map[string]any{
-	"type": "object",
-	"properties": map[string]any{
-		"action": map[string]any{"type": "string"}, "args": map[string]any{"type": "object"},
-	},
-}
 
 // coder reads the code of the project: the PHP under WEBSCOPE_BACKEND, and the columns of a table through the same read-only connection as query.
 type coder struct {
@@ -37,128 +27,9 @@ type coder struct {
 	snaps  map[string]*snapshot // in memory only: they are lost when the server restarts
 }
 
-type codeArgs struct {
-	Action string         `json:"action"`
-	Args   map[string]any `json:"args,omitempty"`
-}
-
-// UnmarshalJSON reads the arguments from "args" and also from the top level of the call; a key inside "args" wins.
-func (a *codeArgs) UnmarshalJSON(b []byte) error {
-	var raw map[string]json.RawMessage
-	if err := json.Unmarshal(b, &raw); err != nil {
-		return err
-	}
-	*a = codeArgs{Args: map[string]any{}}
-	for k, v := range raw {
-		switch k {
-		case "action":
-			if err := json.Unmarshal(v, &a.Action); err != nil {
-				return err
-			}
-		case "args":
-		default:
-			var x any
-			if err := json.Unmarshal(v, &x); err != nil {
-				return err
-			}
-			a.Args[k] = x
-		}
-	}
-	if v, ok := raw["args"]; ok {
-		var nested map[string]any
-		if err := json.Unmarshal(v, &nested); err != nil {
-			return err
-		}
-		for k, x := range nested {
-			a.Args[k] = x
-		}
-	}
-	return nil
-}
-
-const (
-	maxPHP      = 20000   // files read at most
-	maxPHPBytes = 2 << 20 // a bigger file is skipped
-	maxConsumed = 25      // files listed by consumers
-)
-
-// skipDirs are never walked: dependencies, files the app writes, and the repository.
-var skipDirs = map[string]bool{"vendor": true, "node_modules": true, "storage": true, ".git": true}
+const maxConsumed = 25 // files listed by consumers
 
 var writes = regexp.MustCompile(`(?i)\b(update|updateOrCreate|create|firstOrCreate|insert|save|fill|upsert)\w*\s*\(`)
-
-// hit is one line that matched.
-type hit struct {
-	file string
-	line int
-	text string
-}
-
-// source of lines already read, by file.
-type lines map[string][]string
-
-// phpFiles are the .php files under root, read-only: symbolic links are never followed (a link could lead out of the root), .env* files, the
-// folders in skipDirs and files over maxPHPBytes are left out. The names come back relative to the real root.
-func phpFiles(root string) ([]string, string, error) {
-	return walkFiles(root, func(n string) bool { return strings.HasSuffix(n, ".php") })
-}
-
-// walkFiles is the safe walk behind phpFiles for any kind of file: want says which names to keep.
-func walkFiles(root string, want func(name string) bool) (files []string, real string, err error) {
-	if real, err = filepath.EvalSymlinks(root); err != nil {
-		return nil, "", err
-	}
-	err = filepath.WalkDir(real, func(p string, d fs.DirEntry, err error) error {
-		switch {
-		case err != nil || d.Type()&fs.ModeSymlink != 0:
-			return nil
-		case d.IsDir():
-			if p != real && skipDirs[strings.ToLower(d.Name())] {
-				return filepath.SkipDir
-			}
-			return nil
-		case !d.Type().IsRegular(): // a fifo or a socket named X.php would block the read for ever
-			return nil
-		case !want(d.Name()) || strings.HasPrefix(strings.ToLower(d.Name()), ".env"):
-			return nil
-		}
-		if info, err := d.Info(); err != nil || info.Size() > maxPHPBytes {
-			return nil
-		}
-		if files = append(files, p); len(files) >= maxPHP {
-			return fs.SkipAll
-		}
-		return nil
-	})
-	return files, real, err
-}
-
-// grep returns the lines of files that match re, and the lines of every file it read.
-func grep(re *regexp.Regexp, files []string, all lines) []hit {
-	var out []hit
-	for _, f := range files {
-		ls, ok := all[f]
-		if !ok {
-			fh, err := os.Open(f)
-			if err != nil {
-				continue
-			}
-			sc := bufio.NewScanner(fh)
-			sc.Buffer(make([]byte, 0, 64<<10), 1<<20)
-			for sc.Scan() {
-				ls = append(ls, sc.Text())
-			}
-			fh.Close()
-			all[f] = ls
-		}
-		for i, l := range ls {
-			if re.MatchString(l) {
-				out = append(out, hit{f, i + 1, strings.TrimSpace(l)})
-			}
-		}
-	}
-	return out
-}
 
 // classify says WRITES when line n assigns the column ($x->COL = v) or holds it as the key of an array ('COL' => v) within 3 lines of an update, create, save, insert, fill or upsert call, READS otherwise: a text estimate.
 func classify(ls []string, n int, col string) string {
@@ -174,15 +45,15 @@ func classify(ls []string, n int, col string) string {
 }
 
 // tableFiles are the PHP files that name the table or the model that declares it ($table = 'name'), and the models.
-func tableFiles(table string, files []string, all lines) ([]string, []string) {
+func tableFiles(table string, files []string, all fsx.Lines) ([]string, []string) {
 	var models []string
 	var moduleDirs []string // the folder above Models/: its Resources/ read the columns of the model as $this->COLUMN, without naming the table or the model
-	for _, h := range grep(regexp.MustCompile(`\$table\s*=\s*['"]`+regexp.QuoteMeta(table)+`['"]`), files, all) {
-		if name := strings.TrimSuffix(filepath.Base(h.file), ".php"); name != "" {
+	for _, h := range fsx.Grep(regexp.MustCompile(`\$table\s*=\s*['"]`+regexp.QuoteMeta(table)+`['"]`), files, all) {
+		if name := strings.TrimSuffix(filepath.Base(h.File), ".php"); name != "" {
 			models = append(models, name)
 		}
-		if filepath.Base(filepath.Dir(h.file)) == "Models" {
-			moduleDirs = append(moduleDirs, filepath.Dir(filepath.Dir(h.file)))
+		if filepath.Base(filepath.Dir(h.File)) == "Models" {
+			moduleDirs = append(moduleDirs, filepath.Dir(filepath.Dir(h.File)))
 		}
 	}
 	sort.Strings(models)
@@ -192,10 +63,10 @@ func tableFiles(table string, files []string, all lines) ([]string, []string) {
 	}
 	seen := map[string]bool{}
 	var used []string
-	for _, h := range grep(regexp.MustCompile(`\b(`+strings.Join(names, "|")+`)\b`), files, all) {
-		if !seen[h.file] {
-			seen[h.file] = true
-			used = append(used, h.file)
+	for _, h := range fsx.Grep(regexp.MustCompile(`\b(`+strings.Join(names, "|")+`)\b`), files, all) {
+		if !seen[h.File] {
+			seen[h.File] = true
+			used = append(used, h.File)
 		}
 	}
 	for _, f := range files {
@@ -219,7 +90,7 @@ func slicesCompact(s []string) []string {
 	return out
 }
 
-func (c *coder) run(ctx context.Context, in codeArgs) (string, error) {
+func (c *coder) run(ctx context.Context, in input.Args) (string, error) {
 	out, err := c.do(ctx, in)
 	if err != nil {
 		return "", errors.New(redact(err.Error(), password(c.s.url)))
@@ -227,9 +98,7 @@ func (c *coder) run(ctx context.Context, in codeArgs) (string, error) {
 	return out, nil
 }
 
-func str(args map[string]any, k string) string { s, _ := args[k].(string); return s }
-
-func (c *coder) do(ctx context.Context, in codeArgs) (string, error) {
+func (c *coder) do(ctx context.Context, in input.Args) (string, error) {
 	switch in.Action {
 	case "consumers":
 		return c.consumers(in.Args)
@@ -252,7 +121,7 @@ func (c *coder) consumers(args map[string]any) (string, error) {
 	if c.backend == "" {
 		return "", errors.New("WEBSCOPE_BACKEND is not set")
 	}
-	table, col, only := str(args, "table"), str(args, "column"), str(args, "column_only")
+	table, col, only := input.Str(args, "table"), input.Str(args, "column"), input.Str(args, "column_only")
 	if only != "" {
 		col = only
 	}
@@ -262,11 +131,11 @@ func (c *coder) consumers(args map[string]any) (string, error) {
 	if only == "" && !validName.MatchString(table) {
 		return "", fmt.Errorf("the table name %q is not valid: letters, digits and _ only", table)
 	}
-	files, real, err := phpFiles(c.backend)
+	files, real, err := fsx.PHPFiles(c.backend)
 	if err != nil {
 		return "", err
 	}
-	all := lines{}
+	all := fsx.Lines{}
 	var b strings.Builder
 	if only == "" {
 		used, models := tableFiles(table, files, all)
@@ -285,10 +154,10 @@ func (c *coder) consumers(args map[string]any) (string, error) {
 		fmt.Fprintf(&b, "NOTE: '%s' is short; expect noise\n", col)
 	}
 	q := regexp.QuoteMeta(col)
-	hits := grep(regexp.MustCompile(`['"`+"`"+`]`+q+`['"`+"`"+`]|->`+q+`\b`), files, all)
-	per := map[string][]hit{}
+	hits := fsx.Grep(regexp.MustCompile(`['"`+"`"+`]`+q+`['"`+"`"+`]|->`+q+`\b`), files, all)
+	per := map[string][]fsx.Hit{}
 	for _, h := range hits {
-		per[h.file] = append(per[h.file], h)
+		per[h.File] = append(per[h.File], h)
 	}
 	names := make([]string, 0, len(per))
 	for f := range per {
@@ -308,7 +177,7 @@ func (c *coder) consumers(args map[string]any) (string, error) {
 		}
 		marks := map[string]bool{}
 		for _, h := range per[f] {
-			marks[classify(all[f], h.line, col)] = true
+			marks[classify(all[f], h.Line, col)] = true
 		}
 		var ms []string
 		for m := range marks {
@@ -320,7 +189,7 @@ func (c *coder) consumers(args map[string]any) (string, error) {
 		if len(per[f]) > 1 {
 			extra = fmt.Sprintf("  (+%d)", len(per[f])-1)
 		}
-		fmt.Fprintf(&b, "  %-13s %s:%d  %s%s\n", strings.Join(ms, "/"), rel, first.line, show70(first.text), extra)
+		fmt.Fprintf(&b, "  %-13s %s:%d  %s%s\n", strings.Join(ms, "/"), rel, first.Line, show70(first.Text), extra)
 	}
 	return strings.TrimRight(b.String(), "\n"), nil
 }
@@ -335,11 +204,11 @@ func show70(s string) string {
 // fields is the sheet of a table: type, null, default, rows with a value of each column and, if WEBSCOPE_BACKEND is set, how many PHP files read
 // and write each one. Counts only: no stored value is returned.
 func (c *coder) fields(ctx context.Context, args map[string]any) (string, error) {
-	table := str(args, "table")
+	table := input.Str(args, "table")
 	if !validName.MatchString(table) {
 		return "", fmt.Errorf("the table name %q is not valid: letters, digits and _ only", table)
 	}
-	db, driver, err := c.s.open(ctx, str(args, "tenant"))
+	db, driver, err := c.s.open(ctx, input.Str(args, "tenant"))
 	if err != nil {
 		return "", err
 	}
@@ -410,13 +279,13 @@ func (c *coder) fields(ctx context.Context, args map[string]any) (string, error)
 	total := vals[0].String
 	var b strings.Builder
 	var files []string
-	all := lines{}
+	all := fsx.Lines{}
 	head := fmt.Sprintf("%s: %s rows", table, total)
 	var models []string
 	if c.backend == "" {
 		head += " · WEBSCOPE_BACKEND is not set, so no readers or writers"
 	} else {
-		php, real, err := phpFiles(c.backend)
+		php, real, err := fsx.PHPFiles(c.backend)
 		if err != nil {
 			return "", err
 		}
@@ -438,20 +307,20 @@ func (c *coder) fields(ctx context.Context, args map[string]any) (string, error)
 		}
 		users, note := "-", ""
 		if c.backend != "" {
-			var uses []hit
+			var uses []fsx.Hit
 			if len(files) > 0 && len([]rune(k.name)) >= 3 {
 				q := regexp.QuoteMeta(k.name)
-				uses = grep(regexp.MustCompile(`['"`+"`"+`]`+q+`['"`+"`"+`]|->`+q+`\b`), files, all)
+				uses = fsx.Grep(regexp.MustCompile(`['"`+"`"+`]`+q+`['"`+"`"+`]|->`+q+`\b`), files, all)
 			}
 			w, r := map[string]bool{}, map[string]bool{}
 			for _, h := range uses {
-				if classify(all[h.file], h.line, k.name) == "WRITES" {
-					w[h.file] = true
+				if classify(all[h.File], h.Line, k.name) == "WRITES" {
+					w[h.File] = true
 				}
 			}
 			for _, h := range uses {
-				if !w[h.file] {
-					r[h.file] = true
+				if !w[h.File] {
+					r[h.File] = true
 				}
 			}
 			users = strconv.Itoa(len(r)) + " / " + strconv.Itoa(len(w))
@@ -476,7 +345,7 @@ func (c *coder) fields(ctx context.Context, args map[string]any) (string, error)
 	return out, nil
 }
 
-func (c *coder) tool(ctx context.Context, _ *mcp.CallToolRequest, in codeArgs) (*mcp.CallToolResult, any, error) {
+func (c *coder) tool(ctx context.Context, _ *mcp.CallToolRequest, in input.Args) (*mcp.CallToolResult, any, error) {
 	text, err := c.run(ctx, in)
 	if err != nil {
 		text = "Failed: " + strings.TrimRight(err.Error(), ". ") + ". Next: code(help) lists the actions."

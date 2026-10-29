@@ -3,6 +3,8 @@ package main
 import (
 	"errors"
 	"fmt"
+	"github.com/partprogramming09/webscope/internal/fsx"
+	"github.com/partprogramming09/webscope/internal/input"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -89,7 +91,7 @@ func backendModule(action string) string {
 
 // fileRoutes deduces the routes from the files app/Modules/**/Routes/*.php; nothing is executed.
 // shortcut: apiResource parameters as `{}`, groups only with Route::prefix, `api/` assumed; improve if there are routes outside that pattern.
-func fileRoutes(files []string, all lines) []backRoute {
+func fileRoutes(files []string, all fsx.Lines) []backRoute {
 	var routes []backRoute
 	sort.Strings(files)
 	for _, f := range files {
@@ -179,7 +181,7 @@ func fileOf(root, cls string) string {
 	if inside, err := filepath.Rel(root, real); err != nil || skipped(filepath.ToSlash(inside)) { // the links are resolved: the same rules apply to where they lead
 		return ""
 	}
-	if fi, err := os.Stat(real); err != nil || !fi.Mode().IsRegular() || fi.Size() > maxPHPBytes {
+	if fi, err := os.Stat(real); err != nil || !fi.Mode().IsRegular() || fi.Size() > fsx.MaxBytes {
 		return ""
 	}
 	return real
@@ -188,7 +190,7 @@ func fileOf(root, cls string) string {
 // skipped says whether a path relative to the root goes through a folder the walk skips, an empty or ".." part, or is a .env, in any letter case.
 func skipped(rel string) bool {
 	for _, part := range strings.Split(rel, "/") {
-		if l := strings.ToLower(part); part == "" || part == ".." || skipDirs[l] || strings.HasPrefix(l, ".env") {
+		if l := strings.ToLower(part); part == "" || part == ".." || fsx.SkipDirs[l] || strings.HasPrefix(l, ".env") {
 			return true
 		}
 	}
@@ -209,7 +211,7 @@ func importsOf(file, folder string) []string {
 
 // mapBack is map_back: from the screens of the front to the endpoint, controller (with line), service, model and table.
 func (c *coder) mapBack(args map[string]any) (string, error) {
-	query := str(args, "query")
+	query := input.Str(args, "query")
 	if query == "" {
 		return "", errors.New("map_back needs a query: a front module or a part of an API address")
 	}
@@ -220,11 +222,11 @@ func (c *coder) mapBack(args map[string]any) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	files, root, err := phpFiles(c.backend)
+	files, root, err := fsx.PHPFiles(c.backend)
 	if err != nil {
 		return "", err
 	}
-	routes := fileRoutes(files, lines{})
+	routes := fileRoutes(files, fsx.Lines{})
 	mods, names, err := indexModules(base)
 	if err != nil {
 		return "", err

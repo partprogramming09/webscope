@@ -21,6 +21,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
+	"github.com/partprogramming09/webscope/internal/input"
 )
 
 //go:embed page.js
@@ -48,9 +49,6 @@ state|read|fill|click|press|simulate: return a snippet; run it with javascript_t
   simulate {match, status, times?, method?}: the next requests whose URL contains match answer HTTP status 400-599 without reaching the app; {clear:true} cancels.
 payloads {limit?}: the requests the page sent and their answers (answered here, no snippet).
 Writes only with the user's approval, and rows prefixed ZZ_.`
-
-// pageArgs reads like codeArgs: the arguments sit in "args" or at the top level of the call.
-type pageArgs = codeArgs
 
 // capture is one request the page sent, as reported by page.js.
 type capture struct {
@@ -112,7 +110,7 @@ func snippet(action string, args map[string]any) (string, error) {
 	return fmt.Sprintf(`await (window.__ws?window.__ws.%s(%s):"Failed: webscope is not loaded in this page. Next: page(load) and run it.")`, action, raw), nil // await: fill waits for menus
 }
 
-func (p *pageTool) answer(in pageArgs) (string, error) {
+func (p *pageTool) answer(in input.Args) (string, error) {
 	switch in.Action {
 	case "help":
 		return helpText, nil
@@ -132,7 +130,7 @@ func (p *pageTool) answer(in pageArgs) (string, error) {
 }
 
 // tool answers a page call: text on success, and on failure a text that starts with "Failed:" and names the next step, marked as an error.
-func (p *pageTool) tool(_ context.Context, _ *mcp.CallToolRequest, in pageArgs) (*mcp.CallToolResult, any, error) {
+func (p *pageTool) tool(_ context.Context, _ *mcp.CallToolRequest, in input.Args) (*mcp.CallToolResult, any, error) {
 	text, err := p.answer(in)
 	if err != nil {
 		text = "Failed: " + strings.TrimRight(err.Error(), ". ") + ". Next: page(help) lists the actions and their arguments."

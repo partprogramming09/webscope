@@ -11,6 +11,8 @@ import (
 	"syscall"
 	"testing"
 	"time"
+
+	"github.com/partprogramming09/webscope/internal/input"
 )
 
 // codeSetup is a small Laravel-like tree with traps: a .env that names the column, a vendor folder, a symlinked file and a symlinked folder that
@@ -66,7 +68,7 @@ func codeSetup(t *testing.T) *coder {
 
 func code(t *testing.T, c *coder, action string, args map[string]any) (string, error) {
 	t.Helper()
-	return c.run(context.Background(), codeArgs{Action: action, Args: args})
+	return c.run(context.Background(), input.Args{Action: action, Args: args})
 }
 
 func TestConsumersListsReadersAndWritersWithFileAndLine(t *testing.T) {
@@ -197,10 +199,10 @@ func TestCodeRefusesAnUnknownActionAndNamesTheList(t *testing.T) {
 
 func TestCodeAcceptsTheArgumentsAtTheTopLevelToo(t *testing.T) {
 	cases := map[string]string{
-		"nested":       `{"action":"consumers","args":{"table":"quotes","column":"estado"}}`,
-		"top level":    `{"action":"consumers","table":"quotes","column":"estado"}`,
-		"args win":     `{"action":"consumers","table":"nope","args":{"table":"quotes","column":"estado"}}`,
-		"mixed":        `{"action":"consumers","column":"estado","args":{"table":"quotes"}}`,
+		"nested":    `{"action":"consumers","args":{"table":"quotes","column":"estado"}}`,
+		"top level": `{"action":"consumers","table":"quotes","column":"estado"}`,
+		"args win":  `{"action":"consumers","table":"nope","args":{"table":"quotes","column":"estado"}}`,
+		"mixed":     `{"action":"consumers","column":"estado","args":{"table":"quotes"}}`,
 	}
 	c := codeSetup(t)
 	want, err := code(t, c, "consumers", map[string]any{"table": "quotes", "column": "estado"})
@@ -208,7 +210,7 @@ func TestCodeAcceptsTheArgumentsAtTheTopLevelToo(t *testing.T) {
 		t.Fatal(err)
 	}
 	for name, raw := range cases {
-		var in codeArgs
+		var in input.Args
 		if err := json.Unmarshal([]byte(raw), &in); err != nil {
 			t.Fatalf("%s: %v", name, err)
 		}
@@ -218,7 +220,7 @@ func TestCodeAcceptsTheArgumentsAtTheTopLevelToo(t *testing.T) {
 		}
 	}
 	for _, raw := range []string{`{"action":1}`, `{"action":"fields","args":"x"}`} {
-		if err := json.Unmarshal([]byte(raw), &codeArgs{}); err == nil {
+		if err := json.Unmarshal([]byte(raw), &input.Args{}); err == nil {
 			t.Errorf("%s is accepted", raw)
 		}
 	}

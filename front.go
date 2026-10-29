@@ -3,6 +3,8 @@ package main
 import (
 	"errors"
 	"fmt"
+	"github.com/partprogramming09/webscope/internal/fsx"
+	"github.com/partprogramming09/webscope/internal/input"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -54,7 +56,7 @@ func lineAt(text string, i int) int { return strings.Count(text[:i], "\n") + 1 }
 
 // indexModules reads the .ts and .vue files under base into modules, in the order of their names.
 func indexModules(base string) (map[string]*frontModule, []string, error) {
-	files, _, err := walkFiles(base, func(n string) bool { return strings.HasSuffix(n, ".ts") || strings.HasSuffix(n, ".vue") })
+	files, _, err := fsx.WalkFiles(base, func(n string) bool { return strings.HasSuffix(n, ".ts") || strings.HasSuffix(n, ".vue") })
 	if err != nil {
 		return nil, nil, err
 	}
@@ -140,7 +142,7 @@ func capOut(s string) string {
 
 // mapFront is map: the routes, calls, composables and stores of the modules whose name contains module; with walkthrough, what can be clicked.
 func (c *coder) mapFront(args map[string]any) (string, error) {
-	filter := str(args, "module")
+	filter := input.Str(args, "module")
 	if filter == "" {
 		return "", errors.New("map needs a module, a part of the path such as configs/templates")
 	}
@@ -256,7 +258,7 @@ func walkthrough(base string, mods map[string]*frontModule, module string) []str
 			byAPI[file] = append(byAPI[file], strings.Fields(call)[0])
 		}
 	}
-	files, _, err := walkFiles(filepath.Join(base, module), func(n string) bool { return strings.HasSuffix(n, ".ts") || strings.HasSuffix(n, ".vue") })
+	files, _, err := fsx.WalkFiles(filepath.Join(base, module), func(n string) bool { return strings.HasSuffix(n, ".ts") || strings.HasSuffix(n, ".vue") })
 	if err != nil {
 		return nil
 	}

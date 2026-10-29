@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
+	"github.com/partprogramming09/webscope/internal/input"
 )
 
 const (
@@ -51,14 +52,14 @@ func newServer(s *source, p *pageTool) *mcp.Server {
 	mcp.AddTool(srv, &mcp.Tool{
 		Name:        "page",
 		Description: "Test a screen in Chrome (Claude in Chrome): returns text or JavaScript to run with javascript_tool. page(help) lists the actions.",
-		InputSchema: codeSchema,
+		InputSchema: input.Schema,
 	}, guarded(p.tool))
 	cd := &coder{s: s, backend: os.Getenv("WEBSCOPE_BACKEND"), front: os.Getenv("WEBSCOPE_FRONT")}
 	mcp.AddTool(srv, &mcp.Tool{
 		Name:        "code",
 		Description: "Read the project's code: fields, consumers, map, map_back.",
 		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true},
-		InputSchema: codeSchema,
+		InputSchema: input.Schema,
 	}, guarded(cd.tool))
 	ck := &checker{s: s, p: p}
 	mcp.AddTool(srv, &mcp.Tool{

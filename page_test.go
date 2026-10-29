@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
+	"github.com/partprogramming09/webscope/internal/input"
 )
 
 const appOrigin = "http://localhost:5173"
@@ -32,7 +33,7 @@ func testPage(t *testing.T, appURL string) *pageTool {
 
 func askPage(t *testing.T, p *pageTool, action string, args map[string]any) (string, error) {
 	t.Helper()
-	return p.answer(pageArgs{Action: action, Args: args})
+	return p.answer(input.Args{Action: action, Args: args})
 }
 
 func send(t *testing.T, method, url, origin, body string) *http.Response {
@@ -90,7 +91,7 @@ func TestPageAcceptsTheArgumentsAtTheTopLevelToo(t *testing.T) {
 	if got := res.Content[0].(*mcp.TextContent).Text; !strings.Contains(got, `__ws.fill({"Nombre":"Ana"})`) {
 		t.Errorf("the top-level argument did not reach the snippet: %q", got)
 	}
-	var in pageArgs
+	var in input.Args
 	if err := json.Unmarshal([]byte(`{"action":"fill","Nombre":"x","args":{"Nombre":"Ana"}}`), &in); err != nil || in.Args["Nombre"] != "Ana" {
 		t.Errorf("a key inside args must win: %+v, %v", in, err)
 	}
@@ -161,7 +162,7 @@ func TestTheListenerStopsWhenTheContextEnds(t *testing.T) {
 	p := newPage(appOrigin)
 	ctx, cancel := context.WithCancel(context.Background())
 	p.life = ctx
-	out, err := p.answer(pageArgs{Action: "load"})
+	out, err := p.answer(input.Args{Action: "load"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -478,7 +479,7 @@ func TestActionsRunInARealChrome(t *testing.T) {
 	add("fill", map[string]any{})                                                                                                       // 47: nothing to fill says how to ask
 	raw, _ := json.Marshal(steps)
 	mu.Lock()
-	html_ =strings.Replace(fixturePage, "{{STEPS}}", string(raw), 1)
+	html_ = strings.Replace(fixturePage, "{{STEPS}}", string(raw), 1)
 	mu.Unlock()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
