@@ -9,6 +9,7 @@ import (
 	"os/signal"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
+	"github.com/partprogramming09/webscope/internal/check"
 	"github.com/partprogramming09/webscope/internal/db"
 	"github.com/partprogramming09/webscope/internal/input"
 	"github.com/partprogramming09/webscope/internal/page"
@@ -49,13 +50,13 @@ func newServer(s *db.Source, p *page.Tool) *mcp.Server {
 		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true},
 		InputSchema: input.Schema,
 	}, guarded(cd.tool))
-	ck := &checker{s: s, p: p}
+	ck := &check.Tool{Src: s, Page: p}
 	mcp.AddTool(srv, &mcp.Tool{
 		Name:        "check",
 		Description: "Saved row vs what the screen sent and read back.",
 		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true},
-		InputSchema: checkSchema,
-	}, guarded(ck.tool))
+		InputSchema: check.Schema,
+	}, guarded(ck.Handle))
 	return srv
 }
 

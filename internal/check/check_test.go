@@ -1,4 +1,4 @@
-package main
+package check
 
 import (
 	"context"
@@ -11,7 +11,7 @@ import (
 )
 
 // checkSetup is a SQLite table (no primary key, so two rows can share an id) and a page tool holding the requests the screen "made".
-func checkSetup(t *testing.T) (*checker, *fakeCaps) {
+func checkSetup(t *testing.T) (*Tool, *fakeCaps) {
 	t.Helper()
 	path := filepath.Join(t.TempDir(), "app.db")
 	conn, err := sql.Open("sqlite", path)
@@ -31,7 +31,7 @@ func checkSetup(t *testing.T) (*checker, *fakeCaps) {
 		}
 	}
 	p := &fakeCaps{}
-	return &checker{s: &db.Source{URL: "sqlite://" + path}, p: p}, p
+	return &Tool{Src: &db.Source{URL: "sqlite://" + path}, Page: p}, p
 }
 
 // fakeCaps holds the requests the screen "made".
@@ -49,7 +49,7 @@ func args(id string, m map[string]string) checkArgs {
 
 var fourFields = map[string]string{"sub_type": "sub", "office": "office", "notes": "notes", "code": "code"}
 
-func run(t *testing.T, c *checker, a checkArgs) (string, error) {
+func run(t *testing.T, c *Tool, a checkArgs) (string, error) {
 	t.Helper()
 	return c.run(context.Background(), a)
 }
@@ -263,4 +263,15 @@ func TestCheckComparesOnlyASaveThatSucceededAndAReadThatCameAfterIt(t *testing.T
 	if _, err := run(t, c, args("059", map[string]string{"notes": "notes"})); err == nil {
 		t.Error("POST /api/quotes must not match /api/quotes-extra")
 	}
+}
+
+// writeDBFor is a writable connection to the SQLite file behind c.Src.
+func writeDBFor(t *testing.T, c *Tool) *sql.DB {
+	t.Helper()
+	conn, err := sql.Open("sqlite", strings.TrimPrefix(c.Src.URL, "sqlite://"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { conn.Close() })
+	return conn
 }

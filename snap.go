@@ -109,7 +109,7 @@ func keyed(cols []string, rows [][]string, key string) (map[string][]string, err
 	out := make(map[string][]string, len(rows))
 	for _, r := range rows {
 		if _, dup := out[r[k]]; dup {
-			return nil, fmt.Errorf("the key column %s is not unique (the value %q repeats): choose another with key", key, show(r[k]))
+			return nil, fmt.Errorf("the key column %s is not unique (the value %q repeats): choose another with key", key, input.Show(r[k]))
 		}
 		out[r[k]] = r
 	}
@@ -158,7 +158,7 @@ func val(s string) string {
 	if s == "" {
 		return "''"
 	}
-	return show(strings.NewReplacer("\t", " ", "\n", " ", "\r", " ").Replace(s))
+	return input.Show(strings.NewReplacer("\t", " ", "\n", " ", "\r", " ").Replace(s))
 }
 
 func (c *coder) snapDiff(ctx context.Context, args map[string]any) (string, error) {

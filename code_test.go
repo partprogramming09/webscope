@@ -365,17 +365,6 @@ func TestAModelWithAnOddFileNameDoesNotBreakTheSearch(t *testing.T) {
 	}
 }
 
-// writeDBFor is a writable connection to the SQLite file behind c.s, for the tests of other tools.
-func writeDBFor(t *testing.T, c *checker) *sql.DB {
-	t.Helper()
-	conn, err := sql.Open("sqlite", strings.TrimPrefix(c.s.URL, "sqlite://"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { conn.Close() })
-	return conn
-}
-
 func TestSnapSeesAChangeThatIsFarInsideAVeryLongValue(t *testing.T) {
 	c := codeSetup(t)
 	conn := writeDB(t, c)

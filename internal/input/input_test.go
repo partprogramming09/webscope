@@ -2,6 +2,7 @@ package input
 
 import (
 	"encoding/json"
+	"strings"
 	"testing"
 )
 
@@ -32,6 +33,15 @@ func TestACallWithTheWrongTypesIsRefused(t *testing.T) {
 
 func TestStrIsEmptyWhenTheValueIsNotAText(t *testing.T) {
 	if got := Str(map[string]any{"n": 3}, "n"); got != "" {
+		t.Errorf("%q", got)
+	}
+}
+
+func TestShowCutsAtFortyCharactersAndKeepsAShortValue(t *testing.T) {
+	if got := Show("short"); got != "short" {
+		t.Errorf("%q", got)
+	}
+	if got := Show(strings.Repeat("ñ", 41)); got != strings.Repeat("ñ", 40)+"…" {
 		t.Errorf("%q", got)
 	}
 }

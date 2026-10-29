@@ -1,4 +1,4 @@
-package main
+package check
 
 import (
 	"database/sql"
@@ -15,22 +15,23 @@ import (
 	"errors"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/partprogramming09/webscope/internal/db"
+	"github.com/partprogramming09/webscope/internal/input"
 	"github.com/partprogramming09/webscope/internal/page"
 )
 
-// checker compares what the screen sent, what the database stored and what the screen read afterwards.
-// captureSource is where the requests the screen sent come from: the page tool.
-type captureSource interface{ Captures() []page.Capture }
+// CaptureSource is where the requests the screen sent come from: the page tool.
+type CaptureSource interface{ Captures() []page.Capture }
 
-type checker struct {
-	s *db.Source
-	p captureSource
+// Tool compares what the screen sent, what the database stored and what the screen read afterwards.
+type Tool struct {
+	Src  *db.Source
+	Page CaptureSource
 }
 
-// checkSchema is written by hand: the one generated from checkArgs costs twice the bytes of tools/list. sent is a captured request
+// Schema is written by hand: the one generated from checkArgs costs twice the bytes of tools/list. sent is a captured request
 // ("POST /api/quotes"), where is {column: value} for one row, map is {sent field: column}, after is a captured read ("GET /api/quotes/1")
 // and at the path of the object inside its answer ("quote", "data.0"). No "required" list: it costs bytes and run says what is missing.
-var checkSchema = map[string]any{
+var Schema = map[string]any{
 	"type": "object",
 	"properties": map[string]any{
 		"sent": map[string]any{"type": "string"}, "table": map[string]any{"type": "string"},
@@ -53,7 +54,7 @@ type checkArgs struct {
 var cutMark = regexp.MustCompile(`…\(\+\d+ (bytes|chars)\)$`)
 
 // find is the last captured request, at index from or later, that matches "METHOD /path": the path of the URL, or its end after a "/".
-func (c *checker) find(caps []page.Capture, spec string, from int) (page.Capture, int, error) {
+func (c *Tool) find(caps []page.Capture, spec string, from int) (page.Capture, int, error) {
 	method, path, ok := strings.Cut(strings.TrimSpace(spec), " ")
 	if !ok || path == "" {
 		return page.Capture{}, 0, fmt.Errorf("%q is not METHOD /path", spec)
@@ -137,17 +138,9 @@ func sameText(first string, rest []seen) bool {
 	return true
 }
 
-// show is a value for the answer: one line, 40 characters at most.
-func show(s string) string {
-	if r := []rune(s); len(r) > 40 {
-		return string(r[:40]) + "…"
-	}
-	return s
-}
-
 // row reads the one row of table that where picks, only the columns asked for, in a read-only transaction.
-func (c *checker) row(ctx context.Context, in checkArgs, cols []string) (map[string]*string, error) {
-	conn, driver, err := c.s.Open(ctx, in.Tenant)
+func (c *Tool) row(ctx context.Context, in checkArgs, cols []string) (map[string]*string, error) {
+	conn, driver, err := c.Src.Open(ctx, in.Tenant)
 	if err != nil {
 		return nil, err
 	}
@@ -201,8 +194,8 @@ func (c *checker) row(ctx context.Context, in checkArgs, cols []string) (map[str
 	return nil, fmt.Errorf("more than one row in %s matches %v: add a column to where", in.Table, in.Where)
 }
 
-func (c *checker) run(ctx context.Context, in checkArgs) (string, error) {
-	pw := db.Password(c.s.URL)
+func (c *Tool) run(ctx context.Context, in checkArgs) (string, error) {
+	pw := db.Password(c.Src.URL)
 	out, err := c.compare(ctx, in)
 	if err != nil {
 		return "", errors.New(db.Redact(err.Error(), pw))
@@ -211,7 +204,7 @@ func (c *checker) run(ctx context.Context, in checkArgs) (string, error) {
 }
 
 // compare answers: a line, the counts, and a row only for each field that differs, each value cut at 40 characters. A row of the table is never shown whole.
-func (c *checker) compare(ctx context.Context, in checkArgs) (string, error) {
+func (c *Tool) compare(ctx context.Context, in checkArgs) (string, error) {
 	names := []string{in.Table}
 	for k := range in.Where {
 		names = append(names, k)
@@ -227,7 +220,7 @@ func (c *checker) compare(ctx context.Context, in checkArgs) (string, error) {
 			return "", fmt.Errorf("the name %q is not valid: letters, digits and _ only", n)
 		}
 	}
-	caps := c.p.Captures() // one copy for both searches: the buffer may be trimmed between them
+	caps := c.Page.Captures() // one copy for both searches: the buffer may be trimmed between them
 	req, at, err := c.find(caps, in.Sent, 0)
 	if err != nil {
 		return "", err
@@ -346,7 +339,7 @@ func (c *checker) compare(ctx context.Context, in checkArgs) (string, error) {
 					line = append(line, "(absent)")
 					continue
 				}
-				line = append(line, show(strings.NewReplacer("\t", " ", "\n", " ", "\r", " ").Replace(k.text)))
+				line = append(line, input.Show(strings.NewReplacer("\t", " ", "\n", " ", "\r", " ").Replace(k.text)))
 			}
 			rows += strings.Join(line, "\t") + "\n"
 		case !kinds["text"] && !sameText(cells[0].text, cells[1:]):
@@ -383,7 +376,7 @@ func (c *checker) compare(ctx context.Context, in checkArgs) (string, error) {
 	return b.String(), nil
 }
 
-func (c *checker) tool(ctx context.Context, _ *mcp.CallToolRequest, in checkArgs) (*mcp.CallToolResult, any, error) {
+func (c *Tool) Handle(ctx context.Context, _ *mcp.CallToolRequest, in checkArgs) (*mcp.CallToolResult, any, error) {
 	text, err := c.run(ctx, in)
 	if err != nil {
 		text = "Failed: " + strings.TrimRight(err.Error(), ". ") + ". Next: page(payloads) lists what was captured; query shows the columns."

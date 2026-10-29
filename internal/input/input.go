@@ -56,3 +56,11 @@ func (a *Args) UnmarshalJSON(b []byte) error {
 
 // Str is the text argument k, or "" when it is missing or not a text.
 func Str(args map[string]any, k string) string { s, _ := args[k].(string); return s }
+
+// Show is a value for an answer: at most 40 characters, with an ellipsis when it was cut.
+func Show(s string) string {
+	if r := []rune(s); len(r) > 40 {
+		return string(r[:40]) + "…"
+	}
+	return s
+}
