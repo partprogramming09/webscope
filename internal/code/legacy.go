@@ -230,7 +230,7 @@ func (c *Tool) againstNew(module string, legacy map[string]bool, written map[str
 	}
 	out := head + left + "\nonly in new: " + list(onlyN) + "\nboth: " + list(both)
 	if len(both) > 0 {
-		out += "\n" + c.columnGaps(both, written)
+		out += "\n" + c.columnGaps(both, written, endpoints)
 	}
 	return out
 }

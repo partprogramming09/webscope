@@ -2,6 +2,19 @@
 
 One entry per version, newest first. Tool names are `query`, `page`, `check` and `code`. Each change says what it is, what was seen that made it necessary, how it was checked and what was not checked. A change in what a tool prints is listed as a change, because a client may read it.
 
+## 0.5.43 — 2026-10-29
+
+**The columns section of `code legacy` splits what it finds in two groups, so a doubtful column is never reported as a gap.**
+
+What was seen that made it necessary: in 0.5.42 a column counted as named when any backend file had it, so common names (`estado`, `usuario`) hid real gaps; naming only the module's files would swap that for false gaps, since shared code outside the module can write a column too.
+
+Now the section prints `checked N columns on M tables; module folders: …` and two groups: «named nowhere in the backend» (the sure ones) and «named in the backend but not in the module's folders (who writes them?)» (to check by hand). The module folders are the `app/Modules/Area/Module/` of the controllers, services and models that `map_back` finds for the module. A name still counts when a read names it.
+
+How it was checked:
+- The test now has the three cases: a column named in the module, one named only in a shared folder (`usuario`) and one named nowhere (`chk_flete`, with `chk_flete_nuevo` in the module not hiding it). It was written together with the code, not failing first; it fails on 0.5.42 because the headings do not exist. 48 tests pass with `-race`, `go vet` is clean.
+- Real quotes legacy: 267 columns on 18 shared tables, both groups empty, with 20 module folders (the services import models of other modules, so «the module» is wide).
+- Not checked: whether the new code writes a column (a read names it too); the `chk_*` flags, which are PHP variables.
+
 ## 0.5.42 — 2026-10-29
 
 **`code legacy` reads the columns of SQL that PHP builds by concatenation, and says how many it checked.**
