@@ -100,18 +100,36 @@ func (c *Tool) readAll(ctx context.Context, stmt, tenant string) ([]string, [][]
 	return cols, out, rows.Err()
 }
 
-// keyed indexes rows by the key column.
+// keyCols splits key into its column names: one, or several separated by commas.
+func keyCols(key string) []string {
+	var out []string
+	for _, k := range strings.Split(key, ",") {
+		out = append(out, strings.TrimSpace(k))
+	}
+	return out
+}
+
+// keyed indexes rows by the key columns; the key of a row is the values of those columns joined with |.
 func keyed(cols []string, rows [][]string, key string) (map[string][]string, error) {
-	k := slices.Index(cols, key)
-	if k < 0 {
-		return nil, fmt.Errorf("the key %q is not a column of the query (%s)", key, strings.Join(cols, ", "))
+	var at []int
+	for _, k := range keyCols(key) {
+		i := slices.Index(cols, k)
+		if i < 0 {
+			return nil, fmt.Errorf("the key %q is not a column of the query (%s)", k, strings.Join(cols, ", "))
+		}
+		at = append(at, i)
 	}
 	out := make(map[string][]string, len(rows))
 	for _, r := range rows {
-		if _, dup := out[r[k]]; dup {
-			return nil, fmt.Errorf("the key column %s is not unique (the value %q repeats): choose another with key", key, input.Show(r[k]))
+		var parts []string
+		for _, i := range at {
+			parts = append(parts, r[i])
 		}
-		out[r[k]] = r
+		id := strings.Join(parts, "|")
+		if _, dup := out[id]; dup {
+			return nil, fmt.Errorf("the key %s is not unique (the value %q repeats): choose another with key, or several columns separated by commas", key, input.Show(id))
+		}
+		out[id] = r
 	}
 	return out, nil
 }
@@ -208,7 +226,7 @@ func (c *Tool) snapDiff(ctx context.Context, args map[string]any) (string, error
 		}
 		var d []string
 		for i, col := range cols {
-			if col != s.key && len(d) < 6 {
+			if !slices.Contains(keyCols(s.key), col) && len(d) < 6 {
 				d = append(d, col+"="+val(now[k][i]))
 			}
 		}

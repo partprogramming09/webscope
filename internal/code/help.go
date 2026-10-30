@@ -22,7 +22,7 @@ flows {module}: screens, endpoints and tables together, as evidence for user sto
 cases {module}: the test cases of a module as a list; it runs nothing.
 legacy {path, module?}: endpoints, callers and tables of a legacy PHP folder, against the new module's.
 rows {table, a, b, children?, tenant?}: how two rows differ, no values, and the rows that point at each.
-snap {name, sql, key?, tenant?} then snap_diff {name}: what an action changed.
+snap {name, sql, key?, tenant?} then snap_diff {name}: what an action changed; key is a column, or several separated by commas.
 help {topic?}: this list. Topics: migration.
 Migrating a module, parity with a legacy system, user stories or test cases: code(help, {topic: "migration"}) gives the steps and the tool for each.`
 

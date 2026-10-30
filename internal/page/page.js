@@ -7,6 +7,7 @@
   cfg.base = src.slice(0, src.indexOf('/page.js'));
   cfg.t = new URL(src).searchParams.get('t');
   cfg.o = new URL(src).searchParams.get('o'); // the address WEBSCOPE_APP_URL names: the only origin the listener answers
+  window.__wsVer = new URL(src).searchParams.get('v'); // the bootstrap refuses to run over a helper of another version
   if (window.__ws) return;
   const CAP = 3000;
   const SENT = 8000; // chars of each body reported (check compares them): request and answer together stay under the 64 KiB a keepalive fetch may carry, even at 3 bytes a character

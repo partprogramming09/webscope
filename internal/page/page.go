@@ -4,6 +4,7 @@ package page
 import (
 	"context"
 	"crypto/rand"
+	"crypto/sha256"
 	"crypto/subtle"
 	_ "embed"
 	"encoding/hex"
@@ -27,6 +28,9 @@ import (
 
 //go:embed page.js
 var pageJS string
+
+// pageVer identifies the embedded helper: the first 8 hex digits of its hash.
+var pageVer = fmt.Sprintf("%x", sha256.Sum256([]byte(pageJS)))[:8]
 
 const (
 	maxCaptureBody = 256 << 10 // a capture bigger than this is refused (413)
@@ -142,7 +146,7 @@ func (p *Tool) answer(in input.Args) (string, error) {
 		if err != nil {
 			return "", err
 		}
-		return fmt.Sprintf(`(()=>{var s=document.createElement("script");s.src=%q;document.head.appendChild(s);return "loading the webscope helper; next: page(state)"})()`, base+"/page.js?t="+p.token+"&o="+url.QueryEscape(strings.Join(p.origins(), ","))), nil
+		return fmt.Sprintf(`(()=>{if(window.__ws&&window.__wsVer!==%q)return "Failed: an older helper is in this page: reload the page, then page(load)";var s=document.createElement("script");s.src=%q;document.head.appendChild(s);return "loading the webscope helper; next: page(state)"})()`, pageVer, base+"/page.js?t="+p.token+"&v="+pageVer+"&o="+url.QueryEscape(strings.Join(p.origins(), ","))), nil
 	}
 	return snippet(in.Action, in.Args)
 }

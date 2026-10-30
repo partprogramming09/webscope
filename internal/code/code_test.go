@@ -322,6 +322,28 @@ func TestSnapRefusesWhatItCannotCompareNorKeepSafely(t *testing.T) {
 	}
 }
 
+func TestSnapTakesAKeyOfSeveralColumns(t *testing.T) {
+	c := codeSetup(t)
+	sel := "SELECT id, 'a' AS part, estado FROM quotes UNION ALL SELECT id, 'b', estado FROM quotes"
+	if _, err := code(t, c, "snap", map[string]any{"name": "one", "sql": sel, "key": "id"}); err == nil || !strings.Contains(err.Error(), "not unique") {
+		t.Fatalf("id alone repeats: %v", err)
+	}
+	out, err := code(t, c, "snap", map[string]any{"name": "two", "sql": sel, "key": "id, part"})
+	if err != nil || !strings.Contains(out, "key id, part") {
+		t.Fatalf("%q, %v", out, err)
+	}
+	if _, err := writeDB(t, c).Exec("UPDATE quotes SET estado = 'Z' WHERE id = '1'"); err != nil {
+		t.Fatal(err)
+	}
+	out, err = code(t, c, "snap_diff", map[string]any{"name": "two"})
+	if err != nil || !strings.Contains(out, "changed 1|a: estado A → Z") || !strings.Contains(out, "changed 1|b: estado A → Z") {
+		t.Errorf("%q, %v", out, err)
+	}
+	if _, err := code(t, c, "snap", map[string]any{"name": "bad", "sql": sel, "key": "id,nope"}); err == nil || !strings.Contains(err.Error(), "nope") {
+		t.Errorf("a column of the key that does not exist is named: %v", err)
+	}
+}
+
 func TestSnapRefusesAResultTooBigToKeepAndCutsAnAnswerThatIsTooBig(t *testing.T) {
 	c := codeSetup(t)
 	conn := writeDB(t, c)

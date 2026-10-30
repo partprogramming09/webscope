@@ -132,8 +132,25 @@ func TestLoadIsOneShortLineWithPortAndToken(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if strings.Contains(out, "\n") || len(out) > 400 || !strings.Contains(out, "http://127.0.0.1:") || !strings.Contains(out, "/page.js?t="+p.token) {
+	if strings.Contains(out, "\n") || len(out) > 480 || !strings.Contains(out, "http://127.0.0.1:") || !strings.Contains(out, "/page.js?t="+p.token) {
 		t.Fatalf("bootstrap = %q", out)
+	}
+}
+
+func TestLoadRefusesToRunOverAnOlderHelper(t *testing.T) {
+	p := testPage(t, appOrigin)
+	out, err := askPage(t, p, "load", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out, "window.__ws&&window.__wsVer!==\""+pageVer+"\"") || !strings.Contains(out, "reload the page") {
+		t.Errorf("the bootstrap must stop when a helper of another version is in the page: %q", out)
+	}
+	if !strings.Contains(pageJS, "window.__wsVer") || !strings.Contains(out, "&v="+pageVer) {
+		t.Errorf("page.js must record its version and the bootstrap must pass it: %q", out)
+	}
+	if len(pageVer) != 8 {
+		t.Errorf("version %q", pageVer)
 	}
 }
 

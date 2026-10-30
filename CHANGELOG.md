@@ -2,6 +2,19 @@
 
 One entry per version, newest first. Tool names are `query`, `page`, `check` and `code`. Each change says what it is, what was seen that made it necessary, how it was checked and what was not checked. A change in what a tool prints is listed as a change, because a client may read it.
 
+## 0.5.52 — 2026-10-30
+
+**`code snap` takes a key of several columns, and `page load` says when the page still holds the helper of an older build.**
+
+What was seen that made it necessary: in the acme sessions of 2026-10-30, 7 `snap` calls failed because the row is identified by several columns (`COTIZACION_ID,CAMPANA_ID,CLIENTE_ID`) and `key` took one. And while checking 0.5.51 on the real screens, `page(load)` run again after a rebuild did nothing in a tab that already had the helper (it installs once), so the tab kept answering with the old code and the new behaviour could not be told from the old one until the page was reloaded.
+
+Now `key` is one column or several separated by commas; the key of a row is their values joined with `|` («changed 1|a: …»), a column of the key that does not exist is named, and a repeated key says to use several columns. The helper carries a version (the first 8 hex digits of the hash of `page.js`); the line that `page(load)` returns stops with «Failed: an older helper is in this page: reload the page, then page(load)» when the page holds a helper of another version, and loads as before otherwise. The line is longer (about 110 bytes).
+
+How it was checked:
+- Tests written first and failing: a key `id` that repeats fails, `id, part` works, the diff names rows as `1|a`, a missing column of the key is named; the bootstrap checks the version, passes `v=` and `page.js` records it. The suite passes with `-race`; `go vet` is clean.
+- Run after `/mcp` against acme: `snap` with `key: "id_tarifario,id_servicio,id_variacion"` on `app_tipo_tarifario_servicios` (tenant demo) saved 103 rows and `snap_diff` said no changes. In a real tab the helper recorded its version, and with another version set the bootstrap answered «Failed: an older helper is in this page…» (a helper of an older build was simulated by changing the recorded version; no real older helper was left in a tab).
+- Not checked: `snap_diff` after a real change with a composite key outside the test database. Not done: running `load` and an action in one step, because the helper is lost at every navigation and the call has to reach the browser through `javascript_tool` anyway.
+
 ## 0.5.51 — 2026-10-30
 
 **`page shape` names a field by what the screen shows, leaves out the options of a list and the pagination, and `parity` ignores accents and no longer merges «Flete 1» with «Flete 2».**
