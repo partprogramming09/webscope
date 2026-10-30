@@ -984,6 +984,30 @@ func TestParityTreatsDataRowsAsOneNameAndSkipsDigitLabels(t *testing.T) {
 	}
 }
 
+func TestParityIgnoresAccentsAndKeepsNumberedFieldsApart(t *testing.T) {
+	p := testPage(t, appOrigin)
+	if _, err := askPage(t, p, "load", nil); err != nil {
+		t.Fatal(err)
+	}
+	old := `{"fields":[{"l":"Pais Origen","t":"text"},{"l":"Flete 1","t":"text"},{"l":"Flete 2","t":"text"},{"l":"Ruta 1004","t":"text"}],"buttons":[],"columns":["LISTA PRECIOS"],"tabs":[],"headings":[]}`
+	nu := `{"fields":[{"l":"País Origen","t":"text"},{"l":"Flete 1","t":"text"},{"l":"Ruta 2077","t":"text"}],"buttons":[],"columns":["Lista Precios"],"tabs":[],"headings":[]}`
+	for name, body := range map[string]string{"old": old, "new": nu} {
+		postShape(t, p.base, p.token, name, body)
+	}
+	out, err := askPage(t, p, "parity", map[string]any{"a": "old", "b": "new"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out, "field Flete 2") {
+		t.Errorf("a missing «Flete 2» must show even when «Flete 1» exists:\n%s", out)
+	}
+	for _, not := range []string{"Pais", "País", "LISTA", "Lista", "Ruta"} {
+		if strings.Contains(out, not) {
+			t.Errorf("%q is the same name on both sides (accents, case, long row ids):\n%s", not, out)
+		}
+	}
+}
+
 func TestParityKindsLimitsWhatIsCompared(t *testing.T) {
 	p := testPage(t, appOrigin)
 	if _, err := askPage(t, p, "load", nil); err != nil {

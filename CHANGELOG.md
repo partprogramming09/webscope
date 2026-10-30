@@ -2,6 +2,19 @@
 
 One entry per version, newest first. Tool names are `query`, `page`, `check` and `code`. Each change says what it is, what was seen that made it necessary, how it was checked and what was not checked. A change in what a tool prints is listed as a change, because a client may read it.
 
+## 0.5.51 — 2026-10-30
+
+**`page shape` names a field by what the screen shows, leaves out the options of a list and the pagination, and `parity` ignores accents and no longer merges «Flete 1» with «Flete 2».**
+
+What was seen that made it necessary: in the real Tarifario de ventas (legacy against new) the legacy listed fields by their technical name (`lstPaisOrigen_tar_BC`, `cnt_txtVigencia_tar_BC`) next to the labelled ones, nine options of a select2 dropdown as if they were buttons, and the new screen listed «Primera página», «Página siguiente» and a Vuetify field named «Open». 0.5.50 would also have merged «Flete 1» and «Flete 2» into one name.
+
+Now, in `page.js`, a field whose label is only its name or id takes the first line of the text around it when that is 40 characters or less; buttons inside a list of options (`.select2-results`, `[role=listbox]`, `[role=option]`, `.v-list`) or a pagination (`.v-pagination`, `.v-data-table-footer`, `[role=navigation]`) are left out; a field named «Open» is left out. In `parity`, names are compared without accents («Pais» is «País»), and only an id at the end counts as a data row: three digits or more («Ruta 1004»), or any digits after `-`, `_` or `#` («V-2»). «Flete 1» and «Flete 2» stay two names.
+
+How it was checked:
+- Test written first and failing: accents and case match, a long row id is one name, and a missing «Flete 2» still shows. 153 tests pass with `-race`; `go vet` is clean.
+- Run against the real Tarifario de ventas (IMPO AIR) after `/mcp`: the legacy went from 21 to 12 buttons (the nine options of the select are gone) and the technical names became «Pais Origen ×2», «Ciudad Origen ×2» and so on; `Tarifario` and `Proveedor` still pair with the new screen (`changes` lists them) and `Open` is gone. A first run of this version removed every field with the aria-label «Open», including `Tarifario` and `Proveedor`; the real screens showed it and the filter now looks at the field's own label.
+- Not checked: the fields of the new form are «only in legacy» because the dialog was closed in that capture, which is a difference of state and not of screens. The column «LISTA PRECIOS» against «Lista de precios» stays unmatched (the words differ, not the accents). The text around a field is a guess: a layout where the first line of the parent is not its label gives a wrong name. `page.js` has no automated test (it needs Chrome).
+
 ## 0.5.50 — 2026-10-30
 
 **`page parity` treats data rows as one name, groups repeated changes and skips labels made only of digits.**

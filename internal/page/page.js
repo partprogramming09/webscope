@@ -417,7 +417,7 @@
     return out.length ? out.join('\n') : 'No findings: no unrendered text, covered control, unlabeled field, repeated label or unnamed button.';
   };
 
-  // shape keeps what the screen offers (no values) in the listener, under a name, for parity; the side menu and the top bar are left out
+  // shape keeps what the screen offers (no values) in the listener, under a name, for parity; the side menu, the top bar, the options of a list and the pagination are left out
   const shape = async a => {
     const name = String(a.name || '').trim();
     if (!name) return fail('shape needs a name, such as legacy or modern. Next: page(shape, {name: "legacy"}).');
@@ -428,9 +428,13 @@
     }
     const q = sel => [...root.querySelectorAll(sel)].filter(vis);
     const uniq = l => [...new Set(l.filter(Boolean))];
+    // a field named only by its name or id gets the first line of the text around it when that is short
+    const nearText = e => { const t = norm(((e.parentElement && e.parentElement.innerText) || '').split('\n')[0]); return t.length <= 40 ? t : ''; };
+    const visibleLabel = e => { const l = labelOf(e); return l && (l === e.name || l === e.id) ? nearText(e) || l : l; };
+    const inList = e => e.closest('.select2-results,[role=listbox],[role=option],.v-list,.v-pagination,.v-data-table-footer,[role=navigation]');
     const s = {
-      fields: q(FIELDS).map(e => ({ l: labelOf(e), t: e.isContentEditable ? 'editor' : e.type || e.tagName.toLowerCase() })).filter(f => f.l),
-      buttons: uniq(q(CLICKABLE).filter(e => rank(e) < 2 && !e.matches('[role=tab]')).map(textOf)),
+      fields: q(FIELDS).filter(e => labelOf(e) !== 'Open').map(e => ({ l: visibleLabel(e), t: e.isContentEditable ? 'editor' : e.type || e.tagName.toLowerCase() })).filter(f => f.l),
+      buttons: uniq(q(CLICKABLE).filter(e => rank(e) < 2 && !e.matches('[role=tab]') && !inList(e)).map(textOf)),
       columns: uniq(q('th').map(e => norm(e.innerText))),
       tabs: uniq(q('[role=tab]').map(textOf)),
       headings: uniq(q('h1,h2,h3').map(e => norm(e.innerText))),

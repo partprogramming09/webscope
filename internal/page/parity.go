@@ -90,12 +90,26 @@ func diff(a, b []string) (onlyA, onlyB []string) {
 }
 
 var onlyDigits = regexp.MustCompile(`^\d+$`)
-var trailingDigits = regexp.MustCompile(`\d+$`)
 
-// normName is a name as compared: lower case, spaces folded, no [] at the end, and the digits at the end as #, so rows of data (V-1, V-2) are one name.
+// rowID is the end of a name that looks like the id of a data row: three digits or more, or any digits after - _ or #.
+var rowID = regexp.MustCompile(`(\d{3,}|[-_#]\d+)$`)
+
+var unaccent = strings.NewReplacer("á", "a", "à", "a", "ä", "a", "â", "a", "é", "e", "è", "e", "ë", "e", "ê", "e", "í", "i", "ì", "i", "ï", "i", "î", "i", "ó", "o", "ò", "o", "ö", "o", "ô", "o", "ú", "u", "ù", "u", "ü", "u", "û", "u", "ñ", "n")
+
+// hashRowID shows the id of a data row at the end of s as #, keeping its separator.
+func hashRowID(s string) string {
+	return rowID.ReplaceAllStringFunc(s, func(m string) string {
+		if m[0] >= '0' && m[0] <= '9' {
+			return "#"
+		}
+		return m[:1] + "#"
+	})
+}
+
+// normName is a name as compared: lower case, no accents, spaces folded, no [] at the end, and the id of a data row at the end as #, so rows of data (V-1, V-2) are one name and «Flete 1» and «Flete 2» are not.
 func normName(s string) string {
-	s = strings.TrimSuffix(strings.ToLower(strings.Join(strings.Fields(s), " ")), "[]")
-	return trailingDigits.ReplaceAllString(s, "#")
+	s = strings.TrimSuffix(unaccent.Replace(strings.ToLower(strings.Join(strings.Fields(s), " "))), "[]")
+	return hashRowID(s)
 }
 
 // count lists each line once, with ×N when it repeats.
@@ -120,7 +134,7 @@ func count(lines []string) []string {
 func collapse(kind string, names []string) []string {
 	var lines []string
 	for _, s := range names {
-		lines = append(lines, kind+" "+clip(oneLine(trailingDigits.ReplaceAllString(s, "#")), 60))
+		lines = append(lines, kind+" "+clip(oneLine(hashRowID(s)), 60))
 	}
 	return count(lines)
 }
