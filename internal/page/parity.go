@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"regexp"
 	"slices"
 	"strings"
 
@@ -64,11 +65,9 @@ func (p *Tool) shape(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
-// diff compares two lists of names ignoring case and spaces: what only a has, and what only b has.
+// diff compares two lists of names (see normName): what only a has, and what only b has.
 func diff(a, b []string) (onlyA, onlyB []string) {
-	key := func(s string) string {
-		return strings.TrimSuffix(strings.ToLower(strings.Join(strings.Fields(s), " ")), "[]")
-	}
+	key := normName
 	in := func(list []string) map[string]bool {
 		m := map[string]bool{}
 		for _, s := range list {
@@ -90,24 +89,40 @@ func diff(a, b []string) (onlyA, onlyB []string) {
 	return
 }
 
-// collapse lists each name once, with ×N when it repeats.
-func collapse(kind string, names []string) []string {
+var onlyDigits = regexp.MustCompile(`^\d+$`)
+var trailingDigits = regexp.MustCompile(`\d+$`)
+
+// normName is a name as compared: lower case, spaces folded, no [] at the end, and the digits at the end as #, so rows of data (V-1, V-2) are one name.
+func normName(s string) string {
+	s = strings.TrimSuffix(strings.ToLower(strings.Join(strings.Fields(s), " ")), "[]")
+	return trailingDigits.ReplaceAllString(s, "#")
+}
+
+// count lists each line once, with ×N when it repeats.
+func count(lines []string) []string {
 	var order []string
 	n := map[string]int{}
-	for _, s := range names {
-		s = clip(oneLine(s), 60)
+	for _, s := range lines {
 		if n[s] == 0 {
 			order = append(order, s)
 		}
 		n[s]++
 	}
 	for i, s := range order {
-		order[i] = kind + " " + s
 		if n[s] > 1 {
 			order[i] += fmt.Sprintf(" ×%d", n[s])
 		}
 	}
 	return order
+}
+
+// collapse is the names of one kind as lines, a repeated name once with ×N; digits at the end show as #.
+func collapse(kind string, names []string) []string {
+	var lines []string
+	for _, s := range names {
+		lines = append(lines, kind+" "+clip(oneLine(trailingDigits.ReplaceAllString(s, "#")), 60))
+	}
+	return count(lines)
 }
 
 // parity shows only what a screen has and the other lacks (fields, buttons, columns, tabs) and the fields that kept their label but changed kind.
@@ -134,7 +149,9 @@ func (p *Tool) parity(args map[string]any) (string, error) {
 	labels := func(s Shape) []string {
 		var l []string
 		for _, f := range s.Fields {
-			l = append(l, f.L)
+			if !onlyDigits.MatchString(strings.TrimSpace(f.L)) {
+				l = append(l, f.L)
+			}
 		}
 		return l
 	}
@@ -175,6 +192,7 @@ func (p *Tool) parity(args map[string]any) (string, error) {
 			changes = append(changes, fmt.Sprintf("field %s: %s → %s", clip(oneLine(f.L), 60), clip(ka[key], 20), clip(t, 20)))
 		}
 	}
+	changes = count(changes)
 	if len(only[0])+len(only[1])+len(changes) == 0 {
 		return fmt.Sprintf("%s and %s: no differences in fields, buttons, columns, tabs or headings (names only; a hint, not proof the screens behave the same)", clip(an, 40), clip(bn, 40)), nil
 	}

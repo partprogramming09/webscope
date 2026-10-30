@@ -2,6 +2,19 @@
 
 One entry per version, newest first. Tool names are `query`, `page`, `check` and `code`. Each change says what it is, what was seen that made it necessary, how it was checked and what was not checked. A change in what a tool prints is listed as a change, because a client may read it.
 
+## 0.5.50 — 2026-10-30
+
+**`page parity` treats data rows as one name, groups repeated changes and skips labels made only of digits.**
+
+What was seen that made it necessary: run against the real Tarifario de ventas (legacy against new, IMPO AIR), the new screen listed 10 fields «Seleccionar la ruta V-N» and 10 buttons «V-N», one per table row, which are data and not structure; `Proveedor: select-one → text` came out twice; the legacy listed the fields «1», «2», «3», «4» (unlabelled inputs).
+
+Now the digits at the end of a name count as `#` when names are matched and shown, so «V-2» on one side and «V-1» on the other are the same name, and ten of them are one line «V-# ×10». A change of kind that repeats is one line with ×N. A field whose label is only digits is left out. Without those cases the answer is the same as in 0.5.49.
+
+How it was checked:
+- Test written first and failing: three buttons V-1..V-3 against V-7 are one name on both sides; digit labels are skipped; a repeated change is one line with ×2. 153 tests pass with `-race`; `go vet` is clean.
+- Run against the real Tarifario de ventas (IMPO AIR, legacy and new) after `/mcp`, with `kinds: "field,column"`: «only in new» went from 24 lines to 6 (`Seleccionar la ruta V-# ×10` is one line), `Proveedor: select-one → text ×2` is one line, and the fields «1» to «4» are gone.
+- Limit: «Flete 1» and «Flete 2» are also one name, so a missing «Flete 2» is hidden when «Flete 1» exists. Matching by the visible label of a technical name (`lstPaisOrigen_tar_BC`) is still not done.
+
 ## 0.5.49 — 2026-10-30
 
 **Failures of `code` say what to do: `legacy` lists the folders that exist, a missing table says to pass `tenant`, and a call with `help:true` or `args` as JSON text is read.**

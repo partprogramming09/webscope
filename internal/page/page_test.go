@@ -962,6 +962,28 @@ func TestParityCollapsesRepeatedNamesIntoACount(t *testing.T) {
 	}
 }
 
+func TestParityTreatsDataRowsAsOneNameAndSkipsDigitLabels(t *testing.T) {
+	p := testPage(t, appOrigin)
+	if _, err := askPage(t, p, "load", nil); err != nil {
+		t.Fatal(err)
+	}
+	old := `{"fields":[{"l":"Proveedor","t":"select-one"},{"l":"Proveedor","t":"select-one"},{"l":"1","t":"text"},{"l":"2","t":"text"}],"buttons":["V-1","V-2","V-3"],"columns":[],"tabs":[],"headings":[]}`
+	nu := `{"fields":[{"l":"Proveedor","t":"text"}],"buttons":["V-7"],"columns":[],"tabs":[],"headings":[]}`
+	for name, body := range map[string]string{"old": old, "new": nu} {
+		postShape(t, p.base, p.token, name, body)
+	}
+	out, err := askPage(t, p, "parity", map[string]any{"a": "old", "b": "new"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(out, "V-") || strings.Contains(out, "field 1") || strings.Contains(out, "field 2") {
+		t.Errorf("V-1..V-7 are one name present on both sides, and digit labels are skipped:\n%s", out)
+	}
+	if !strings.Contains(out, "field Proveedor: select-one → text ×2") {
+		t.Errorf("a repeated change must be one line with ×2:\n%s", out)
+	}
+}
+
 func TestParityKindsLimitsWhatIsCompared(t *testing.T) {
 	p := testPage(t, appOrigin)
 	if _, err := askPage(t, p, "load", nil); err != nil {
