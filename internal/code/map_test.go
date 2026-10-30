@@ -6,6 +6,8 @@ import (
 	"github.com/partprogramming09/webscope/internal/input"
 	"os"
 	"path/filepath"
+	"regexp"
+	"strconv"
 	"strings"
 	"testing"
 )
@@ -333,7 +335,7 @@ func TestFlowsKeepsRoomForTheEndpointsWhenTheScreensAreLong(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(out, "## endpoints\napi") || !strings.Contains(out, "more lines of screens not shown") {
+	if !strings.Contains(out, "## endpoints\nmodel") || !strings.Contains(out, "\napi GET quotes -> QuoteController@index") || !strings.Contains(out, "more lines of screens not shown") {
 		t.Errorf("long screens must be cut and the endpoints must still be there:\n%.300s", out)
 	}
 }
@@ -356,5 +358,49 @@ func TestCasesGroupTheRequiredFieldsOfAScreenAndKeepBothPartsOfAPermission(t *te
 	}
 	if strings.Count(out, "required empty") != 2 { // the legend and one row
 		t.Errorf("the required fields of one screen are one row:\n%s", out)
+	}
+}
+
+func manyEndpoints(t *testing.T, method string) *Tool {
+	t.Helper()
+	c := mapSetup(t)
+	var b strings.Builder
+	b.WriteString("<?php\nuse App\\Modules\\Crm\\Quotes\\Controllers\\QuoteController;\n")
+	for i := 0; i < 400; i++ {
+		fmt.Fprintf(&b, "Route::%s('quotes/extra-endpoint-number-%03d', [QuoteController::class, 'index']);\n", method, i)
+	}
+	if err := os.WriteFile(filepath.Join(c.Backend, "app/Modules/Crm/Quotes/Routes/many.php"), []byte(b.String()), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	return c
+}
+
+func TestFlowsKeepsTheTablesAndShortensTheEndpointLinesWhenThereAreManyEndpoints(t *testing.T) {
+	out, err := code(t, manyEndpoints(t, "get"), "flows", map[string]any{"module": "crm/quotes"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(out) > input.MaxAnswer+200 || !strings.Contains(out, "-> table app_cotizaciones") {
+		t.Errorf("%d bytes: the table must survive a long endpoint list", len(out))
+	}
+	if strings.Contains(out, "app/Modules/Crm/Quotes/Controllers/QuoteController.php") && strings.Contains(out, "api GET quotes -> QuoteController@index  app/") {
+		t.Errorf("an endpoint line should carry the controller file name and line, not its whole path:\n%.600s", out)
+	}
+	if !strings.Contains(out, "api GET quotes -> QuoteController@index  QuoteController.php:6") {
+		t.Errorf("want the short form `QuoteController.php:6`:\n%s", out)
+	}
+}
+
+func TestCasesListsAnHttpErrorForEveryWriteEndpointEvenWhenThereAreHundreds(t *testing.T) {
+	out, err := code(t, manyEndpoints(t, "post"), "cases", map[string]any{"module": "crm/quotes"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	m := regexp.MustCompile(`\((\d+) cases, \d+ shown: ask for a narrower module\)`).FindStringSubmatch(out)
+	if m == nil {
+		t.Fatalf("want the real count and the shown count:\n...%s", out[max(0, len(out)-200):])
+	}
+	if n, _ := strconv.Atoi(m[1]); n < 400 {
+		t.Errorf("%d cases: every one of the 400 write endpoints needs its case", n)
 	}
 }

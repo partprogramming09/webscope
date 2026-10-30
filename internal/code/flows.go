@@ -3,6 +3,7 @@ package code
 import (
 	"errors"
 	"fmt"
+	"regexp"
 	"strings"
 
 	"github.com/partprogramming09/webscope/internal/input"
@@ -23,7 +24,7 @@ func (c *Tool) flowParts(args map[string]any) (screens, endpoints string, found 
 	if !strings.HasPrefix(head, "Frontend of") {
 		return all, "", false, nil
 	}
-	back, err := c.mapBack(map[string]any{"query": module})
+	back, err := c.mapBack(map[string]any{"query": module, "uncut": true})
 	if err != nil {
 		return viewsFirst(body), "not available: " + err.Error(), true, nil
 	}
@@ -60,7 +61,7 @@ func (c *Tool) flows(args map[string]any) (string, error) {
 	head := fmt.Sprintf("Flows of «%s»: evidence, not user stories. Write the stories from it and ask a person to confirm them: the code may describe a mistake as a feature.", echo(module))
 	room := input.MaxAnswer - len(head) - 40
 	screens = cutLines(screens, room*5/9, "screens")
-	endpoints = cutLines(endpoints, room-len(screens), "endpoints")
+	endpoints = cutLines(tablesFirst(endpoints), room-len(screens), "endpoints")
 	return head + "\n## screens\n" + screens + "\n## endpoints\n" + endpoints, nil
 }
 
@@ -93,4 +94,22 @@ func viewsFirst(screens string) string {
 	}
 	flush()
 	return strings.Join(append(append(head, views...), rest...), "\n")
+}
+
+var controllerPath = regexp.MustCompile(`  \S+/(\w+\.php:\d+)(?:  <- .*)?$`)
+
+// tablesFirst puts the models with their table before the endpoints, and shortens each endpoint line to the controller file and line, so a cut loses endpoints last-first and never the tables.
+func tablesFirst(endpoints string) string {
+	var models, apis, rest []string
+	for _, l := range strings.Split(endpoints, "\n") {
+		switch {
+		case strings.HasPrefix(l, "model "):
+			models = append(models, l)
+		case apiLine.MatchString(l):
+			apis = append(apis, controllerPath.ReplaceAllString(l, "  $1"))
+		default:
+			rest = append(rest, l)
+		}
+	}
+	return strings.Join(append(append(models, apis...), rest...), "\n")
 }

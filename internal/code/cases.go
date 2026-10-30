@@ -6,9 +6,9 @@ import (
 	"path"
 	"regexp"
 	"strings"
-)
 
-const maxCases = 150
+	"github.com/partprogramming09/webscope/internal/input"
+)
 
 var (
 	actionLine = regexp.MustCompile(`^action \d+ (.*?)(?: if (.*?))?(?: «(.*)»)?$`)
@@ -98,13 +98,19 @@ func casesFrom(module, screens, endpoints string) string {
 	}
 	var b strings.Builder
 	fmt.Fprintf(&b, "Cases of «%s»: a list to run, not a result. Run each with page; writes only with the user's approval, on ZZ_ rows.\n%s\nid\tflow\tcase\trun with", echo(module), casesLegend)
-	for i, r := range rows[:min(len(rows), maxCases)] {
-		fmt.Fprintf(&b, "\nC%d\t%s\t%s\t%s", i+1, r[0], r[1], r[2])
+	shown := 0
+	for i, r := range rows {
+		line := fmt.Sprintf("\nC%d\t%s\t%s\t%s", i+1, r[0], r[1], r[2])
+		if b.Len()+len(line) > input.MaxAnswer-60 { // room for the count line
+			break
+		}
+		b.WriteString(line)
+		shown++
 	}
 	fmt.Fprintf(&b, "\n(%d cases", len(rows))
-	if len(rows) > maxCases {
-		fmt.Fprintf(&b, ", %d shown", maxCases)
+	if shown < len(rows) {
+		fmt.Fprintf(&b, ", %d shown: ask for a narrower module", shown)
 	}
 	b.WriteString(")")
-	return capOut(b.String())
+	return b.String()
 }

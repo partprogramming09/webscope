@@ -2,6 +2,24 @@
 
 One entry per version, newest first. Tool names are `query`, `page`, `check` and `code`. Each change says what it is, what was seen that made it necessary, how it was checked and what was not checked. A change in what a tool prints is listed as a change, because a client may read it.
 
+## 0.5.33 — 2026-10-29
+
+**`flows` and `cases` use every endpoint, and `flows` keeps the tables. Second real run on `crm/quotes`.**
+
+What the second run showed (after the 0.5.32 fixes, which it confirmed: views first, statuses on top, `INS COTIZA`, required fields grouped, 67 cases with no cut):
+- `cases` had only 10 `http error` rows for a module with about 60 endpoints. `map_back` cuts its own endpoint list to fit 8000 bytes («… and 49 more endpoints not shown») and `cases` read that shortened list. The `empty` row of every list endpoint and the error row of every write endpoint after the tenth were never produced.
+- `flows` lost the `model … -> table …` lines (47 lines cut): they come after the endpoints, and the cut takes the end.
+
+Now:
+- `map_back` takes an internal `uncut` argument and `flows` and `cases` use it, so they see all the endpoints and share the room themselves. What `map_back` prints for a person is the same.
+- `flows` puts the models with their table first, then the endpoints, then the rest, so a cut loses the last endpoints and not the tables. Each endpoint line is shortened to `QuoteController.php:234` instead of the whole path and the front file it is called from (about 40 bytes less per line); `map_back` keeps the long form.
+- `cases` stops adding rows when the next one would not fit and says `(N cases, M shown: ask for a narrower module)` with the real N. Before it counted rows (150) and the 8000-byte cut came first, so the count line could be lost.
+
+How it was checked:
+- Two tests written first, against 400 extra endpoints on top of the fixture: `flows` keeps `-> table app_cotizaciones` and the short controller form (it failed at 8003 bytes with no table); `cases` reports at least 400 cases for 400 write endpoints (it stopped at 49 and lost the count). The test of long screens now expects the table line first under `## endpoints`.
+- `go test -race ./...` passes (126 tests).
+- Not checked: the real module with this version (the registered server has to be reconnected with `/mcp`); how many cases a module with hundreds of endpoints produces before the 8000-byte limit stops it (the rest is reported by count only).
+
 ## 0.5.32 — 2026-10-29
 
 **`flows` and `cases` after the first run on the real quotes module (`crm/quotes`: 25 front files, 53 API calls, 60 endpoints).** Four defects the fixture tests could not show.
