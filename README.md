@@ -6,7 +6,7 @@ An MCP server that lets an AI agent test a web application and understand its da
 
 When you ask an agent to «test the quotes screen», the expensive part is not thinking: it is reading. Whole pages of HTML, hundreds of table rows, the output of a `grep` over a backend. webscope answers with short, capped, structured text instead, so the agent can do the whole round (look at the screen, fill it, save, see what was stored, see what else changed) in a handful of calls.
 
-It was built against a real Laravel + Vue application and its older PHP version, and works on any web app and any MySQL or SQLite database. Two actions (`map` and `map_back`) are tied to Laravel routes and Vue modules; the rest is generic.
+It was built against a real Laravel + Vue application and its older PHP version, and works on any web app and any MySQL or SQLite database. Some pieces are tied to a stack: `map`, `map_back`, `flows` and `cases` to Laravel routes and Vue modules, and `legacy` to legacy PHP with the SQL inside the file and jQuery calls; the rest is generic.
 
 ## What you can ask your agent
 
@@ -31,9 +31,9 @@ With the server registered, ask in plain words:
 | Tool | In one line | It needs |
 |---|---|---|
 | `query` | One read-only SQL statement; the answer is a short table. | `WEBSCOPE_DB_URL` |
-| `page` | Read, fill and click a screen in your Chrome, see the requests it sent, force an HTTP error, audit it. | Claude in Chrome and `WEBSCOPE_APP_URL` |
+| `page` | Read, fill and click a screen in your Chrome, see the requests it sent, force an HTTP error, audit it, and compare an old screen and a new one. | Claude in Chrome and `WEBSCOPE_APP_URL` |
 | `check` | For one saved row: what the screen sent, what the database stored, what the screen read back. Only the differences. | `page` and the database |
-| `code` | The sheet of a table, who uses a column, the routes and calls of a screen, and what an action changed. | `WEBSCOPE_BACKEND`, `WEBSCOPE_FRONT` |
+| `code` | The sheet of a table, who uses a column, the routes and calls of a screen, what an action changed, the flows and test cases of a module, and what a legacy PHP module calls and writes. | `WEBSCOPE_BACKEND`, `WEBSCOPE_FRONT`, `WEBSCOPE_LEGACY` |
 
 A typical session, in the order that works best (`docs/usage.md` has the contract of each tool):
 
@@ -83,6 +83,22 @@ After changing a variable, or after rebuilding, reconnect with `/mcp`: the conne
 - **A review of a screen without a reference.** `page audit` lists unrendered text, covered controls, unlabeled fields, repeated labels and unnamed buttons; it is a hint, not a verdict.
 - **The `screen-audit` skill** (`.claude/skills/screen-audit/SKILL.md`): how to review a screen, how to look for fields that are missing or should not be there, and how to compare an old and a new screen with these tools.
 - **A list of what has been found.** `docs/patterns.md` records the findings met while testing screens, each with how to recognize it, what to do and how far it was verified. `docs/module-testing.md` is the procedure for testing a whole module.
+
+## Migrating a module from a legacy system, start to end
+
+The case this was extended for: a module that exists in an old system and was rebuilt, and you want to know what the new one lacks, adds or changes. It takes two origins (`WEBSCOPE_APP_URL=http://old:8088,http://new:5173`), the legacy folder (`WEBSCOPE_LEGACY`) and two tabs of Chrome with the session started. Everything below reads; the only writes are one test row per system through the screen, prefixed `ZZ_`, and only with your approval.
+
+| Step | Ask the agent | What it runs | What comes back |
+|---|---|---|---|
+| 1. What the module does | «Give me the flows and user stories of `crm/quotes`» | `code flows`, skill `module-flows` | Screens and actions with their conditions and permissions, then endpoints, controllers and tables, as evidence; the stories are written from it and you confirm them |
+| 2. What the old code touches | «What does the legacy quotes module call and write, and which tables does the new one not have?» | `code legacy {path, module}` | Each legacy endpoint with its caller and tables; the tables only one side has, split into «named elsewhere in the backend» and «not named» |
+| 3. Screens | «Compare the quotes list of the old and the new screen» | `page shape {name, selector}` on each, `page parity {a, b}` | Only the fields, buttons and columns one side has |
+| 4. Requests | «Does the new search send and receive what the old one did?» | the same action on both, `page parity {req_a, req_b, map}` | Status and the field names only one side sends or gets, never values |
+| 5. What to test | «List the test cases for this module» | `code cases` | A table: happy path, permission, required field, status, HTTP error and empty list, with what runs each |
+| 6. A write on both | «Create a `ZZ_` quote on each system and compare what was saved» | `code snap`, `page fill` and `click`, `code snap_diff`, `query` | The rows each system wrote, their differences, and the child rows by count |
+| 7. Unit tests | «Plan the unit tests that pin the old behaviour» | skill `parity-tests`, agent `tester` | A plan by layer, with which tests must fail today |
+
+The whole chain is the `migration-parity` skill. A real run on a quotes module found, among other things: 21 of 22 tables «only in the legacy» were in fact used by the new backend, one database view the old code reads does not exist, the old screen was saving a number the new one had already taken (`Duplicate entry … 1062`), and the two systems wrote the same child rows for a new quote. `CHANGELOG.md` has the detail of each run and what was not checked.
 
 ## Docs
 
