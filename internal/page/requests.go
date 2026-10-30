@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/url"
+	"regexp"
 	"sort"
 	"strings"
 )
@@ -119,10 +120,18 @@ func (p *Tool) parityRequests(args map[string]any) (string, error) {
 			}
 		}
 	}
-	line := func(c Capture) string {
-		return clip(oneLine(c.M), 10) + " " + clip(oneLine(c.U), 120) + " " + fmt.Sprint(c.S)
+	var queries [2]map[string]bool
+	line := func(i int) string {
+		c := caps[i]
+		path, q := target(c.U)
+		queries[i] = q
+		where := clip(oneLine(path), 120)
+		if len(q) > 0 {
+			where += fmt.Sprintf(" ?%d params", len(q))
+		}
+		return clip(oneLine(c.M), 10) + " " + where + " " + fmt.Sprint(c.S)
 	}
-	out := []string{"a: " + line(caps[0]) + " · b: " + line(caps[1]) + " (field names only, never values)"}
+	out := []string{"a: " + line(0) + " · b: " + line(1) + " (field names only, never values)"}
 	if caps[0].S != caps[1].S {
 		out = append(out, fmt.Sprintf("status: %d → %d", caps[0].S, caps[1].S))
 	}
@@ -130,6 +139,18 @@ func (p *Tool) parityRequests(args map[string]any) (string, error) {
 	for _, part := range []struct{ label, a, b string }{{"sent", caps[0].Req, caps[1].Req}, {"got", caps[0].Res, caps[1].Res}} {
 		na, ea := names(part.a)
 		nb, eb := names(part.b)
+		if part.label == "sent" { // a GET sends its fields in the address
+			for k := range queries[0] {
+				if na != nil {
+					na[k] = true
+				}
+			}
+			for k := range queries[1] {
+				if nb != nil {
+					nb[k] = true
+				}
+			}
+		}
 		if ea != "" || eb != "" {
 			out = append(out, fmt.Sprintf("%s: not compared (a: %s, b: %s)", part.label, firstNonEmpty(ea, "ok"), firstNonEmpty(eb, "ok")))
 			same = false
@@ -148,6 +169,21 @@ func (p *Tool) parityRequests(args map[string]any) (string, error) {
 		out = append(out, "same status and same field names sent and received")
 	}
 	return clip(strings.Join(out, "\n"), 8000), nil
+}
+
+var listIndex = regexp.MustCompile(`\[\d+\]`)
+
+// target is the address of a request without its query string, and the names of the query parameters (a list index is written []).
+func target(raw string) (string, map[string]bool) {
+	u, err := url.Parse(raw)
+	if err != nil {
+		return strings.SplitN(raw, "?", 2)[0], nil
+	}
+	names := map[string]bool{}
+	for k := range u.Query() {
+		names[listIndex.ReplaceAllString(k, "[]")] = true
+	}
+	return u.Host + u.Path, names
 }
 
 func firstNonEmpty(s ...string) string {

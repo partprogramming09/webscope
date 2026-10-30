@@ -2,6 +2,28 @@
 
 One entry per version, newest first. Tool names are `query`, `page`, `check` and `code`. Each change says what it is, what was seen that made it necessary, how it was checked and what was not checked. A change in what a tool prints is listed as a change, because a client may read it.
 
+## 0.5.38 — 2026-10-29
+
+**`page parity {req_a, req_b}` reads the query string of a GET and no longer prints the values of the address. First real comparison of the old screen and the new one.**
+
+What the first real run showed (legacy `comercial/MDI_CCIAL.php?enl_id=COTIZA_NEW` on `demo.localhost:8088` and the new list on `demo.localhost:5173`, two tabs, one session, read only, the same action on both: «Buscar» on the quotes list, default filter `ENPROCESO`):
+- A leak I had promised not to have: the request line of `parity` printed the address with its query string (`…/api/quotes?page=1&per_page=10&search=07&filters…`), so the values a user typed (and anything else on an address, like a token) reached the agent. Now it shows the address without the query and the number of parameters (`demo.localhost:8001/api/quotes ?5 params`).
+- A `GET` sends its fields in the address, and `parity` read only bodies, so the new side showed no sent fields at all. It now adds the names of the query parameters to the sent names (a list index becomes `[]`: `filters[statuses][]`), for both sides.
+
+How it was checked:
+- A test written first and failing: a legacy form `POST` and a modern `GET` with a query string; the values (`secretvalue`, `ENPROCESO`) must not appear anywhere, the line says `?5 params`, and with a `map` that renames three legacy names the only differences are `filters[with_requirement]` and `per_page`. The earlier tests (bodies only) still pass.
+- `go test -race ./...` passes (136 tests).
+- Real run before the fix, through the registered server: legacy `POST …/server/grid_ppal.php` against modern `GET /api/quotes`.
+
+What the real comparison says (evidence, to be confirmed by a person; none of it is a verdict):
+- **One search, two shapes.** The legacy list sends 17 form fields (`txtCotizaBC`, `txtNomClienteBC`, `txtOrigenBC`, `txtDestinoBC`, `txtNomAsesorBC`, `txtDOBC`, `txtFechaIniBC`, `lstEstadoCBC`, `lstRequestCBC`, `lstServicioBC`, `lstIncotermBC`, `lstInforden`, `lstInfordenValor`, `orden`, `sentido`, `itemsPerPage`, `page`); the new one sends `page`, `per_page`, `search`, `filters[statuses][]`, `filters[with_requirement]` and `filters[attribute_value]`. The new list has one search box for quote, client, contact, advisor, campaign, route or DO where the legacy has separate fields; it has no sort control in the request (the legacy sends `orden` and `sentido`).
+- **The legacy search does more than a search.** One click on «Buscar» made four requests (`grid_ppal.php`, `cotiza_frm.php`, `preliquidacion.php`, `cotiza_listas.php`): after listing, it loads the form, the pre-settlement and the lists of quote `071`. The new list makes one.
+- **Fields of the legacy row with no obvious twin in the new list row:** the seven `chk_*` flags (`chk_origen`, `chk_seguro`, `chk_flete`, `chk_destino`, `chk_aduana`, `chk_terrestre`, `chk_condiciones`), `archivo` and `PROFILE`. The money fields have twins (`compra`, `venta`, `profit` and `purchase_total`, `sales_total`, `profit`). The names are otherwise different in style (Spanish column names against English snake case), so a `map` is needed to compare.
+- **A legacy defect, seen and not fixed:** the answer of `server/preliquidacion.php` carries the SQL it ran (`"sql":["SELECT a.* … FROM app_preliquidacion a INNER JOIN …"]`) in its JSON. The new list answer carries no SQL.
+- **Screen shape.** `page shape` and `page parity {a, b}` on the two screens gave 34 fields, 19 buttons and 12 tabs against 14, 13 and none, almost all noise: the legacy is one page («Pantalla Cotización») with the list and a 12-step form, and the new front splits them, so the names do not pair. The shape of a part of the screen (a `selector`) would help; it is not built.
+- **The table view** `viewc_lstprovees_ope` (read by the legacy supplier list of the pre-settlement) does not exist in the tenant database (`Error 1146`).
+- Not checked: a map built from `code fields`, the answer of the detail (`cotiza_frm.php` against `GET /api/quotes/{id}`), the write operations (only reads were done).
+
 ## 0.5.37 — 2026-10-29
 
 **`code legacy {module}`: the tables only the legacy has are split into «named elsewhere in the backend» and «not named in the backend».**

@@ -1181,3 +1181,26 @@ func TestAnyOriginOfTheListIsTheTabsOwn(t *testing.T) {
 		t.Errorf("a tab in none of the list must be warned, with the list:\n%s", out)
 	}
 }
+
+func TestParityOfRequestsReadsTheQueryNamesOfAGetAndNeverPrintsItsValues(t *testing.T) {
+	p := testPage(t, appOrigin)
+	if _, err := askPage(t, p, "load", nil); err != nil {
+		t.Fatal(err)
+	}
+	postCapture(t, p, Capture{M: "POST", U: "/legacy/grid.php", S: 200, Req: "page=1&txtCotizaBC=secretvalue&lstEstadoCBC=X", Res: `{"arreglo":[{"id":1}]}`})
+	postCapture(t, p, Capture{M: "GET", U: "http://demo.localhost:8001/api/quotes?page=1&per_page=10&search=secretvalue&filters%5Bstatuses%5D%5B0%5D=ENPROCESO&filters%5Bwith_requirement%5D=0", S: 200, Res: `{"data":[{"id":1}]}`})
+	out, err := askPage(t, p, "parity", map[string]any{"req_a": "POST grid.php", "req_b": "GET /api/quotes", "map": map[string]any{"txtCotizaBC": "search", "lstEstadoCBC": "filters[statuses][]"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{"/api/quotes ?5 params", "sent only in b: filters[with_requirement], per_page"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("lacks %q:\n%s", want, out)
+		}
+	}
+	for _, not := range []string{"secretvalue", "ENPROCESO", "per_page=10", "sent only in a"} {
+		if strings.Contains(out, not) {
+			t.Errorf("%q must not appear (a value, or a name the map made equal):\n%s", not, out)
+		}
+	}
+}
