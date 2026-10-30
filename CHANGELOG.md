@@ -2,6 +2,18 @@
 
 One entry per version, newest first. Tool names are `query`, `page`, `check` and `code`. Each change says what it is, what was seen that made it necessary, how it was checked and what was not checked. A change in what a tool prints is listed as a change, because a client may read it.
 
+## 0.5.49 — 2026-10-30
+
+**Failures of `code` say what to do: `legacy` lists the folders that exist, a missing table says to pass `tenant`, and a call with `help:true` or `args` as JSON text is read.**
+
+What was seen that made it necessary: in the acme sessions of 2026-10-30, 3 of 6 `code legacy` calls and 12 of 39 `code fields` calls failed. `legacy` said `no folder "…/tipo_tarifario" in WEBSCOPE_LEGACY` without saying which folders exist; `fields` without `tenant` read the central database and answered `Table 'acme.app_tarifario' doesn't exist`. Two agents also called `code {help: "true", topic: "migration"}` and `args` as a JSON text, and got `unknown action ""`.
+
+Now `legacy` with a missing folder adds the first 15 folders of the nearest parent that exists. A «table doesn't exist» error (1146) of `fields`, `snap` or `rows` called without `tenant` adds «pass tenant to read the one of the app». A call with no action and `help` set to `true` is the action `help`, and `args` given as a text that holds an object is read as that object (`page` takes the same call, so it gets both too). A text that is not an object is still refused.
+
+How it was checked:
+- Tests written first and failing: the missing folder lists its siblings (and the root's folders when no parent exists); the hint appears only without `tenant`; `help` flag and `args` as text are read. The full suite passes with `-race`; `go vet` is clean.
+- Not checked: against the real acme legacy folder, nor that an agent now gets the call right at the first try. `snap` with a composite key is not done.
+
 ## 0.5.48 — 2026-10-30
 
 **`page parity {a, b, kinds?}` shows a repeated name once with ×N, and `kinds` limits what is compared.**

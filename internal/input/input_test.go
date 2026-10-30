@@ -23,6 +23,22 @@ func TestArgumentsAreReadFromArgsAndFromTheTopLevel(t *testing.T) {
 	}
 }
 
+func TestArgsAsAJSONTextAndHelpAsAFlagAreAccepted(t *testing.T) {
+	for name, raw := range map[string]string{
+		"args as text": `{"action":"help","args":"{\"topic\":\"migration\"}"}`,
+		"help flag":    `{"help":"true","topic":"migration"}`,
+		"help bool":    `{"help":true,"topic":"migration"}`,
+	} {
+		var in Args
+		if err := json.Unmarshal([]byte(raw), &in); err != nil {
+			t.Fatalf("%s: %v", name, err)
+		}
+		if in.Action != "help" || Str(in.Args, "topic") != "migration" {
+			t.Errorf("%s: %+v", name, in)
+		}
+	}
+}
+
 func TestACallWithTheWrongTypesIsRefused(t *testing.T) {
 	for _, raw := range []string{`{"action":1}`, `{"action":"fields","args":"x"}`} {
 		if err := json.Unmarshal([]byte(raw), &Args{}); err == nil {

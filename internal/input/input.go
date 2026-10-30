@@ -1,7 +1,10 @@
 // Package input is the shape of the call that page and code take: an action and its arguments.
 package input
 
-import "encoding/json"
+import (
+	"encoding/json"
+	"strings"
+)
 
 // MaxAnswer is the most bytes that one answer of a tool carries.
 const MaxAnswer = 8000
@@ -20,7 +23,7 @@ type Args struct {
 	Args   map[string]any `json:"args,omitempty"`
 }
 
-// UnmarshalJSON reads the arguments from "args" and also from the top level of the call; a key inside "args" wins.
+// UnmarshalJSON reads the arguments from "args" (an object, or text holding one) and also from the top level of the call; a key inside "args" wins. A call with no action and help set means the action help.
 func (a *Args) UnmarshalJSON(b []byte) error {
 	var raw map[string]json.RawMessage
 	if err := json.Unmarshal(b, &raw); err != nil {
@@ -43,6 +46,10 @@ func (a *Args) UnmarshalJSON(b []byte) error {
 		}
 	}
 	if v, ok := raw["args"]; ok {
+		var text string
+		if json.Unmarshal(v, &text) == nil && strings.HasPrefix(strings.TrimSpace(text), "{") {
+			v = json.RawMessage(text)
+		}
 		var nested map[string]any
 		if err := json.Unmarshal(v, &nested); err != nil {
 			return err
@@ -50,6 +57,10 @@ func (a *Args) UnmarshalJSON(b []byte) error {
 		for k, x := range nested {
 			a.Args[k] = x
 		}
+	}
+	if h, ok := a.Args["help"]; ok && a.Action == "" && (h == true || h == "true") {
+		a.Action = "help"
+		delete(a.Args, "help")
 	}
 	return nil
 }

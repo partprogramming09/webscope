@@ -179,6 +179,18 @@ func TestLegacyRefusesWhatItCannotReadAndSaysWhatItNeeds(t *testing.T) {
 	}
 }
 
+func TestLegacyMissingFolderListsTheFoldersThatExist(t *testing.T) {
+	c := legacySetup(t)
+	_, err := code(t, c, "legacy", map[string]any{"path": "comercial/tipo_tarifario"})
+	if err == nil || !strings.Contains(err.Error(), "cotizadorX_new") || !strings.Contains(err.Error(), "comercial") {
+		t.Errorf("want the folders under «comercial» listed: %v", err)
+	}
+	_, err = code(t, c, "legacy", map[string]any{"path": "nada/otro"})
+	if err == nil || !strings.Contains(err.Error(), "comercial") {
+		t.Errorf("want the folders of the root listed when no parent exists: %v", err)
+	}
+}
+
 func TestLegacyKeepsTheComparisonWhenThereAreManyEndpoints(t *testing.T) {
 	c := legacySetup(t)
 	dir := filepath.Join(c.Legacy, "comercial/cotizadorX_new/server")

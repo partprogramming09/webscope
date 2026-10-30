@@ -100,18 +100,29 @@ func (c *Tool) run(ctx context.Context, in input.Args) (string, error) {
 	return out, nil
 }
 
+// withTenantHint adds to a missing-table error of a call without tenant that the table may live in the tenant's database.
+func withTenantHint(err error, args map[string]any) error {
+	if err == nil || input.Str(args, "tenant") != "" || !strings.Contains(err.Error(), "Error 1146") {
+		return err
+	}
+	return fmt.Errorf("%w; the call named no tenant, so it read the central database: pass tenant to read the one of the app", err)
+}
+
 func (c *Tool) do(ctx context.Context, in input.Args) (string, error) {
 	switch in.Action {
 	case "consumers":
 		return c.consumers(in.Args)
 	case "fields":
-		return c.fields(ctx, in.Args)
+		out, err := c.fields(ctx, in.Args)
+		return out, withTenantHint(err, in.Args)
 	case "snap":
-		return c.snapSave(ctx, in.Args)
+		out, err := c.snapSave(ctx, in.Args)
+		return out, withTenantHint(err, in.Args)
 	case "snap_diff":
 		return c.snapDiff(ctx, in.Args)
 	case "rows":
-		return c.rows(ctx, in.Args)
+		out, err := c.rows(ctx, in.Args)
+		return out, withTenantHint(err, in.Args)
 	case "map":
 		return c.mapFront(in.Args)
 	case "map_back":

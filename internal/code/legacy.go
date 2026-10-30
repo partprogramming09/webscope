@@ -43,7 +43,7 @@ func (c *Tool) legacyDir(path string) (real, dir string, err error) {
 		return "", "", err
 	}
 	if dir, err = filepath.EvalSymlinks(filepath.Join(real, p)); err != nil {
-		return "", "", fmt.Errorf("no folder %q in WEBSCOPE_LEGACY", echo(path))
+		return "", "", fmt.Errorf("no folder %q in WEBSCOPE_LEGACY%s", echo(path), foldersNear(real, p))
 	}
 	if rel, err := filepath.Rel(real, dir); err != nil || rel == ".." || strings.HasPrefix(rel, "../") {
 		return "", "", errors.New("the path leads out of WEBSCOPE_LEGACY")
@@ -52,6 +52,32 @@ func (c *Tool) legacyDir(path string) (real, dir string, err error) {
 		return "", "", fmt.Errorf("%q is not a folder", echo(path))
 	}
 	return real, dir, nil
+}
+
+// foldersNear lists the folders of the nearest parent of rel that exists under root, to say what the path could have been.
+func foldersNear(root, rel string) string {
+	for rel != "." && rel != "/" {
+		if ents, err := os.ReadDir(filepath.Join(root, rel)); err == nil {
+			return listDirs(rel, ents)
+		}
+		rel = filepath.Dir(rel)
+	}
+	ents, _ := os.ReadDir(root)
+	return listDirs(".", ents)
+}
+
+// listDirs is the first 15 folder names of ents, as « (folders in rel: a, b)».
+func listDirs(rel string, ents []os.DirEntry) string {
+	var names []string
+	for _, e := range ents {
+		if e.IsDir() && len(names) < 15 {
+			names = append(names, e.Name())
+		}
+	}
+	if len(names) == 0 {
+		return ""
+	}
+	return fmt.Sprintf(" (folders in %s: %s)", echo(rel), strings.Join(names, ", "))
 }
 
 // tablesOf is the tables named by the SQL of a PHP file, in order of appearance: those it writes and those it only reads. Comment lines are skipped.

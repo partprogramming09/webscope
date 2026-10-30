@@ -1,6 +1,7 @@
 package code
 
 import (
+	"errors"
 	"regexp"
 	"slices"
 	"strings"
@@ -62,5 +63,18 @@ func TestHelpRefusesAnUnknownTopicAndListsTheKnownOnes(t *testing.T) {
 	_, err := code(t, codeSetup(t), "help", map[string]any{"topic": "nope"})
 	if err == nil || !strings.Contains(err.Error(), "migration") {
 		t.Errorf("an unknown topic must list the known ones, got %v", err)
+	}
+}
+
+func TestAMissingTableWithoutATenantSaysToPassOne(t *testing.T) {
+	err := withTenantHint(errors.New("Error 1146 (42S02): Table 'acme.app_x' doesn't exist"), map[string]any{})
+	if !strings.Contains(err.Error(), "pass tenant") {
+		t.Errorf("want a hint to pass tenant: %v", err)
+	}
+	if err := withTenantHint(errors.New("Error 1146 (42S02): Table"), map[string]any{"tenant": "demo"}); strings.Contains(err.Error(), "pass tenant") {
+		t.Errorf("a call that named a tenant needs no hint: %v", err)
+	}
+	if withTenantHint(nil, nil) != nil {
+		t.Error("no error stays no error")
 	}
 }
