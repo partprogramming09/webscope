@@ -61,7 +61,7 @@ func (c *Tool) flows(args map[string]any) (string, error) {
 	head := fmt.Sprintf("Flows of «%s»: evidence, not user stories. Write the stories from it and ask a person to confirm them: the code may describe a mistake as a feature.", echo(module))
 	room := input.MaxAnswer - len(head) - 40
 	screens = cutLines(screens, room*5/9, "screens")
-	endpoints = cutLines(tablesFirst(endpoints), room-len(screens), "endpoints")
+	endpoints = tablesFirst(endpoints, room-len(screens))
 	return head + "\n## screens\n" + screens + "\n## endpoints\n" + endpoints, nil
 }
 
@@ -98,8 +98,9 @@ func viewsFirst(screens string) string {
 
 var controllerPath = regexp.MustCompile(`  \S+/(\w+\.php:\d+)(?:  <- .*)?$`)
 
-// tablesFirst puts the models with their table before the endpoints, and shortens each endpoint line to the controller file and line, so a cut loses endpoints last-first and never the tables.
-func tablesFirst(endpoints string) string {
+// tablesFirst puts the models with their table before the endpoints, shortens each endpoint line to the controller file and line, and shares room
+// bytes: 3/10 for the tables, 2/10 for the warnings and services, the rest for the endpoints; each part says what it cut.
+func tablesFirst(endpoints string, room int) string {
 	var models, apis, rest []string
 	for _, l := range strings.Split(endpoints, "\n") {
 		switch {
@@ -111,5 +112,14 @@ func tablesFirst(endpoints string) string {
 			rest = append(rest, l)
 		}
 	}
-	return strings.Join(append(append(models, apis...), rest...), "\n")
+	m := cutLines(strings.Join(models, "\n"), room*3/10, "models")
+	r := cutLines(strings.Join(rest, "\n"), room*2/10, "services and warnings")
+	a := cutLines(strings.Join(apis, "\n"), room-len(m)-len(r)-2, "endpoints")
+	var parts []string
+	for _, p := range []string{m, a, r} {
+		if p != "" {
+			parts = append(parts, p)
+		}
+	}
+	return strings.Join(parts, "\n")
 }

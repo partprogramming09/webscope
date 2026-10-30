@@ -404,3 +404,26 @@ func TestCasesListsAnHttpErrorForEveryWriteEndpointEvenWhenThereAreHundreds(t *t
 		t.Errorf("%d cases: every one of the 400 write endpoints needs its case", n)
 	}
 }
+
+func TestTablesFirstSharesTheRoomBetweenTablesEndpointsAndWarnings(t *testing.T) {
+	var in []string
+	for i := 0; i < 100; i++ {
+		in = append(in, fmt.Sprintf("model app/Modules/X/Models/M%03d.php -> table t_%03d", i, i))
+	}
+	for i := 0; i < 20; i++ {
+		in = append(in, fmt.Sprintf("api PUT quotes/act-%02d/{} -> QuoteController@a%02d  app/Modules/Crm/Quotes/Controllers/QuoteController.php:%d  <- src/x.ts:%d", i, i, 10+i, i))
+	}
+	in = append(in, "api without a route in the backend: pieces/quote/{}", "service app/Modules/Crm/Quotes/Services/QuoteService.php")
+	out := tablesFirst(strings.Join(in, "\n"), 3000)
+	if len(out) > 3300 {
+		t.Errorf("%d bytes for a room of 3000", len(out))
+	}
+	for _, want := range []string{"-> table t_000", "api PUT quotes/act-00/{} -> QuoteController@a00  QuoteController.php:10", "api without a route in the backend: pieces/quote/{}", "more lines of models not shown"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("lacks %q:\n%s", want, out)
+		}
+	}
+	if strings.Index(out, "-> table t_000") > strings.Index(out, "api PUT") {
+		t.Error("the tables come before the endpoints")
+	}
+}

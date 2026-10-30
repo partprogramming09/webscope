@@ -2,6 +2,20 @@
 
 One entry per version, newest first. Tool names are `query`, `page`, `check` and `code`. Each change says what it is, what was seen that made it necessary, how it was checked and what was not checked. A change in what a tool prints is listed as a change, because a client may read it.
 
+## 0.5.34 — 2026-10-29
+
+**`flows` shares its endpoint room between tables, endpoints and warnings. Third run on `crm/quotes`.**
+
+What the third run showed (0.5.33 confirmed: `cases` now sees every endpoint, 99 cases for the module, 79 shown before the byte limit, with the write endpoints of `quotes`, `quote-versions`, `quote-taxes` and `quote-conditions`):
+- `flows` listed 40 `model … -> table …` lines (the module touches 40 tables, from `app_cotizaciones` to `app_trm`) and nothing else: the 91 lines that were cut were all the endpoints, the front addresses with no route and the services. Tables first had fixed the lost tables and moved the loss to the endpoints.
+
+Now the room under `## endpoints` is shared: 3/10 for the tables, 2/10 for the services and the `api without a route in the backend` warnings, and the rest for the endpoints. Each part says what it cut (`… N more lines of models not shown`).
+
+How it was checked:
+- One test written first and failing (`tablesFirst` took no room): 100 tables, 20 endpoints, a warning and a service in 3000 bytes give the first table, the first endpoint in its short form, the warning, the note that tables were cut, tables before endpoints, and no more than 3300 bytes.
+- `go test -race ./...` passes (127 tests).
+- Not checked: this version on the real module (it needs `/mcp`); whether 3/10 is the right share for a module with few tables and many endpoints (the unused room of one part is not given to another).
+
 ## 0.5.33 — 2026-10-29
 
 **`flows` and `cases` use every endpoint, and `flows` keeps the tables. Second real run on `crm/quotes`.**
