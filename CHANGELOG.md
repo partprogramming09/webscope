@@ -2,6 +2,18 @@
 
 One entry per version, newest first. Tool names are `query`, `page`, `check` and `code`. Each change says what it is, what was seen that made it necessary, how it was checked and what was not checked. A change in what a tool prints is listed as a change, because a client may read it.
 
+## 0.5.46 — 2026-10-29
+
+**`code rows` leaves out the columns that pick the rows whatever their case.**
+
+What was seen that made it necessary: the first run of 0.5.45 on the two `ZZ_` quotes of the test bed (one created by each system, both now `BORRADO`) listed `COTIZACION_ID` as a difference. It was asked with `cotizacion_id` and the database names it in capitals, and the name was compared as typed.
+
+Now the comparison ignores case. The real run gave: 42 columns, 38 equal, 3 differ once the key is out (`MOTIVO_RECHAZO` empty on one side and filled on the other, `DESCRIPCION` with the same length and another text, `USUARIO` in another case) and the same count of child rows on both (1 log, 1 version, 6 general data, 10 instructions, 12 follow-up activities). It is what the by-hand comparison found.
+
+How it was checked:
+- A test written first and failing (`2 columns, 0 equal, 2 differ`), with a capitalised column asked in lowercase; 143 tests pass with `-race`, `go vet` is clean.
+- Not checked: that the counts of the real run were read after the fix; they are the ones printed by 0.5.45, whose only error was the key column.
+
 ## 0.5.45 — 2026-10-29
 
 **`code rows {table, a, b, children?, tenant?}`: how two rows of one table differ, without a value.**

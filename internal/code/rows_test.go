@@ -51,6 +51,20 @@ func TestRowsSaysHowTwoRowsDifferAndNeverPrintsAValue(t *testing.T) {
 	}
 }
 
+func TestRowsDoesNotCompareTheKeyWhenTheDatabaseNamesItInOtherCase(t *testing.T) {
+	c := rowsSetup(t)
+	if _, err := writeDB(t, c).Exec("CREATE TABLE q3 (COTIZACION_ID TEXT, estado TEXT); INSERT INTO q3 VALUES ('1', 'A'); INSERT INTO q3 VALUES ('2', 'B')"); err != nil {
+		t.Fatal(err)
+	}
+	out, err := code(t, c, "rows", map[string]any{"table": "q3", "a": map[string]any{"cotizacion_id": "1"}, "b": map[string]any{"cotizacion_id": "2"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(out, "COTIZACION_ID:") || !strings.Contains(out, "1 columns, 0 equal, 1 differ") {
+		t.Errorf("the column that picks the rows is left out, whatever its case:\n%s", out)
+	}
+}
+
 func TestRowsRefusesWhatItCannotCompare(t *testing.T) {
 	c := rowsSetup(t)
 	a, b := map[string]any{"id": "072"}, map[string]any{"id": "073"}

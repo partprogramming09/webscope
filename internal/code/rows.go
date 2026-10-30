@@ -188,7 +188,8 @@ func (c *Tool) rows(ctx context.Context, args map[string]any) (string, error) {
 	var diffs []string
 	compared, equal := 0, 0
 	for i, name := range names {
-		if slices.Contains(aCols, name) || slices.Contains(bCols, name) {
+		isKey := func(k string) bool { return strings.EqualFold(k, name) }
+		if slices.ContainsFunc(aCols, isKey) || slices.ContainsFunc(bCols, isKey) {
 			continue
 		}
 		compared++
