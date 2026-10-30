@@ -69,10 +69,34 @@ func TestLegacyComparesItsTablesWithThoseOfTheNewModule(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, want := range []string{"## against «crm/quotes»", "only in legacy: app_clientes, app_cotiza_infogral, app_cotiza_notas, tm_huerfana, tm_users", "only in new: -", "both: app_cotizaciones"} {
+	c := legacySetup(t)
+	if err := os.MkdirAll(filepath.Join(c.Backend, "app/Modules/Shared"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	other := "<?php\nDB::table('app_clientes')->get();\n// tm_users is read by the login\n$x = 'tm_users';\n"
+	if err := os.WriteFile(filepath.Join(c.Backend, "app/Modules/Shared/Other.php"), []byte(other), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	out, err = code(t, c, "legacy", map[string]any{"path": "comercial/cotizadorX_new", "module": "crm/quotes"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{"## against «crm/quotes»", "only in legacy and named elsewhere in the backend: app_clientes (1 file), tm_users (1 file)", "only in legacy and not named in the backend: app_cotiza_infogral, app_cotiza_notas, tm_huerfana", "only in new: -", "both: app_cotizaciones"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("lacks %q:\n%s", want, out)
 		}
+	}
+}
+
+func TestLegacyComparisonWithoutABackendKeepsOneList(t *testing.T) {
+	c := legacySetup(t)
+	c.Backend = ""
+	out, err := code(t, c, "legacy", map[string]any{"path": "comercial/cotizadorX_new", "module": "crm/quotes"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out, "not compared") {
+		t.Errorf("the new module cannot be read without WEBSCOPE_BACKEND, and the answer must say so:\n%s", out)
 	}
 }
 
@@ -115,7 +139,7 @@ func TestLegacyKeepsTheComparisonWhenThereAreManyEndpoints(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(out) > 8200 || !strings.Contains(out, "only in legacy:") || !strings.Contains(out, "more lines of endpoints not shown") {
+	if len(out) > 8200 || !strings.Contains(out, "only in legacy and not named in the backend: ") || !strings.Contains(out, "(+") || !strings.Contains(out, "more lines of endpoints not shown") {
 		t.Errorf("%d bytes: the comparison must survive and the cut must be said:\n...%s", len(out), out[max(0, len(out)-300):])
 	}
 	if strings.Count(out, "no caller found") != 1 || strings.Contains(out, "number_399") {

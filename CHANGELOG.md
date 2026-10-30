@@ -2,6 +2,26 @@
 
 One entry per version, newest first. Tool names are `query`, `page`, `check` and `code`. Each change says what it is, what was seen that made it necessary, how it was checked and what was not checked. A change in what a tool prints is listed as a change, because a client may read it.
 
+## 0.5.37 — 2026-10-29
+
+**`code legacy {module}`: the tables only the legacy has are split into «named elsewhere in the backend» and «not named in the backend».**
+
+What the real run showed (the first one through the registered server, with `WEBSCOPE_LEGACY` and the two-origin `WEBSCOPE_APP_URL` set): `crm/quotes` against the legacy `cotizadorX_new` listed 22 tables as `only in legacy`. A search of the backend for each one found 21 of them named in other PHP files (`tm_awb` in 18 files, `tm_ordenes_infogral` in 21, `tm_bl` in 16, `tm_actividades_oper` in 17, `app_wp_message` in 5, among others) and only `viewc_lstprovees_ope` in none. The 21 are not missing: the new module reaches them through services and models that `flows` does not follow (it reads the models that a controller or a service imports). Reporting all 22 as a possible gap was wrong in 21 cases.
+
+Now, with `WEBSCOPE_BACKEND` set, the answer has two lines instead of one:
+- `only in legacy and named elsewhere in the backend:` each table with the number of files that name it (`tm_awb (18 files)`);
+- `only in legacy and not named in the backend:` the candidates for a real gap.
+
+A name counts if it appears as a whole word in any `.php` file of the backend (comments and strings too: it is a text search, so a table named only in a comment also counts as named). Without `WEBSCOPE_BACKEND` the answer keeps the old single line. Each list stops at 60 names with a count of the rest.
+
+On the real module the only candidate is `viewc_lstprovees_ope`, a database view that the legacy file `server/preliquidacion_provees_lst.php` reads (`SELECT cedula,nombre,tipo FROM viewc_lstprovees_ope WHERE tipo = …`, the list of suppliers by type for the pre-settlement). No backend file and no migration of either project names it. This is evidence for a question, not a verdict: the new pre-settlement may take its suppliers from `tm_proveedores` (a table both sides use), and nobody has compared the two lists.
+
+How it was checked:
+- A test written first and failing (`only in legacy:` was one line): a backend file that names two of the five legacy-only tables, in code and in a comment; the answer gives those two with `(1 file)` and the other three as not named. A test with no `WEBSCOPE_BACKEND` and one with 400 tables, which must keep both lists under the size limit with `(+N more)`.
+- `go test -race ./...` passes.
+- Real module, read only: the split above (21 named elsewhere, 1 not).
+- Not checked: that each of the 21 is used by the flow of the new quotes (a name in the backend is not a flow); the view in the database itself (`SHOW CREATE VIEW` was not run).
+
 ## 0.5.36 — 2026-10-29
 
 **`WEBSCOPE_APP_URL` accepts several addresses, separated by commas. The old app and the new one in one session.**

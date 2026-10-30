@@ -201,7 +201,54 @@ func (c *Tool) againstNew(module string, legacy map[string]bool) string {
 	}
 	list := func(l []string) string {
 		sort.Strings(l)
+		if len(l) > 60 {
+			return strings.Join(l[:60], ", ") + fmt.Sprintf(" (+%d more)", len(l)-60)
+		}
 		return firstNonEmpty(strings.Join(l, ", "), "-")
 	}
-	return head + "\nonly in legacy: " + list(onlyL) + "\nonly in new: " + list(onlyN) + "\nboth: " + list(both)
+	left := "\nonly in legacy: " + list(onlyL)
+	if elsewhere, none := c.namedInBackend(onlyL); c.Backend != "" {
+		sort.Strings(none)
+		var named []string
+		for _, t := range onlyL {
+			if n := elsewhere[t]; n > 0 {
+				named = append(named, fmt.Sprintf("%s (%d %s)", t, n, map[bool]string{true: "file", false: "files"}[n == 1]))
+			}
+		}
+		left = "\nonly in legacy and named elsewhere in the backend: " + firstNonEmpty(strings.Join(named, ", "), "-") +
+			"\nonly in legacy and not named in the backend: " + list(none)
+	}
+	return head + left + "\nonly in new: " + list(onlyN) + "\nboth: " + list(both)
+}
+
+// namedInBackend counts, for each table, the PHP files of WEBSCOPE_BACKEND that name it, and lists the tables no file names.
+func (c *Tool) namedInBackend(tables []string) (count map[string]int, none []string) {
+	count = map[string]int{}
+	if c.Backend == "" || len(tables) == 0 {
+		return count, nil
+	}
+	files, _, err := fsx.PHPFiles(c.Backend)
+	if err != nil {
+		return count, nil
+	}
+	quoted := make([]string, len(tables))
+	for i, t := range tables {
+		quoted[i] = regexp.QuoteMeta(t)
+	}
+	re := regexp.MustCompile(`\b(?:` + strings.Join(quoted, "|") + `)\b`)
+	seen := map[string]bool{}
+	for _, h := range fsx.Grep(re, files, fsx.Lines{}) {
+		for _, name := range re.FindAllString(h.Text, -1) {
+			if k := name + "\x00" + h.File; !seen[k] {
+				seen[k] = true
+				count[name]++
+			}
+		}
+	}
+	for _, t := range tables {
+		if count[t] == 0 {
+			none = append(none, t)
+		}
+	}
+	return count, none
 }
