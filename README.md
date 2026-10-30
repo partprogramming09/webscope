@@ -95,7 +95,7 @@ The case this was extended for: a module that exists in an old system and was re
 | 3. Screens | «Compare the quotes list of the old and the new screen» | `page shape {name, selector}` on each, `page parity {a, b}` | Only the fields, buttons and columns one side has |
 | 4. Requests | «Does the new search send and receive what the old one did?» | the same action on both, `page parity {req_a, req_b, map}` | Status and the field names only one side sends or gets, never values |
 | 5. What to test | «List the test cases for this module» | `code cases` | A table: happy path, permission, required field, status, HTTP error and empty list, with what runs each |
-| 6. A write on both | «Create a `ZZ_` quote on each system and compare what was saved» | `code snap`, `page fill` and `click`, `code snap_diff`, `query` | The rows each system wrote, their differences, and the child rows by count |
+| 6. A write on both | «Create a `ZZ_` quote on each system and compare what was saved» | `code snap`, `page fill` and `click`, `code snap_diff`, `code rows`, `query` | The rows each system wrote, their differences, and the child rows by count |
 | 7. Unit tests | «Plan the unit tests that pin the old behaviour» | skill `parity-tests`, agent `tester` | A plan by layer, with which tests must fail today |
 
 The whole chain is the `migration-parity` skill. A real run on a quotes module found, among other things: 21 of 22 tables «only in the legacy» were in fact used by the new backend, one database view the old code reads does not exist, the old screen was saving a number the new one had already taken (`Duplicate entry … 1062`), and the two systems wrote the same child rows for a new quote. `CHANGELOG.md` has the detail of each run and what was not checked.

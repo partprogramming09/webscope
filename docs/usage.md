@@ -55,6 +55,7 @@ Not covered: `v-combobox`, date pickers, menus of other libraries, file uploads,
 | `flows {module}` | Screens with their actions, then endpoints, controllers and tables: evidence for user stories | Vue + Laravel (`map` and `map_back` joined) |
 | `cases {module}` | The test cases of the module as a table (happy path, permission, required field, status, HTTP error, empty list), each with what runs it; it runs nothing | Vue + Laravel (built on `flows`) |
 | `legacy {path, module?}` | The PHP endpoints of a legacy folder with their callers and the tables their SQL writes and reads; with `module`, the tables against the new module's and the columns the legacy writes that the backend never names (inline `INSERT` and `UPDATE … SET` only) | Legacy PHP with SQL in the file and jQuery calls (`WEBSCOPE_LEGACY`) |
+| `rows {table, a, b, children?, tenant?}` | How two rows of one table differ, column by column, without a value (`a filled, b empty`, `case only`, `same number, other text`), and how many rows of other tables point at each | Any database |
 | `snap {name, sql, key?, tenant?}` / `snap_diff {name}` | What a query returned, then only what changed | Any database; snapshots live in memory |
 
 `code` reads at most 20000 `.php` files of 2 MB each and stops there without saying so.
@@ -76,7 +77,7 @@ To migrate a module from a legacy system and keep what it did:
 1. `code(flows {module})`, then write the user stories from it and have a person confirm them (skill `module-flows`).
 2. `code(legacy {path, module})`: the legacy endpoints, who calls them, and the tables on one side only. A table only the legacy has and the backend names elsewhere is not a gap; one no backend file names is a question.
 3. Open the old and the new screen (two tabs): `page(shape)` on the part to compare on each, `page(parity {a, b})`; then the same action on both and `page(parity {req_a, req_b, map})`.
-4. `code(cases {module})`: what to test; run the ones you choose with `page`, on `ZZ_` rows, with `snap` before and `snap_diff` after, and `check` the saved row. Compare the row each system wrote.
+4. `code(cases {module})`: what to test; run the ones you choose with `page`, on `ZZ_` rows, with `snap` before and `snap_diff` after, and `check` the saved row. Compare the row each system wrote with `rows {table, a, b, children}`: `a` and `b` pick each row, `children` is `{child table: column}`.
 5. A confirmed difference becomes a plan of unit tests (skill `parity-tests`) for the `tester` agent; the whole chain is the skill `migration-parity`.
 
 [module-testing.md](module-testing.md) is the full procedure for a module; [patterns.md](patterns.md) lists what has been found.

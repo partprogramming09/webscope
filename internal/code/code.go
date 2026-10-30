@@ -110,6 +110,8 @@ func (c *Tool) do(ctx context.Context, in input.Args) (string, error) {
 		return c.snapSave(ctx, in.Args)
 	case "snap_diff":
 		return c.snapDiff(ctx, in.Args)
+	case "rows":
+		return c.rows(ctx, in.Args)
 	case "map":
 		return c.mapFront(in.Args)
 	case "map_back":
@@ -121,7 +123,7 @@ func (c *Tool) do(ctx context.Context, in input.Args) (string, error) {
 	case "legacy":
 		return c.legacy(in.Args)
 	}
-	return "", fmt.Errorf("unknown action %q: fields {table, tenant?}, consumers {table, column} or {column_only}, map {module, walkthrough?}, map_back {query}, flows {module}, cases {module}, legacy {path, module?}, snap {name, sql, key?, tenant?} or snap_diff {name}", in.Action)
+	return "", fmt.Errorf("unknown action %q: fields {table, tenant?}, consumers {table, column} or {column_only}, map {module, walkthrough?}, map_back {query}, flows {module}, cases {module}, legacy {path, module?}, rows {table, a, b, children?, tenant?}, snap {name, sql, key?, tenant?} or snap_diff {name}", in.Action)
 }
 
 // consumers lists who reads and who writes a column in the PHP of WEBSCOPE_BACKEND.

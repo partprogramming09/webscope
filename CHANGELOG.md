@@ -2,6 +2,18 @@
 
 One entry per version, newest first. Tool names are `query`, `page`, `check` and `code`. Each change says what it is, what was seen that made it necessary, how it was checked and what was not checked. A change in what a tool prints is listed as a change, because a client may read it.
 
+## 0.5.45 — 2026-10-29
+
+**`code rows {table, a, b, children?, tenant?}`: how two rows of one table differ, without a value.**
+
+What was seen that made it necessary: the write test on both systems (a `ZZ_` quote on each) was compared by hand with `query`, column by column, and the child rows were counted one table at a time. That found `MOTIVO_RECHAZO` filled by one system and empty in the other, and the case of `USUARIO`, but it is the step a person repeats for every action of every module.
+
+`a` and `b` are `{column: value}` that pick one row each (more than one row is an error that asks for another column). The answer is the count of columns compared, equal and different, then one line per differing column with its class: `a filled, b empty`, `a NULL, b empty`, `case only`, `spaces only`, `same number, other text` (`7` and `007`), or `differs (a N chars, b M chars)`. The columns that pick the rows are not compared and no value is printed. `children` is `{child table: column}`: the rows of each table that carry the first value of `a` and of `b`, with `≠` when the counts differ. It only reads, in a read-only transaction; every name is checked as a plain identifier. The text of `tools/list` grew by about 60 bytes.
+
+How it was checked:
+- Tests written first and failing (`unknown action "rows"`): every class of difference, no value in the answer (`SECRET_NOTE` and the others are absent), the children counts with `≠`, two equal rows, and eight refusals (no table, a table with `;`, no `b`, a column with a backtick, no row, two rows, a bad child name, an unknown table). 51 tests of the package and 142 in all pass with `-race`; `go vet` is clean.
+- Not checked: on the real quotes of the test bed (it needs `/mcp` to load this version); MySQL types other than text (dates and decimals are compared as the driver returns them as text, so `1.50` and `1.5` are «same number, other text»).
+
 ## Note on 0.5.31 — 2026-10-29
 
 The condition of the skill `parity-tests` (the `tester` agent writes tests of a real service that fail on a planted regression) was met in part. On the quotes module of the test bed the agent wrote two tests of `QuoteService::isApprovable` for a rule the legacy code has (`grabar_aprobar_cotiza.php:70-72`: no approval without a client): an empty and a null client give `false`. Both passed, and both failed with the check inverted (`Failed asserting that true is false`); the code was restored and its `git diff` was empty. Checked by hand afterwards.
