@@ -27,6 +27,7 @@ type legacySide struct {
 	callers []string
 	writes  []string
 	reads   []string
+	columns map[string][]string
 }
 
 // legacyDir is path inside WEBSCOPE_LEGACY, resolved: it must stay under the real root, so a link or a ../ cannot lead out of it.
@@ -109,6 +110,7 @@ func (c *Tool) legacy(args map[string]any) (string, error) {
 			rel = filepath.ToSlash(rel)
 			s := &legacySide{rel: rel}
 			s.writes, s.reads = tablesOf(f, all)
+			s.columns = columnsOf(f, all)
 			sides[rel] = s
 			order = append(order, rel)
 		}
@@ -133,10 +135,18 @@ func (c *Tool) legacy(args map[string]any) (string, error) {
 	var called, orphans []string
 	var lines []string
 	legacyTables := map[string]bool{}
+	written := map[string][]string{}
 	for _, rel := range order {
 		s := sides[rel]
 		for _, t := range append(append([]string{}, s.writes...), s.reads...) {
 			legacyTables[t] = true
+		}
+		for t, cols := range s.columns {
+			for _, col := range cols {
+				if !slicesContains(written[t], col) {
+					written[t] = append(written[t], col)
+				}
+			}
 		}
 		if len(s.callers) == 0 {
 			orphans = append(orphans, rel)
@@ -165,15 +175,15 @@ func (c *Tool) legacy(args map[string]any) (string, error) {
 		tail = append(tail, "no caller found: "+strings.Join(orphans[:min(6, len(orphans))], ", ")+more+" (pages loaded by address, includes or dead code)")
 	}
 	if module := input.Str(args, "module"); module != "" {
-		tail = append(tail, c.againstNew(module, legacyTables))
+		tail = append(tail, c.againstNew(module, legacyTables, written))
 	}
 	room := input.MaxAnswer - len(strings.Join(out, "\n")) - len(strings.Join(tail, "\n")) - 80
 	out = append(out, cutLines(strings.Join(lines, "\n"), room, "endpoints"))
 	return strings.Join(append(out, tail...), "\n"), nil
 }
 
-// againstNew compares the tables of the legacy with the tables the models of the new module name.
-func (c *Tool) againstNew(module string, legacy map[string]bool) string {
+// againstNew compares the tables of the legacy with the tables the models of the new module name, and the columns the legacy writes on the shared ones.
+func (c *Tool) againstNew(module string, legacy map[string]bool, written map[string][]string) string {
 	head := fmt.Sprintf("## against «%s» (tables of all its PHP files, not only the called ones)", echo(module))
 	_, endpoints, found, err := c.flowParts(map[string]any{"module": module})
 	if err != nil || !found {
@@ -218,7 +228,11 @@ func (c *Tool) againstNew(module string, legacy map[string]bool) string {
 		left = "\nonly in legacy and named elsewhere in the backend: " + firstNonEmpty(strings.Join(named, ", "), "-") +
 			"\nonly in legacy and not named in the backend: " + list(none)
 	}
-	return head + left + "\nonly in new: " + list(onlyN) + "\nboth: " + list(both)
+	out := head + left + "\nonly in new: " + list(onlyN) + "\nboth: " + list(both)
+	if len(both) > 0 {
+		out += "\n" + c.columnGaps(both, written)
+	}
+	return out
 }
 
 // namedInBackend counts, for each table, the PHP files of WEBSCOPE_BACKEND that name it, and lists the tables no file names.

@@ -54,7 +54,7 @@ Not covered: `v-combobox`, date pickers, menus of other libraries, file uploads,
 | `map_back {query}` | Endpoint, controller, service and table for a front module or API address | Laravel (`app/Modules/**/Routes/*.php`) |
 | `flows {module}` | Screens with their actions, then endpoints, controllers and tables: evidence for user stories | Vue + Laravel (`map` and `map_back` joined) |
 | `cases {module}` | The test cases of the module as a table (happy path, permission, required field, status, HTTP error, empty list), each with what runs it; it runs nothing | Vue + Laravel (built on `flows`) |
-| `legacy {path, module?}` | The PHP endpoints of a legacy folder with their callers and the tables their SQL writes and reads; with `module`, the tables against the new module's | Legacy PHP with SQL in the file and jQuery calls (`WEBSCOPE_LEGACY`) |
+| `legacy {path, module?}` | The PHP endpoints of a legacy folder with their callers and the tables their SQL writes and reads; with `module`, the tables against the new module's and the columns the legacy writes that the backend never names (inline `INSERT` and `UPDATE … SET` only) | Legacy PHP with SQL in the file and jQuery calls (`WEBSCOPE_LEGACY`) |
 | `snap {name, sql, key?, tenant?}` / `snap_diff {name}` | What a query returned, then only what changed | Any database; snapshots live in memory |
 
 `code` reads at most 20000 `.php` files of 2 MB each and stops there without saying so.

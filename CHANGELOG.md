@@ -2,6 +2,20 @@
 
 One entry per version, newest first. Tool names are `query`, `page`, `check` and `code`. Each change says what it is, what was seen that made it necessary, how it was checked and what was not checked. A change in what a tool prints is listed as a change, because a client may read it.
 
+## 0.5.41 — 2026-10-29
+
+**`code legacy {path, module}` lists the columns the legacy writes that the new backend never names.**
+
+What was seen that made it necessary: when the old and the new system share one database, a column only the legacy writes is lost without a warning, and until now it was found only if a test action happened to touch it (the seven `chk_*` flags of the quotes were found by hand). `legacy` compared tables, not columns.
+
+Now the answer of `legacy` with `module` ends with a section «columns the legacy writes and the backend never names», one line per shared table. The columns come from the SQL of the legacy files: the list of an `INSERT`, the names assigned by `UPDATE … SET` and by `ON DUPLICATE KEY UPDATE`, comments skipped and names built from a PHP variable left out. A column counts as named when any PHP file of `WEBSCOPE_BACKEND` has it between quotes or after `->`, case apart. It prints names, never values; without `WEBSCOPE_BACKEND` it says it did not compare.
+
+How it was checked:
+- A test written first and failing: an `INSERT` spread over lines, an `UPDATE … SET`, a commented statement, a variable in the list and a table only the legacy has; the listed columns are exactly the ones the backend does not name, and `chk_flete_nuevo` in the backend does not hide `chk_flete`.
+- `go vet` and `go test -race ./internal/code` pass (48 tests).
+- Run on the real quotes legacy: the section answered `-`, and that is not a clean result. The legacy there writes through PHP functions (`DMLC_*`) that call stored procedures, and has no inline `INSERT` and two `UPDATE … SET`, so its columns are not in the files. The seven `chk_*` flags travel as PHP variables of a `CALL`.
+- Not checked: a legacy that writes with inline SQL (only the fixture); the SQL inside stored procedures (`SHOW CREATE PROCEDURE` through `query` could read it, not built).
+
 ## 0.5.40 — 2026-10-29
 
 **`page fill` warns when a name fits more than one field.**
