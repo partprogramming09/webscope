@@ -2,6 +2,24 @@
 
 One entry per version, newest first. Tool names are `query`, `page`, `check` and `code`. Each change says what it is, what was seen that made it necessary, how it was checked and what was not checked. A change in what a tool prints is listed as a change, because a client may read it.
 
+## 0.5.36 — 2026-10-29
+
+**`WEBSCOPE_APP_URL` accepts several addresses, separated by commas. The old app and the new one in one session.**
+
+What was seen that made it necessary: in the app where this is tested the legacy answers on `http://localhost:8088` and the new front on `http://demo.localhost:5173`. The listener answered one origin, so a tab of the other one had every capture refused: `payloads` looked empty and `page parity {req_a, req_b}` (0.5.28) could not hold a request from each side.
+
+What changes:
+- Each address of the list is read as the browser writes its origin (lowercase, no default port, no path), blanks and duplicates are dropped, and the listener answers the `Origin` of any of them and no other. The `Access-Control-Allow-Origin` it sends is the one that asked.
+- `load` carries the list in its `o` parameter (the one-line bootstrap stays under 450 bytes with three addresses); the helper in the page warns about a tab only when the tab's origin is in none of the list, and the warning names the list.
+- `payloads` names the list when it says that a request from another origin was refused.
+- A list with no usable address fails as before, with the same `WEBSCOPE_APP_URL is not set` text plus a hint about the list.
+- One address works exactly as before. The captures of all the origins go to the same list (50 at most), so a legacy request and a modern request can be compared with `page parity {req_a, req_b}`; `page(load)` still has to be run again in each tab and after every navigation of the legacy, which reloads the page.
+
+How it was checked:
+- Three tests written first and failing (403 for every origin of a list, `WEBSCOPE_APP_URL is not set`): the listener answers each of three origins (one written with capitals and a path) and refuses a fourth, and `payloads` keeps all three requests and names the list; the bootstrap carries the three origins and stays short, and a list of blanks and a non-address is refused; and a real Chrome where the tab's origin is the second of the list (no warning) and is in none (the warning, with the list).
+- `go test -race ./...` passes (134 tests).
+- Not checked: with the real legacy and the real new front in two tabs at once (this needs your Chrome and `/mcp`); a legacy page that opens its own windows or frames at another origin.
+
 ## 0.5.35 — 2026-10-29
 
 **New: `code legacy {path, module?}`. What the old PHP of a module calls, writes and reads, against what the new module touches.** (It is the version the roadmap called 0.5.29; the number moved on.)

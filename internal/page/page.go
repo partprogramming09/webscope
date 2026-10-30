@@ -83,9 +83,20 @@ func New(appURL string) *Tool {
 	return &Tool{appURL: appURL, token: hex.EncodeToString(b), Life: context.Background()}
 }
 
-// origin is scheme://host of the app: the only origin the listener answers.
-func (p *Tool) origin() string {
-	u, err := url.Parse(p.appURL)
+// origins are the scheme://host of each address in WEBSCOPE_APP_URL (several are separated by commas): the only origins the listener answers.
+func (p *Tool) origins() []string {
+	var out []string
+	for _, a := range strings.Split(p.appURL, ",") {
+		if o := originOf(strings.TrimSpace(a)); o != "" && !slices.Contains(out, o) {
+			out = append(out, o)
+		}
+	}
+	return out
+}
+
+// originOf is the origin of one address, as the browser writes it, or "" if it is not an address.
+func originOf(appURL string) string {
+	u, err := url.Parse(appURL)
 	if err != nil || u.Host == "" {
 		return ""
 	}
@@ -124,14 +135,14 @@ func (p *Tool) answer(in input.Args) (string, error) {
 	case "parity":
 		return p.parity(in.Args)
 	case "load":
-		if p.origin() == "" {
-			return "", errors.New("WEBSCOPE_APP_URL is not set, set it to the app's address, e.g. http://localhost:5173")
+		if len(p.origins()) == 0 {
+			return "", errors.New("WEBSCOPE_APP_URL is not set, set it to the app's address, e.g. http://localhost:5173 (several, separated by commas, when the old and the new app are on different ports)")
 		}
 		base, err := p.start()
 		if err != nil {
 			return "", err
 		}
-		return fmt.Sprintf(`(()=>{var s=document.createElement("script");s.src=%q;document.head.appendChild(s);return "loading the webscope helper; next: page(state)"})()`, base+"/page.js?t="+p.token+"&o="+url.QueryEscape(p.origin())), nil
+		return fmt.Sprintf(`(()=>{var s=document.createElement("script");s.src=%q;document.head.appendChild(s);return "loading the webscope helper; next: page(state)"})()`, base+"/page.js?t="+p.token+"&o="+url.QueryEscape(strings.Join(p.origins(), ","))), nil
 	}
 	return snippet(in.Action, in.Args)
 }
@@ -171,7 +182,7 @@ func (p *Tool) guard(next http.HandlerFunc) http.HandlerFunc {
 			return
 		}
 		if o := r.Header.Get("Origin"); o != "" {
-			if o != p.origin() {
+			if !slices.Contains(p.origins(), o) {
 				p.mu.Lock()
 				p.refused = true
 				p.mu.Unlock()
@@ -251,7 +262,7 @@ func (p *Tool) payloads(args map[string]any) string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "%d requests captured (showing last %d)\n", len(p.caps), len(list))
 	if p.refused { // the origin itself is not repeated: it comes from the browser, and the agent can read the tab's address with state
-		fmt.Fprintf(&b, "(requests from another origin were refused: the tab's address must be the one in WEBSCOPE_APP_URL, %s; restart the server after changing it)\n", p.origin())
+		fmt.Fprintf(&b, "(requests from another origin were refused: the tab's address must be one of those in WEBSCOPE_APP_URL, %s; restart the server after changing it)\n", strings.Join(p.origins(), ", "))
 	}
 	for i, c := range list {
 		// The method and the URL come from the page under test: one line each, and short.

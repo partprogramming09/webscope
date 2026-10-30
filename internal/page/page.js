@@ -158,7 +158,7 @@
   const ALERTS ='[role=alert],.v-alert,.v-snackbar__content,.alert,.toast';
   const ERRORS = '.v-messages__message,.invalid-feedback,.error--text,.text-danger';
 
-  const wrongOrigin = () => cfg.o && location.origin !== cfg.o ? 'This tab is ' + location.origin + ' but WEBSCOPE_APP_URL is ' + cfg.o + ': captures and simulate are refused. Open the app at that address.' : '';
+  const wrongOrigin = () => cfg.o && !cfg.o.split(',').includes(location.origin) ? 'This tab is ' + location.origin + ' but WEBSCOPE_APP_URL is ' + cfg.o.split(',').join(', ') + ': captures and simulate are refused. Open the app at that address.' : '';
 
   const state = a => {
     const out = ['URL: ' + location.pathname + location.search + location.hash, 'Title: ' + norm(document.title)];

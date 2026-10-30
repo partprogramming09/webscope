@@ -57,7 +57,7 @@ A typical session, in the order that works best (`docs/usage.md` has the contrac
 
 Only `WEBSCOPE_DB_URL` is needed to start (`query`). The others switch on the rest:
 
-- `WEBSCOPE_APP_URL`: the address of the tab to test, exactly as the browser writes it (scheme, host and port). `page` needs it, and it needs the Claude in Chrome extension.
+- `WEBSCOPE_APP_URL`: the address of the tab to test, exactly as the browser writes it (scheme, host and port). `page` needs it, and it needs the Claude in Chrome extension. When the old and the new app answer on different addresses, list them separated by commas (`http://localhost:8088,http://demo.localhost:5173`): the helper then works in a tab of any of them and the requests of all of them are kept together.
 - `WEBSCOPE_BACKEND`: the folder with the project's PHP. `code` uses it.
 - `WEBSCOPE_FRONT`: the folder of the Vue front (its `src/modules` is read if it exists). `code map` and `map_back` use it.
 - `WEBSCOPE_LEGACY`: the folder of the legacy PHP (the one that holds the module folders, for example `public_html`). `code legacy` reads it; it never leaves it, follows no link and opens no `.env*`.

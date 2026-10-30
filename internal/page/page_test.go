@@ -893,7 +893,7 @@ func TestPayloadsAreBoundedAndACaptureCannotFakeALine(t *testing.T) {
 
 func TestTheOriginOfTheAppIsHowTheBrowserWritesIt(t *testing.T) {
 	for in, want := range map[string]string{"https://X.Example:443/app": "https://x.example", "http://localhost:80": "http://localhost", "http://localhost:5173/": "http://localhost:5173", "HTTP://LocalHost:5173": "http://localhost:5173"} {
-		if got := New(in).origin(); got != want {
+		if got := originOf(in); got != want {
 			t.Errorf("origin of %q is %q, the browser sends %q", in, got, want)
 		}
 	}
@@ -1091,5 +1091,93 @@ func TestParityOfRequestsSaysWhatItCouldNotFindOrRead(t *testing.T) {
 	out, err := askPage(t, p, "parity", map[string]any{"req_a": "POST save.php", "req_b": "POST /api/cut"})
 	if err != nil || !strings.Contains(out, "cut") {
 		t.Errorf("a clipped body must be called cut, not compared as complete: %v\n%s", err, out)
+	}
+}
+
+func TestTheServerAnswersEveryOriginOfTheListAndNoOther(t *testing.T) {
+	list := "http://localhost:8088, http://LOCALHOST:5173/demo/x ,http://demo.localhost:5173"
+	p := testPage(t, list)
+	srv := httptest.NewServer(p.handler())
+	defer srv.Close()
+	url := srv.URL + "/capture?t=" + p.token
+	for _, o := range []string{"http://localhost:8088", "http://localhost:5173", "http://demo.localhost:5173"} {
+		res := send(t, "POST", url, o, `{"m":"GET","u":"/from-`+strings.TrimPrefix(o, "http://")+`","s":200}`)
+		if res.StatusCode >= 300 || res.Header.Get("Access-Control-Allow-Origin") != o {
+			t.Errorf("origin %s: %d, ACAO %q", o, res.StatusCode, res.Header.Get("Access-Control-Allow-Origin"))
+		}
+	}
+	if res := send(t, "POST", url, "http://evil.example", `{"m":"GET","u":"/x","s":200}`); res.StatusCode != http.StatusForbidden {
+		t.Errorf("an origin that is not in the list: %d", res.StatusCode)
+	}
+	out, _ := askPage(t, p, "payloads", nil)
+	for _, want := range []string{"/from-localhost:8088", "/from-localhost:5173", "/from-demo.localhost:5173", "http://localhost:8088, http://localhost:5173, http://demo.localhost:5173", "refused"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("payloads lacks %q: %s", want, out)
+		}
+	}
+}
+
+func TestLoadCarriesEveryOriginAndStaysShort(t *testing.T) {
+	p := testPage(t, "http://localhost:8088,http://localhost:5173,http://demo.localhost:5173")
+	out, err := askPage(t, p, "load", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(out, "\n") || len(out) > 450 || !strings.Contains(out, "&o=http%3A%2F%2Flocalhost%3A8088%2Chttp%3A%2F%2Flocalhost%3A5173%2Chttp%3A%2F%2Fdemo.localhost%3A5173") {
+		t.Errorf("bootstrap (%d bytes) = %q", len(out), out)
+	}
+	if _, err := askPage(t, testPage(t, " , ,not a url"), "load", nil); err == nil {
+		t.Error("a list with no usable address must say WEBSCOPE_APP_URL is not set")
+	}
+}
+
+// TestAnyOriginOfTheListIsTheTabsOwn runs in a real Chrome: the helper warns about the tab's origin only when it is in none of the list.
+func TestAnyOriginOfTheListIsTheTabsOwn(t *testing.T) {
+	var mu sync.Mutex
+	var html_ string
+	app := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		defer mu.Unlock()
+		io.WriteString(w, html_)
+	}))
+	app.Start()
+	defer app.Close()
+	run := func(appURL string) string {
+		p := testPage(t, appURL)
+		load, err := askPage(t, p, "load", nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		state, _ := snippet("state", nil)
+		raw, _ := json.Marshal([]string{load, state})
+		mu.Lock()
+		html_ = strings.Replace(auditPage, "{{STEPS}}", string(raw), 1)
+		mu.Unlock()
+		ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+		defer cancel()
+		flags := []string{"--headless=new", "--disable-gpu", "--no-first-run", "--no-default-browser-check", "--user-data-dir=" + t.TempDir(), "--virtual-time-budget=60000", "--dump-dom"}
+		if os.Getenv("CI") != "" {
+			flags = append(flags, "--no-sandbox")
+		}
+		dom, err := exec.CommandContext(ctx, chromePath(t), append(flags, app.URL+"/")...).Output()
+		if err != nil {
+			t.Fatalf("chrome: %v", err)
+		}
+		m := regexp.MustCompile(`(?s)<pre id="out">(.*?)</pre>`).FindSubmatch(dom)
+		if m == nil {
+			t.Fatalf("the page did not finish its steps")
+		}
+		var out []string
+		if err := json.Unmarshal([]byte(html.UnescapeString(string(m[1]))), &out); err != nil || len(out) != 2 {
+			t.Fatalf("results %q: %v", m[1], err)
+		}
+		return out[1]
+	}
+	if out := run("http://other.example, " + app.URL); strings.Contains(out, "Warning") {
+		t.Errorf("the tab's origin is the second of the list, no warning expected:\n%s", out)
+	}
+	out := run("http://other.example,http://another.example")
+	if !strings.Contains(out, "Warning: This tab is "+app.URL) || !strings.Contains(out, "http://other.example, http://another.example") {
+		t.Errorf("a tab in none of the list must be warned, with the list:\n%s", out)
 	}
 }
