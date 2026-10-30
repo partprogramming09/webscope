@@ -2,6 +2,19 @@
 
 One entry per version, newest first. Tool names are `query`, `page`, `check` and `code`. Each change says what it is, what was seen that made it necessary, how it was checked and what was not checked. A change in what a tool prints is listed as a change, because a client may read it.
 
+## 0.5.40 — 2026-10-29
+
+**`page fill` warns when a name fits more than one field.**
+
+What was seen that made it necessary: on the legacy quotes screen the list filters and the form below them share labels (`ORIGEN`, `DESTINO`, `Vendedor`, `Nombre del cliente`). `fill {"ORIGEN": …}` answered `ORIGEN: ok` and had written into the list filter, not into the form, which showed `...` and was found by reading the values one by one. A dialog's field is already chosen before the page's; a page with two panels has no dialog.
+
+Now, when the first of the three ways of finding a field that gives a result (exact label, name, id or placeholder, label that contains the text) gives more than one, `fill` still fills the first (a dialog's before the page's, as before) and the line of that field ends with `(warning: 2 fields answer to this name; filled #e1, the others are #e2. Name one by its id to be sure)`, naming up to three of the others by id, `[name=…]` or label. A name that fits one field answers as before, and an id still picks one without a warning.
+
+How it was checked:
+- A real-Chrome test written first and failing (`Estado: ok` and nothing else): two selects labelled `Estado` give the warning with both ids; `fill {"e2": "dos"}` gives `e2: ok` with no warning; a name that fits one field (`Nombre`) gives none.
+- `go test -race ./...` passes (138 tests); the existing fill tests (the `Nota` in a dialog and in the page) still pass because the line still starts with `Nota: ok`.
+- Not checked: on the legacy screen itself (it needs `/mcp` and a tab); a name that matches fields in a hidden panel (hidden fields are not counted).
+
 ## 0.5.39 — 2026-10-29
 
 **`page shape {name, selector?}`: the shape of one part of the screen.**

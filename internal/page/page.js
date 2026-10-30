@@ -194,12 +194,11 @@
   };
 
   // ---- acting on the screen
-  const findField = name => {
+  const findFields = name => {
     const n = lower(name), f = fields().sort((a, b) => !!b.closest('[role=dialog],.v-dialog') - !!a.closest('[role=dialog],.v-dialog'));
-    return f.find(e => lower(labelOf(e)) === n) ||
-      f.find(e => [e.name, e.id, e.placeholder].some(x => x && lower(x) === n)) ||
-      f.find(e => lower(labelOf(e)).includes(n));
+    return [f.filter(e => lower(labelOf(e)) === n), f.filter(e => [e.name, e.id, e.placeholder].some(x => x && lower(x) === n)), f.filter(e => lower(labelOf(e)).includes(n))].find(l => l.length) || [];
   };
+  const idOf = e => e.id ? '#' + e.id : e.name ? '[name=' + e.name + ']' : '"' + labelOf(e) + '"';
   // Vuetify menus: v-select/v-autocomplete show the option text, keep a code in the input and render only the rows in view.
   const MENU = '.v-select,.v-autocomplete,.v-combobox';
   const sleep = ms => new Promise(r => setTimeout(r, ms));
@@ -271,9 +270,10 @@
     const fields = a.fields && typeof a.fields === 'object' ? a.fields : a;
     if (!Object.keys(fields).length) return fail('fill needs fields {label: value}, e.g. fill {"Nombre":"Ana","Acepto":true}');
     let miss = false;
-    const out = [];
+    const out = [], notes = [];
     for (const [k, v] of Object.entries(fields)) {
-      const e = findField(k);
+      const found = findFields(k), e = found[0];
+      notes.push(found.length > 1 ? ' (warning: ' + found.length + ' fields answer to this name; filled ' + idOf(e) + ', the others are ' + found.slice(1, 4).map(idOf).join(', ') + '. Name one by its id to be sure)' : '');
       if (!e) { miss = true; out.push(k + ': not found'); continue; }
       try {
         const clicked = await setValue(e, v);
@@ -288,8 +288,9 @@
         out.push(k + ': the page shows "' + got + '" instead of "' + want + '"');
       } catch (x) { miss = true; out.push(k + ': ' + x.message); }
     }
-    if (miss) out.push('Next: page(state) lists the fields and their labels.');
-    return out.join('\n');
+    const lines = out.map((l, i) => l + notes[i]);
+    if (miss) lines.push('Next: page(state) lists the fields and their labels.');
+    return lines.join('\n');
   };
 
   // Runs `f` (a click or a key) and appends what it caused: the requests with their status, the new alerts and field errors, a URL change, or that nothing changed.

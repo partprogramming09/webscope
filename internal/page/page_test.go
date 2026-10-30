@@ -1265,3 +1265,62 @@ func TestShapeOfAPartOfTheScreenHoldsOnlyThatPart(t *testing.T) {
 		t.Errorf("the part #clean holds one field (Nombre) and one button (Enviar): %+v", part)
 	}
 }
+
+// TestFillSaysWhenANameMatchesMoreThanOneField runs in a real Chrome: two selects are labelled «Estado»; the first is filled, the answer names both, and an id picks one without a warning.
+func TestFillSaysWhenANameMatchesMoreThanOneField(t *testing.T) {
+	var mu sync.Mutex
+	var html_ string
+	app := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		defer mu.Unlock()
+		io.WriteString(w, html_)
+	}))
+	app.Start()
+	defer app.Close()
+	p := testPage(t, app.URL)
+	load, err := askPage(t, p, "load", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	steps := []string{load}
+	for _, f := range []map[string]any{{"Estado": "uno"}, {"e2": "dos"}, {"Nombre": "x"}} {
+		s, err := snippet("fill", map[string]any{"fields": f})
+		if err != nil {
+			t.Fatal(err)
+		}
+		steps = append(steps, s)
+	}
+	raw, _ := json.Marshal(steps)
+	mu.Lock()
+	html_ = strings.Replace(auditPage, "{{STEPS}}", string(raw), 1)
+	mu.Unlock()
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+	flags := []string{"--headless=new", "--disable-gpu", "--no-first-run", "--no-default-browser-check", "--user-data-dir=" + t.TempDir(), "--virtual-time-budget=60000", "--dump-dom"}
+	if os.Getenv("CI") != "" {
+		flags = append(flags, "--no-sandbox")
+	}
+	dom, err := exec.CommandContext(ctx, chromePath(t), append(flags, app.URL+"/")...).Output()
+	if err != nil {
+		t.Fatalf("chrome: %v", err)
+	}
+	m := regexp.MustCompile(`(?s)<pre id="out">(.*?)</pre>`).FindSubmatch(dom)
+	if m == nil {
+		t.Fatalf("the page did not finish its steps")
+	}
+	var out []string
+	if err := json.Unmarshal([]byte(html.UnescapeString(string(m[1]))), &out); err != nil || len(out) != len(steps) {
+		t.Fatalf("results %q: %v", m[1], err)
+	}
+	for _, want := range []string{"Estado: ok", "2 fields answer to this name", "#e1", "#e2"} {
+		if !strings.Contains(out[1], want) {
+			t.Errorf("an ambiguous name must say so (lacks %q): %s", want, out[1])
+		}
+	}
+	if out[2] != "e2: ok" {
+		t.Errorf("an id names one field and gets no warning: %q", out[2])
+	}
+	if strings.Contains(out[3], "answer to this name") {
+		t.Errorf("a name that matches one field gets no warning: %q", out[3])
+	}
+}
