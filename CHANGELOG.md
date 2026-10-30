@@ -2,6 +2,19 @@
 
 One entry per version, newest first. Tool names are `query`, `page`, `check` and `code`. Each change says what it is, what was seen that made it necessary, how it was checked and what was not checked. A change in what a tool prints is listed as a change, because a client may read it.
 
+## 0.5.39 — 2026-10-29
+
+**`page shape {name, selector?}`: the shape of one part of the screen.**
+
+What was seen that made it necessary: on the real quotes screens the legacy is one page («Pantalla Cotización») with the list and a 12-step form, and the new front splits them, so the shape of the whole screen gave 34 fields, 19 buttons and 12 tabs against 14, 13 and none, and `parity` was almost all noise.
+
+`selector` is a CSS selector, like the one `audit` and `read` take. Fields, buttons, table columns, tabs and headings are then taken only from inside the first element it matches, so the list of the legacy and the list of the new front can be saved and compared without the form. A selector that matches nothing answers `Failed: nothing matches …` and one that is not a selector answers `Failed: bad selector …`; neither saves anything, so an old shape of the same name is not replaced by an empty one. Without `selector` it behaves as before.
+
+How it was checked:
+- A test in a real Chrome written first and failing (`shape «none» saved: 8 fields` for a selector that matched nothing): the whole page gives its eight fields; `#clean` gives one field (`Nombre`) and one button (`Enviar`) and no headings; a selector that matches nothing and one that is not a selector both fail and save nothing.
+- `go test -race ./...` passes (137 tests).
+- Not checked: on the real legacy and the real new front (it needs `/mcp` and the two tabs); which selectors name the list on each side (the legacy page has no obvious container id).
+
 ## 0.5.38 — 2026-10-29
 
 **`page parity {req_a, req_b}` reads the query string of a GET and no longer prints the values of the address. First real comparison of the old screen and the new one.**

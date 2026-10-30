@@ -1204,3 +1204,64 @@ func TestParityOfRequestsReadsTheQueryNamesOfAGetAndNeverPrintsItsValues(t *test
 		}
 	}
 }
+
+// TestShapeOfAPartOfTheScreenHoldsOnlyThatPart runs in a real Chrome: a selector limits the shape to one section, and a selector that matches nothing fails.
+func TestShapeOfAPartOfTheScreenHoldsOnlyThatPart(t *testing.T) {
+	var mu sync.Mutex
+	var html_ string
+	app := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		defer mu.Unlock()
+		io.WriteString(w, html_)
+	}))
+	app.Start()
+	defer app.Close()
+	p := testPage(t, app.URL)
+	load, err := askPage(t, p, "load", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	steps := []string{load}
+	for _, args := range []map[string]any{{"name": "all"}, {"name": "part", "selector": "#clean"}, {"name": "none", "selector": "#nothing"}, {"name": "bad", "selector": "##"}} {
+		s, err := snippet("shape", args)
+		if err != nil {
+			t.Fatal(err)
+		}
+		steps = append(steps, s)
+	}
+	raw, _ := json.Marshal(steps)
+	mu.Lock()
+	html_ = strings.Replace(auditPage, "{{STEPS}}", string(raw), 1)
+	mu.Unlock()
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+	flags := []string{"--headless=new", "--disable-gpu", "--no-first-run", "--no-default-browser-check", "--user-data-dir=" + t.TempDir(), "--virtual-time-budget=60000", "--dump-dom"}
+	if os.Getenv("CI") != "" {
+		flags = append(flags, "--no-sandbox")
+	}
+	dom, err := exec.CommandContext(ctx, chromePath(t), append(flags, app.URL+"/")...).Output()
+	if err != nil {
+		t.Fatalf("chrome: %v", err)
+	}
+	m := regexp.MustCompile(`(?s)<pre id="out">(.*?)</pre>`).FindSubmatch(dom)
+	if m == nil {
+		t.Fatalf("the page did not finish its steps")
+	}
+	var out []string
+	if err := json.Unmarshal([]byte(html.UnescapeString(string(m[1]))), &out); err != nil || len(out) != len(steps) {
+		t.Fatalf("results %q: %v", m[1], err)
+	}
+	if !strings.Contains(out[3], "Failed: nothing matches #nothing") || !strings.Contains(out[4], "Failed: bad selector") {
+		t.Errorf("a selector that matches nothing or is not one must fail: %q %q", out[3], out[4])
+	}
+	p.mu.Lock()
+	all, part := p.shapes["all"], p.shapes["part"]
+	_, none := p.shapes["none"]
+	p.mu.Unlock()
+	if none || len(all.Fields) < 5 {
+		t.Fatalf("the whole screen has many fields and a failed shape saves nothing: %+v / %v", all, none)
+	}
+	if len(part.Fields) != 1 || part.Fields[0].L != "Nombre" || !slices.Equal(part.Buttons, []string{"Enviar"}) || len(part.Headings) != 0 {
+		t.Errorf("the part #clean holds one field (Nombre) and one button (Enviar): %+v", part)
+	}
+}
