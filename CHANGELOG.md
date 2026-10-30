@@ -14,7 +14,8 @@ Now the room under `## endpoints` is shared: 3/10 for the tables, 2/10 for the s
 How it was checked:
 - One test written first and failing (`tablesFirst` took no room): 100 tables, 20 endpoints, a warning and a service in 3000 bytes give the first table, the first endpoint in its short form, the warning, the note that tables were cut, tables before endpoints, and no more than 3300 bytes.
 - `go test -race ./...` passes (127 tests).
-- Not checked: this version on the real module (it needs `/mcp`); whether 3/10 is the right share for a module with few tables and many endpoints (the unused room of one part is not given to another).
+- Real `crm/quotes` with this version: 11 tables (32 more cut), 21 endpoints in their short form (39 more cut), the 10 front addresses with no route, and a note of 17 more lines of services and warnings. Nothing is empty.
+- Not checked: whether 3/10 is the right share for a module with few tables and many endpoints (the unused room of one part is not given to another).
 
 ## 0.5.33 — 2026-10-29
 
