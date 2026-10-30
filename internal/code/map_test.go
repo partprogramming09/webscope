@@ -262,3 +262,37 @@ func TestFlowsWithoutABackendStillGivesTheScreensAndSaysSo(t *testing.T) {
 		t.Errorf("want the screens and the missing backend named:\n%s", out)
 	}
 }
+
+func TestCasesListsTheTestsEachFlowNeedsWithWhatRunsThemAndWhatChecksThem(t *testing.T) {
+	out, err := code(t, mapSetup(t), "cases", map[string]any{"module": "crm/quotes"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{"Cases of «crm/quotes»: a list to run, not a result", "id\tflow\tcase\trun with\tverify with",
+		"QuoteIndex.vue\thappy: openCreate «Nueva»", "permission: quotes.create", "permission: quotes.delete",
+		"required empty: client", "status: ENPROCESO, APROBADA", "PUT quotes/approve/{}\thttp error", "GET quotes\tempty", `page simulate {match: "quotes/approve/", status: 500}`, " cases)"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("lacks %q:\n%s", want, out)
+		}
+	}
+	for _, not := range []string{"required empty: notes", "GET quotes/{}\tempty", "SECRET"} {
+		if strings.Contains(out, not) {
+			t.Errorf("must not contain %q:\n%s", not, out)
+		}
+	}
+	if _, err := code(t, mapSetup(t), "cases", map[string]any{}); err == nil {
+		t.Error("cases without a module must say what it needs")
+	}
+}
+
+func TestCasesWithoutABackendStillGivesTheScreenCases(t *testing.T) {
+	c := mapSetup(t)
+	c.Backend = ""
+	out, err := code(t, c, "cases", map[string]any{"module": "crm/quotes"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out, "happy: openCreate") || strings.Contains(out, "http error") {
+		t.Errorf("want the screen cases and no endpoint cases:\n%s", out)
+	}
+}

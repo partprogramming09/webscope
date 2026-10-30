@@ -2,6 +2,31 @@
 
 One entry per version, newest first. Tool names are `query`, `page`, `check` and `code`. Each change says what it is, what was seen that made it necessary, how it was checked and what was not checked. A change in what a tool prints is listed as a change, because a client may read it.
 
+## 0.5.30 — 2026-10-29
+
+(There is no 0.5.29: it is the reading of the legacy code, which waits for the answers about where the legacy lives.)
+
+**New: `code cases {module}`. From what a module does to what has to be tested, as a table to run.**
+
+It builds on `flows` and answers one row per case, five columns: `id`, `flow`, `case`, `run with`, `verify with`. The rows it makes:
+- `happy: <action>`: run with `page click «text»`, verify with `page payloads` and `check` against the saved `ZZ_` row.
+- `permission: <name>`: for each `can('…')` that guards an action or a part of the screen, `page state` as a user without it.
+- `required empty: <field>`: for each field marked `*`, fill the rest, save, and look for the error and for no request.
+- `status: A, B`: the statuses of the module, with a count by status in the base.
+- `http error`: for each POST, PUT, PATCH or DELETE endpoint, `page simulate {match, status: 500}` and repeat the action; the id in the address becomes a prefix (`quotes/approve/`) so it matches the real request.
+- `empty`: for each list endpoint (a GET with no id), a filter that matches nothing.
+
+It runs nothing and says so in its first line: it is a list, not a result. Writes only with the user's approval and on `ZZ_` rows. At most 120 rows; it says how many exist. Without `WEBSCOPE_BACKEND` it gives only the screen cases.
+
+**New skill `.claude/skills/migration-parity/SKILL.md`.** Chains the pieces for a migrated module: confirmed flows, the legacy side with `state` and `payloads`, screen `shape` and `parity`, request `parity` with a `map`, `check` of the saved row, then `cases`, adding one case for every difference found, and a report table that ends with what was not checked. It also lists what each tool cannot say (names are not behaviour; a rule in a service is found only by reading). Not tried with a real agent yet.
+
+What was seen that made it necessary: after `flows`, `shape` and `parity` the agent knew what the module does and where it differs, but each session still invented its own list of what to test.
+
+How it was checked:
+- Two tests written first and failing (`unknown action "cases"`): the table with a case of each kind, the ones that must not appear (a field that is not required, the `show` endpoint as an empty list), the header and the legend; and the module without backend. After seeing the real output, one more fix: the `simulate` match had `{}` in it and would never match a real request; the test now pins `quotes/approve/`.
+- `go test -race ./...` passes.
+- Not checked: on the real quotes module (a long list, and whether 120 rows is too many or too few); the cases of a screen whose actions are not `@click` on a button (they are not in `flows` either); that the `run with` phrases are enough for an agent that has not read the skill.
+
 ## 0.5.28 — 2026-10-29
 
 **New: `page parity {req_a, req_b, map?}`. Same button on the old screen and the new one: do they send and receive the same fields?**
