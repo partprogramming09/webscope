@@ -99,38 +99,48 @@ func TestLegacyListsTheColumnsItWritesThatTheBackendNeverNames(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	put(c.Legacy, "comercial/cotizadorX_new/server/estado.php", "<?php\n$db->query(\"INSERT INTO app_cotizaciones (CODIGO, `chk_flete`, ESTADO,\n   {$extra}) VALUES (1,2,3)\");\n$db->query(\"UPDATE app_cotizaciones SET MOTIVO_RECHAZO = 'x', USUARIO=1 WHERE id=3\");\n// UPDATE app_cotizaciones SET comentada = 1\n$sql = \"INSERT  INTO  app_cotizaciones  (extra_col,\" .\n  \" otra_col, fecha_ingreso) VALUES (1,2,3)\";\n$sql = \"UPDATE app_cotizaciones SET \" .\n  \"campo_union = 1, \" .\n  \"fecha_ingreso = 2 WHERE id = 1\";\n$db->query(\"UPDATE app_clientes SET solo_legado = 1\");\n")
-	put(c.Backend, "app/Modules/Crm/Quotes/Services/QuoteWriter.php", "<?php\n$q->update(['codigo' => 1, 'motivo_rechazo' => 'x']);\n$q->estado = 'A';\n$f = ['fecha_ingreso' => 1];\n$other = 'chk_flete_nuevo';\n")
+	put(c.Legacy, "comercial/cotizadorX_new/server/estado.php", "<?php\n$db->query(\"INSERT INTO app_cotizaciones (CODIGO, `chk_flete`, ESTADO,\n   {$extra}) VALUES (1,2,3)\");\n$db->query(\"UPDATE app_cotizaciones SET MOTIVO_RECHAZO = 'x', USUARIO=1 WHERE id=3\");\n// UPDATE app_cotizaciones SET comentada = 1\n$sql = \"INSERT  INTO  app_cotizaciones  (extra_col,\" .\n  \" otra_col, fecha_ingreso) VALUES (1,2,3)\";\n$sql = \"UPDATE app_cotizaciones SET \" .\n  \"campo_union = 1, \" .\n  \"fecha_ingreso = 2 WHERE id = 1\";\n$sql = \"INSERT INTO app_cotizaciones (solo_lectura, rellena, filtro_col, en_request) VALUES (1,2,3,4)\";\n$db->query(\"UPDATE app_clientes SET solo_legado = 1\");\n")
+	mod := "app/Modules/Crm/Quotes/"
+	put(c.Backend, mod+"Services/QuoteWriter.php", "<?php\n$q->update(['codigo' => 1, 'motivo_rechazo' => 'x']);\n$q->estado = 'A';\n$f = ['fecha_ingreso' => 1];\n$other = 'chk_flete_nuevo';\n$q->where('filtro_col', 1)->get();\n")
+	put(c.Backend, mod+"Resources/QuoteResource.php", "<?php\nreturn ['solo_lectura' => $this->solo_lectura];\n")
+	put(c.Backend, mod+"Requests/QuoteRequest.php", "<?php\nreturn ['en_request' => 'required'];\n")
+	put(c.Backend, mod+"Models/Extra.php", "<?php\nclass Extra {\n    protected $fillable = [\n        'rellena',\n    ];\n}\n")
 	put(c.Backend, "app/Modules/Shared/Other.php", "<?php\n$x = ['usuario' => 1];\n")
 	out, err := code(t, c, "legacy", map[string]any{"path": "comercial/cotizadorX_new", "module": "crm/quotes"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	const outside = "named in the backend but not in the module's folders"
+	const readOnly, outside = "named in the backend only where it is read", "written in the backend, but not in the module's folders"
 	_, cols, ok := strings.Cut(out, "## columns the legacy writes on shared tables")
 	if !ok {
 		t.Fatalf("the section is missing:\n%s", out)
 	}
-	nowhere, elsewhere, _ := strings.Cut(cols, outside)
+	nowhere, rest, _ := strings.Cut(cols, readOnly)
+	reads, elsewhere, _ := strings.Cut(rest, outside)
 	if !strings.Contains(cols, "module folders: app/Modules/Crm/Quotes/") {
 		t.Errorf("the module folders must be named:\n%s", cols)
 	}
-	for _, want := range []string{"app_cotizaciones: ", "chk_flete", "extra_col", "otra_col", "campo_union"} {
-		if !strings.Contains(nowhere, want) {
-			t.Errorf("%q is written by the legacy and named nowhere in the backend:\n%s", want, nowhere)
+	groups := map[string]string{"nowhere": nowhere, "reads": reads, "elsewhere": elsewhere}
+	want := map[string][]string{
+		"nowhere":   {"app_cotizaciones: ", "chk_flete", "extra_col", "otra_col", "campo_union"},
+		"reads":     {"solo_lectura", "filtro_col", "en_request"},
+		"elsewhere": {"usuario"},
+	}
+	not := map[string][]string{
+		"nowhere":   {"usuario", "codigo", "estado", "motivo_rechazo", "comentada", "fecha_ingreso", "solo_lectura", "filtro_col", "{"},
+		"reads":     {"usuario", "codigo", "estado", "motivo_rechazo", "chk_flete", "fecha_ingreso", "rellena"},
+		"elsewhere": {"codigo", "estado", "motivo_rechazo", "chk_flete", "fecha_ingreso", "rellena", "solo_lectura", "filtro_col"},
+	}
+	for g, text := range groups {
+		for _, w := range want[g] {
+			if !strings.Contains(text, w) {
+				t.Errorf("%q belongs to the group %s:\n%s", w, g, text)
+			}
 		}
-	}
-	for _, not := range []string{"usuario", "codigo", "estado", "motivo_rechazo", "comentada", "fecha_ingreso", "{"} {
-		if strings.Contains(nowhere, not) {
-			t.Errorf("%q must not be in the «named nowhere» group (named in the backend, a comment or a variable):\n%s", not, nowhere)
-		}
-	}
-	if !strings.Contains(elsewhere, "usuario") {
-		t.Errorf("usuario is named only outside the module's folders:\n%s", elsewhere)
-	}
-	for _, not := range []string{"codigo", "estado", "motivo_rechazo", "chk_flete", "fecha_ingreso"} {
-		if strings.Contains(elsewhere, not) {
-			t.Errorf("%q is not a column named only outside the module:\n%s", not, elsewhere)
+		for _, n := range not[g] {
+			if strings.Contains(text, n) {
+				t.Errorf("%q must not be in the group %s:\n%s", n, g, text)
+			}
 		}
 	}
 	if strings.Contains(out, "solo_legado") {

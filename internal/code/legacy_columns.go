@@ -71,12 +71,26 @@ func moduleDirs(endpoints string) []string {
 	return dirs
 }
 
-// namedColumns says, for each of cols, whether a PHP file of the backend names it between quotes or after ->, case apart, and whether one inside dirs does.
-func (c *Tool) namedColumns(cols, dirs []string) (anywhere, inModule map[string]bool) {
-	anywhere, inModule = map[string]bool{}, map[string]bool{}
+// readOnlyFile is a file whose quoted `'name' =>` pairs describe data to send or to validate, not to store.
+func readOnlyFile(path string) bool {
+	return strings.Contains(path, "/Resources/") || strings.Contains(path, "/Requests/") ||
+		strings.HasSuffix(path, "Resource.php") || strings.HasSuffix(path, "Request.php") || strings.HasSuffix(path, "Collection.php")
+}
+
+var (
+	pairAfter   = regexp.MustCompile(`^\s*=>`)
+	assignAfter = regexp.MustCompile(`^\s*(?:=[^=>]|\.=|\+=|-=)`)
+	fillable    = regexp.MustCompile(`(?s)\$(?:fillable|guarded)\s*=\s*\[(.*?)\]`)
+	quotedName  = regexp.MustCompile("['\"\x60](\\w+)['\"\x60]")
+)
+
+// namedColumns says, for each of cols, whether a PHP file of the backend names it between quotes or after ->, case apart (anywhere), whether it is assigned
+// there (`'col' =>` outside Resources and Requests, `->col =`, a $fillable list: wrote), and whether such a file lies inside dirs (inModule).
+func (c *Tool) namedColumns(cols, dirs []string) (anywhere, wrote, inModule map[string]bool) {
+	anywhere, wrote, inModule = map[string]bool{}, map[string]bool{}, map[string]bool{}
 	files, _, err := fsx.PHPFiles(c.Backend)
 	if err != nil || len(cols) == 0 {
-		return anywhere, inModule
+		return anywhere, wrote, inModule
 	}
 	quoted := make([]string, len(cols))
 	for i, col := range cols {
@@ -84,18 +98,50 @@ func (c *Tool) namedColumns(cols, dirs []string) (anywhere, inModule map[string]
 	}
 	names := strings.Join(quoted, "|")
 	re := regexp.MustCompile("(?i)(?:['\"\x60](" + names + ")['\"\x60]|->(" + names + ")\\b)")
-	for _, h := range fsx.Grep(re, files, fsx.Lines{}) {
-		path, mine := filepath.ToSlash(h.File), false
+	wanted := map[string]bool{}
+	for _, col := range cols {
+		wanted[col] = true
+	}
+	lines := fsx.Lines{}
+	inside := func(path string) bool {
 		for _, d := range dirs {
-			mine = mine || strings.Contains(path, "/"+d)
+			if strings.Contains(path, "/"+d) {
+				return true
+			}
 		}
-		for _, m := range re.FindAllStringSubmatch(h.Text, -1) {
-			name := strings.ToLower(m[1] + m[2])
+		return false
+	}
+	seen := map[string]bool{}
+	for _, h := range fsx.Grep(re, files, lines) {
+		path := filepath.ToSlash(h.File)
+		seen[h.File] = true
+		for _, m := range re.FindAllStringSubmatchIndex(h.Text, -1) {
+			name, after := "", ""
+			if m[2] >= 0 {
+				name, after = h.Text[m[2]:m[3]], h.Text[m[1]:]
+			} else {
+				name, after = h.Text[m[4]:m[5]], h.Text[m[1]:]
+			}
+			name = strings.ToLower(name)
 			anywhere[name] = true
-			inModule[name] = inModule[name] || mine
+			isWrite := m[2] >= 0 && pairAfter.MatchString(after) && !readOnlyFile(path) || m[2] < 0 && assignAfter.MatchString(after)
+			if isWrite {
+				wrote[name] = true
+				inModule[name] = inModule[name] || inside(path)
+			}
 		}
 	}
-	return anywhere, inModule
+	for f := range seen {
+		for _, b := range fillable.FindAllStringSubmatch(strings.Join(lines[f], "\n"), -1) {
+			for _, q := range quotedName.FindAllStringSubmatch(b[1], -1) {
+				if name := strings.ToLower(q[1]); wanted[name] {
+					wrote[name] = true
+					inModule[name] = inModule[name] || inside(filepath.ToSlash(f))
+				}
+			}
+		}
+	}
+	return anywhere, wrote, inModule
 }
 
 // columnLines is one line per table of the columns of written that pick selects, within room bytes.
@@ -125,18 +171,18 @@ func columnLines(shared []string, written map[string][]string, pick func(string)
 }
 
 // columnGaps is the section of the legacy columns on shared tables that the backend does not name, in two groups: named nowhere, and named only outside the new module's folders.
-func (c *Tool) columnGaps(shared []string, written map[string][]string, endpoints string) string {
-	head := "## columns the legacy writes on shared tables (a column counts as named when a backend file has it between quotes or after ->; reads count too)"
+func (c *Tool) columnGaps(shared []string, cols map[string][]string, endpoints string) string {
+	head := "## columns the legacy writes on shared tables (named: a backend file has it between quotes or after ->; written: it is assigned there, in `'col' =>` outside Resources and Requests, in `->col =` or in a $fillable list)"
 	if c.Backend == "" {
 		return head + "\nnot compared: WEBSCOPE_BACKEND is not set"
 	}
 	var all []string
 	tables := 0
 	for _, t := range shared {
-		if len(written[t]) > 0 {
+		if len(cols[t]) > 0 {
 			tables++
 		}
-		all = append(all, written[t]...)
+		all = append(all, cols[t]...)
 	}
 	dirs := moduleDirs(endpoints)
 	shown := firstNonEmpty(strings.Join(dirs[:min(3, len(dirs))], ", "), "none found")
@@ -144,9 +190,9 @@ func (c *Tool) columnGaps(shared []string, written map[string][]string, endpoint
 		shown += fmt.Sprintf(" (+%d)", len(dirs)-3)
 	}
 	head += fmt.Sprintf("\nchecked %d columns on %d tables; module folders: %s", len(all), tables, shown)
-	anywhere, inModule := c.namedColumns(all, dirs)
+	anywhere, wrote, inModule := c.namedColumns(all, dirs)
 	section := func(title string, pick func(string) bool) string {
-		lines, left := columnLines(shared, written, pick, columnSectionMax/2)
+		lines, left := columnLines(shared, cols, pick, columnSectionMax/3)
 		if len(lines) == 0 {
 			return title + " -"
 		}
@@ -156,8 +202,9 @@ func (c *Tool) columnGaps(shared []string, written map[string][]string, endpoint
 		return title + "\n" + strings.Join(lines, "\n")
 	}
 	out := head + "\n" + section("named nowhere in the backend:", func(col string) bool { return !anywhere[col] })
+	out += "\n" + section("named in the backend only where it is read, never assigned or filled (a Resource, a Request, a filter):", func(col string) bool { return anywhere[col] && !wrote[col] })
 	if len(dirs) > 0 {
-		out += "\n" + section("named in the backend but not in the module's folders (who writes them?):", func(col string) bool { return anywhere[col] && !inModule[col] })
+		out += "\n" + section("written in the backend, but not in the module's folders (who else writes them?):", func(col string) bool { return wrote[col] && !inModule[col] })
 	}
 	return out
 }

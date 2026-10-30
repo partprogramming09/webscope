@@ -2,6 +2,19 @@
 
 One entry per version, newest first. Tool names are `query`, `page`, `check` and `code`. Each change says what it is, what was seen that made it necessary, how it was checked and what was not checked. A change in what a tool prints is listed as a change, because a client may read it.
 
+## 0.5.44 — 2026-10-29
+
+**The columns section of `code legacy` tells a column that is written from one that is only read.**
+
+What was seen that made it necessary: in 0.5.43 a column counted as named when a backend file had it between quotes, so a `'estado' => $this->estado` in a Resource, a validation rule or a `where('estado', …)` hid a column that nothing stores. A false «named» is a missed gap, and the user asked for precision first.
+
+Now three groups: «named nowhere in the backend»; «named only where it is read, never assigned or filled» (a Resource, a Request, a filter); and «written in the backend, but not in the module's folders». A column is written when it is assigned: `'col' =>` in a file that is not a Resource, Request or Collection, `->col =` (also `.=`, `+=`, `-=`, not `==`), or a name in a `$fillable` or `$guarded` list. A column written inside the module's folders is in none of the groups.
+
+How it was checked:
+- The test has a column per case: one in a Resource (`solo_lectura`), one in a Request (`en_request`), one in a `where` (`filtro_col`), one in `$fillable` (`rellena`, in none of the groups), one written in a shared folder (`usuario`), one named nowhere. It failed first (the new groups did not exist), then passed; 48 tests pass with `-race`, `go vet` is clean.
+- Real quotes legacy: 267 columns on 18 tables, and the three groups are empty, so every column the legacy writes is assigned somewhere in the module's folders.
+- Not checked: a write by a path the rules do not see (`DB::table()->insert($data)` with an array built elsewhere, `fill($request->all())`); then the column would show as «only read». A count by hand of which of the 267 are assigned by each rule.
+
 ## 0.5.43 — 2026-10-29
 
 **The columns section of `code legacy` splits what it finds in two groups, so a doubtful column is never reported as a gap.**
