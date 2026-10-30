@@ -2,6 +2,18 @@
 
 One entry per version, newest first. Tool names are `query`, `page`, `check` and `code`. Each change says what it is, what was seen that made it necessary, how it was checked and what was not checked. A change in what a tool prints is listed as a change, because a client may read it.
 
+## 0.5.48 — 2026-10-30
+
+**`page parity {a, b, kinds?}` shows a repeated name once with ×N, and `kinds` limits what is compared.**
+
+What was seen that made it necessary: in the parity of the CRM tariff screens, «only in legacy» listed 59 lines, almost all the same `chk_id[]` checkbox repeated and the step buttons of a four-step wizard, so the agent had to read the answer by hand to find the real gaps (a missing filter, a select that became a combobox).
+
+Now a name that repeats is printed once with its count («field chk_id[] ×8»), and `[]` at the end of a name is ignored when matching. `kinds` (a list of `field`, `button`, `column`, `tab`, `heading`) compares only those kinds; an unknown kind fails and lists the valid ones. Without `kinds` the answer is the same as before, except for the ×N.
+
+How it was checked:
+- Tests written first and failing: a repeated name gives one line with ×3; `kinds: "field"` leaves the buttons out; an unknown kind fails. The tests of the package pass with `-race`; `go vet` is clean.
+- Not checked: matching by the visible label when the legacy name is technical (`lstPaisOrigen_tar_BC` against «País de origen»): it needs the label of each field from `page.js`, and is left for another version. Not run against the real acme screens.
+
 ## 0.5.47 — 2026-10-30
 
 **`code help {topic?}`: the server tells the agent when and how to use its tools for a migration.**

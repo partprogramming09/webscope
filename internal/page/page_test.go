@@ -943,6 +943,47 @@ func TestParityShowsOnlyWhatIsMissingExtraOrChanged(t *testing.T) {
 	}
 }
 
+func TestParityCollapsesRepeatedNamesIntoACount(t *testing.T) {
+	p := testPage(t, appOrigin)
+	if _, err := askPage(t, p, "load", nil); err != nil {
+		t.Fatal(err)
+	}
+	old := `{"fields":[{"l":"chk_id[]","t":"checkbox"},{"l":"chk_id[]","t":"checkbox"},{"l":"chk_id[]","t":"checkbox"}],"buttons":[],"columns":[],"tabs":[],"headings":[]}`
+	nu := `{"fields":[],"buttons":[],"columns":[],"tabs":[],"headings":[]}`
+	for name, body := range map[string]string{"old": old, "new": nu} {
+		postShape(t, p.base, p.token, name, body)
+	}
+	out, err := askPage(t, p, "parity", map[string]any{"a": "old", "b": "new"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out, "field chk_id[] ×3") || strings.Count(out, "chk_id[]") != 1 {
+		t.Errorf("want one line «field chk_id[] ×3»:\n%s", out)
+	}
+}
+
+func TestParityKindsLimitsWhatIsCompared(t *testing.T) {
+	p := testPage(t, appOrigin)
+	if _, err := askPage(t, p, "load", nil); err != nil {
+		t.Fatal(err)
+	}
+	old := `{"fields":[{"l":"Cliente","t":"text"}],"buttons":["Paso 1","Paso 2"],"columns":[],"tabs":[],"headings":[]}`
+	nu := `{"fields":[],"buttons":[],"columns":[],"tabs":[],"headings":[]}`
+	for name, body := range map[string]string{"old": old, "new": nu} {
+		postShape(t, p.base, p.token, name, body)
+	}
+	out, err := askPage(t, p, "parity", map[string]any{"a": "old", "b": "new", "kinds": "field"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out, "field Cliente") || strings.Contains(out, "Paso") {
+		t.Errorf("kinds=field must compare fields only:\n%s", out)
+	}
+	if _, err := askPage(t, p, "parity", map[string]any{"a": "old", "b": "new", "kinds": "colour"}); err == nil {
+		t.Error("an unknown kind must fail")
+	}
+}
+
 func TestParityNeedsTwoSavedShapesAndSaysWhich(t *testing.T) {
 	p := testPage(t, appOrigin)
 	if _, err := askPage(t, p, "parity", map[string]any{"a": "legacy"}); err == nil {

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"slices"
 	"strings"
 
 	"github.com/partprogramming09/webscope/internal/input"
@@ -65,7 +66,9 @@ func (p *Tool) shape(w http.ResponseWriter, r *http.Request) {
 
 // diff compares two lists of names ignoring case and spaces: what only a has, and what only b has.
 func diff(a, b []string) (onlyA, onlyB []string) {
-	key := func(s string) string { return strings.ToLower(strings.Join(strings.Fields(s), " ")) }
+	key := func(s string) string {
+		return strings.TrimSuffix(strings.ToLower(strings.Join(strings.Fields(s), " ")), "[]")
+	}
 	in := func(list []string) map[string]bool {
 		m := map[string]bool{}
 		for _, s := range list {
@@ -85,6 +88,26 @@ func diff(a, b []string) (onlyA, onlyB []string) {
 		}
 	}
 	return
+}
+
+// collapse lists each name once, with ×N when it repeats.
+func collapse(kind string, names []string) []string {
+	var order []string
+	n := map[string]int{}
+	for _, s := range names {
+		s = clip(oneLine(s), 60)
+		if n[s] == 0 {
+			order = append(order, s)
+		}
+		n[s]++
+	}
+	for i, s := range order {
+		order[i] = kind + " " + s
+		if n[s] > 1 {
+			order[i] += fmt.Sprintf(" ×%d", n[s])
+		}
+	}
+	return order
 }
 
 // parity shows only what a screen has and the other lacks (fields, buttons, columns, tabs) and the fields that kept their label but changed kind.
@@ -122,22 +145,31 @@ func (p *Tool) parity(args map[string]any) (string, error) {
 		}
 		return m
 	}
+	want := map[string]bool{}
+	for _, k := range strings.FieldsFunc(input.Str(args, "kinds"), func(r rune) bool { return r == ',' || r == ' ' }) {
+		if !slices.Contains([]string{"field", "button", "column", "tab", "heading"}, k) {
+			return "", fmt.Errorf("unknown kind %q: kinds is a list of field, button, column, tab, heading", k)
+		}
+		want[k] = true
+	}
 	var only [2][]string
 	var changes []string
 	for _, k := range []struct {
 		kind string
 		a, b []string
 	}{{"field", labels(a), labels(b)}, {"button", a.Buttons, b.Buttons}, {"column", a.Columns, b.Columns}, {"tab", a.Tabs, b.Tabs}, {"heading", a.Headings, b.Headings}} {
+		if len(want) > 0 && !want[k.kind] {
+			continue
+		}
 		x, y := diff(k.a, k.b)
-		for _, s := range x {
-			only[0] = append(only[0], k.kind+" "+clip(oneLine(s), 60))
-		}
-		for _, s := range y {
-			only[1] = append(only[1], k.kind+" "+clip(oneLine(s), 60))
-		}
+		only[0] = append(only[0], collapse(k.kind, x)...)
+		only[1] = append(only[1], collapse(k.kind, y)...)
 	}
 	ka, kb := kinds(a), kinds(b)
 	for _, f := range a.Fields {
+		if len(want) > 0 && !want["field"] {
+			break
+		}
 		key := strings.ToLower(strings.Join(strings.Fields(f.L), " "))
 		if t, ok := kb[key]; ok && t != ka[key] {
 			changes = append(changes, fmt.Sprintf("field %s: %s → %s", clip(oneLine(f.L), 60), clip(ka[key], 20), clip(t, 20)))
