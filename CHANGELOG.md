@@ -2,6 +2,24 @@
 
 One entry per version, newest first. Tool names are `query`, `page`, `check` and `code`. Each change says what it is, what was seen that made it necessary, how it was checked and what was not checked. A change in what a tool prints is listed as a change, because a client may read it.
 
+## 0.5.35 — 2026-10-29
+
+**New: `code legacy {path, module?}`. What the old PHP of a module calls, writes and reads, against what the new module touches.** (It is the version the roadmap called 0.5.29; the number moved on.)
+
+`path` is a folder inside the new variable `WEBSCOPE_LEGACY` (for example `comercial/cotizadorX_new`). The answer has:
+- `## endpoints`: each PHP file of the folder that some page or script calls, with the first caller as `file:line` and `(+N)` more, the tables its SQL writes (`W`) and the ones it only reads (`R`); a table written and read is listed once, as written. A caller is a quoted `.php` address in any `.php`, `.js`, `.html` or `.htm` file of the legacy: `folder/server/x.php` from anywhere, or `server/x.php` from a file of the folder itself.
+- `no caller found:` the first six files nobody names (pages loaded by address, includes or dead code) and a count.
+- With `module` (a front module such as `crm/quotes`): `## against «crm/quotes»` with `only in legacy`, `only in new` and `both`, comparing the tables of all the PHP of the legacy folder with the tables the new module's models name (the ones `flows` prints).
+
+Safety: the path must stay inside `WEBSCOPE_LEGACY` (no `..`, no absolute path, no link that leads out), links are not followed, `.env*`, `vendor`, `node_modules`, `storage` and `.git` are not read, and the answer carries table names, never values. It reads PHP with the SQL inside the file and jQuery calls with a quoted address; other legacy styles will find less, and it says that it is an estimate. It lives in its own file, `internal/code/legacy.go`, like the other pieces tied to a stack.
+
+How it was checked:
+- A legacy tree of mentions and traps and six tests written first (they failed with `c.legacy undefined`): endpoints with callers from another folder and from inside the module, the writes, the reads, a table written and read listed once, a comment that says «update the user list from the form» that must not give a table `the`, a same-named file in another module, a `.env`, a `node_modules` and a link out of the root that must not leak; the comparison with the new module; the refusals (no path, `../`, absolute, missing, through a link, no `WEBSCOPE_LEGACY`); the comparison surviving 400 endpoints; and `ON DUPLICATE KEY UPDATE valor = 2` that must not give a table `valor`.
+- `go test -race ./...` passes (131 tests); `tools/list` is still under its budget.
+- On the real legacy of the app (`comercial/cotizadorX_new`, read only): 81 PHP files, 67 with a caller, the callers with their line, and the comparison with `crm/quotes`: 38 tables on both sides, 5 only in the new (`plantillas`, `app_lista_precios`, `app_lista_precios_detalle`, `app_tipo_cargos`, `tm_quote_links`) and the rest only in the legacy, among them `app_wp_message`, `sgg_consecutivos`, `app_campana_bitacora` and the import and export tables (`tm_importaciones`, `tm_exportaciones`, `tm_bl`, `tm_awb`, `tm_containers`).
+- What the real run showed and was fixed here: the comparison was at the end and the 8000-byte cut removed it (the endpoints now take what is left); each line carried two long callers (now one and a count); and `ON DUPLICATE KEY UPDATE valor = …` made `id`, `iva` and `valor` look like tables.
+- Not checked, and visible in the real answer: the `grabar_*.php` endpoints show no tables because their SQL is in an included file (`procedimientos/cotizaciones.php`, which does list its tables as `W`); the tables only in the legacy are not proof of a gap (the import and export tables may belong to another new module, and some names may come from SQL kept in strings that are not a query); `app_wp_message` and the others have not been confirmed as missing in the new module.
+
 ## 0.5.34 — 2026-10-29
 
 **`flows` shares its endpoint room between tables, endpoints and warnings. Third run on `crm/quotes`.**

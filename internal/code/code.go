@@ -23,6 +23,7 @@ type Tool struct {
 	Src     *db.Source
 	Backend string
 	Front   string
+	Legacy  string
 
 	snapMu sync.Mutex
 	snaps  map[string]*snapshot // in memory only: they are lost when the server restarts
@@ -117,8 +118,10 @@ func (c *Tool) do(ctx context.Context, in input.Args) (string, error) {
 		return c.flows(in.Args)
 	case "cases":
 		return c.cases(in.Args)
+	case "legacy":
+		return c.legacy(in.Args)
 	}
-	return "", fmt.Errorf("unknown action %q: fields {table, tenant?}, consumers {table, column} or {column_only}, map {module, walkthrough?}, map_back {query}, flows {module}, cases {module}, snap {name, sql, key?, tenant?} or snap_diff {name}", in.Action)
+	return "", fmt.Errorf("unknown action %q: fields {table, tenant?}, consumers {table, column} or {column_only}, map {module, walkthrough?}, map_back {query}, flows {module}, cases {module}, legacy {path, module?}, snap {name, sql, key?, tenant?} or snap_diff {name}", in.Action)
 }
 
 // consumers lists who reads and who writes a column in the PHP of WEBSCOPE_BACKEND.

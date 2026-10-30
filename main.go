@@ -17,8 +17,8 @@ import (
 )
 
 const (
-	version      = "0.5.34"
-	instructions = `query(sql): one read-only statement (SELECT, SHOW, DESCRIBE, EXPLAIN, WITH). The answer is TSV with a header; \N is NULL; rows and cells are capped, so refine with WHERE or fewer columns. page(action,args?): test a screen in Chrome; start with page(help). check(sent,table,where,map,after?,at?,tenant?): sent is a request page captured ("POST /api/quotes"), where {column:value} picks one row, map {sent field:column}, after a later captured read; only differences are shown. code(action,args?): fields {table,tenant?} is the sheet of a table (counts, never values); consumers {table,column} lists who reads and writes a column in the backend (an estimate); map {module,walkthrough?} the routes, calls and screens of a front module; map_back {query} from them to endpoint, controller, service and table; flows {module} both in one answer, as evidence for user stories; cases {module} the tests it needs, as a list; snap {name,sql,key?,tenant?} keeps a query and snap_diff {name} shows what changed since (new, deleted, before → after). If a tool fails, report it as is.`
+	version      = "0.5.35"
+	instructions = `query(sql): one read-only statement (SELECT, SHOW, DESCRIBE, EXPLAIN, WITH). The answer is TSV with a header; \N is NULL; rows and cells are capped, so refine with WHERE or fewer columns. page(action,args?): test a screen in Chrome; start with page(help). check(sent,table,where,map,after?,at?,tenant?): sent is a request page captured ("POST /api/quotes"), where {column:value} picks one row, map {sent field:column}, after a later captured read; only differences are shown. code(action,args?): fields {table,tenant?} is the sheet of a table (counts, never values); consumers {table,column} lists who reads and writes a column in the backend (an estimate); map {module,walkthrough?} the routes, calls and screens of a front module; map_back {query} from them to endpoint, controller, service and table; flows {module} both in one answer, as evidence for user stories; cases {module} the tests it needs, as a list; legacy {path,module?} endpoints, callers and tables of a legacy PHP folder, against the new module's tables; snap {name,sql,key?,tenant?} keeps a query and snap_diff {name} shows what changed since (new, deleted, before → after). If a tool fails, report it as is.`
 )
 
 // query answers a query call: plain text on success, and on failure a text that starts with "Failed:" and names the next step, marked as an error.
@@ -44,10 +44,10 @@ func newServer(s *db.Source, p *page.Tool) *mcp.Server {
 		Description: "Test a screen in Chrome (Claude in Chrome): returns text or JavaScript to run with javascript_tool. page(help) lists the actions.",
 		InputSchema: input.Schema,
 	}, guarded(p.Handle))
-	cd := &code.Tool{Src: s, Backend: os.Getenv("WEBSCOPE_BACKEND"), Front: os.Getenv("WEBSCOPE_FRONT")}
+	cd := &code.Tool{Src: s, Backend: os.Getenv("WEBSCOPE_BACKEND"), Front: os.Getenv("WEBSCOPE_FRONT"), Legacy: os.Getenv("WEBSCOPE_LEGACY")}
 	mcp.AddTool(srv, &mcp.Tool{
 		Name:        "code",
-		Description: "Read the project's code: fields, consumers, map, map_back, flows, cases.",
+		Description: "Read the project's code: fields, consumers, map, map_back, flows, cases, legacy.",
 		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true},
 		InputSchema: input.Schema,
 	}, guarded(cd.Handle))
