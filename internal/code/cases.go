@@ -8,89 +8,103 @@ import (
 	"strings"
 )
 
-const maxCases = 120
+const maxCases = 150
 
 var (
 	actionLine = regexp.MustCompile(`^action \d+ (.*?)(?: if (.*?))?(?: «(.*)»)?$`)
-	canRe      = regexp.MustCompile(`can\('([^']+)'`)
+	canRe      = regexp.MustCompile(`can\('([^']+)'(?:\s*,\s*'([^']+)')?`)
 	apiLine    = regexp.MustCompile(`^api (GET|POST|PUT|PATCH|DELETE) (\S+) ->`)
 )
 
-// cases turns the flows of a module into a list of test cases to run, each with what runs it (page) and what checks it (page, check, query). It runs nothing.
+const casesLegend = "Verify: happy = page payloads, then check the saved ZZ_ row · permission = the action is not offered and its endpoint is refused · required empty = page state shows the error, page payloads no request · status = each one is shown and its actions follow; query count by status · http error = an error is shown and the count is unchanged · empty = page state shows 0 rows and the empty message."
+
+// cases turns the flows of a module into a list of test cases to run with page and to verify with check, query or page. It runs nothing.
 func (c *Tool) cases(args map[string]any) (string, error) {
 	module, _ := args["module"].(string)
 	if module == "" {
 		return "", errors.New("cases needs a module, a part of the path such as crm/quotes")
 	}
-	evidence, err := c.flows(args)
-	if err != nil {
-		return "", err
+	screens, endpoints, found, err := c.flowParts(args)
+	if err != nil || !found {
+		return screens, err
 	}
-	if !strings.HasPrefix(evidence, "Flows of") {
-		return evidence, nil
+	return casesFrom(module, screens, endpoints), nil
+}
+
+// readable is false for a label that is a translation key or a template, which no screen shows as written.
+func readable(label string) bool {
+	return label != "" && !strings.Contains(label, "$t(") && !strings.Contains(label, "{{")
+}
+
+// casesFrom builds the table from the screens and endpoints of flows: each case once, in the order the module lists them.
+func casesFrom(module, screens, endpoints string) string {
+	var rows [][3]string
+	have := map[string]bool{}
+	add := func(flow, kase, run string) {
+		if k := flow + "\x00" + kase; !have[k] {
+			have[k] = true
+			rows = append(rows, [3]string{flow, kase, run})
+		}
 	}
-	var rows [][4]string
-	add := func(flow, kase, run, verify string) { rows = append(rows, [4]string{flow, kase, run, verify}) }
-	screen, seen := "", map[string]bool{}
-	once := func(k string) bool { d := seen[k]; seen[k] = true; return !d }
-	for _, l := range strings.Split(evidence, "\n") {
+	screen := ""
+	for _, l := range strings.Split(screens, "\n") {
 		switch {
 		case strings.HasPrefix(l, "### "):
 			screen, _, _ = strings.Cut(strings.TrimPrefix(l, "### "), " [")
 			screen = path.Base(screen)
 		case strings.HasPrefix(l, "statuses "):
 			list, _, _ := strings.Cut(strings.TrimPrefix(l, "statuses "), "  ")
-			add(echo(module), "status: "+strings.Join(strings.Fields(list), ", "), "on a row of each status, page state", "each status is shown and its actions follow it; query count by status")
+			add(echo(module), "status: "+strings.Join(strings.Fields(list), ", "), "state on a row of each")
 		case strings.HasPrefix(l, "action "):
 			m := actionLine.FindStringSubmatch(l)
 			if m == nil {
 				continue
 			}
-			label := m[1]
-			run := "page click {selector} on the button that calls " + m[1]
-			if m[3] != "" {
-				label += " «" + m[3] + "»"
-				run = "page click «" + m[3] + "»"
+			kase, run := "happy: "+m[1], "click the button that calls it"
+			if readable(m[3]) {
+				kase, run = kase+" «"+m[3]+"»", "click «"+m[3]+"»"
 			}
-			add(screen, "happy: "+label, run, "page payloads, then check against the saved row (ZZ_ rows only)")
-			if p := canRe.FindStringSubmatch(m[2]); p != nil && once(screen+p[1]) {
-				add(screen, "permission: "+p[1], "page state as a user without it", "the action is not offered and its endpoint is refused")
+			add(screen, kase, run)
+			if p := canRe.FindStringSubmatch(m[2]); p != nil {
+				add(screen, "permission: "+strings.TrimSpace(p[1]+" "+p[2]), "state as a user without it")
 			}
 		case strings.HasPrefix(l, "permission "):
-			if p := canRe.FindStringSubmatch(l); p != nil && once(screen+p[1]) {
-				add(screen, "permission: "+p[1], "page state as a user without it", "what it guards is not shown")
+			if p := canRe.FindStringSubmatch(l); p != nil {
+				add(screen, "permission: "+strings.TrimSpace(p[1]+" "+p[2]), "state as a user without it")
 			}
 		case strings.HasPrefix(l, "fields "):
 			_, list, _ := strings.Cut(strings.TrimPrefix(l, "fields "), " ")
+			var req []string
 			for _, f := range strings.Split(list, ", ") {
-				if name, ok := strings.CutSuffix(f, "*"); ok {
-					add(screen, "required empty: "+name, "page fill every field but "+name+", then page click the save button", "page state shows the error under it; page payloads shows no request")
+				if name, ok := strings.CutSuffix(f, "*"); ok && !slicesContains(req, name) {
+					req = append(req, name)
 				}
 			}
-		case apiLine.MatchString(l):
-			m := apiLine.FindStringSubmatch(l)
+			if len(req) > 0 {
+				add(screen, "required empty: "+strings.Join(req, ", "), "fill all but one of them at a time, save")
+			}
+		}
+	}
+	for _, l := range strings.Split(endpoints, "\n") {
+		if m := apiLine.FindStringSubmatch(l); m != nil {
 			flow := m[1] + " " + m[2]
 			if m[1] != "GET" {
 				match, _, _ := strings.Cut(m[2], "{") // an id in the address is a {} here and a number in the request
-				add(flow, "http error", "page simulate {match: \""+match+"\", status: 500}, then repeat the action", "an error is shown and query count of the table is unchanged")
+				add(flow, "http error", `simulate {match: "`+match+`", status: 500}, repeat the action`)
 			} else if !strings.Contains(m[2], "{") {
-				add(flow, "empty", "page fill a filter that matches nothing, then click search", "page state shows 0 rows and the empty message, no error")
+				add(flow, "empty", "filter that matches nothing")
 			}
 		}
 	}
 	var b strings.Builder
-	fmt.Fprintf(&b, "Cases of «%s»: a list to run, not a result. Write only with the user's approval, on ZZ_ rows. Run them with page; confirm with check and query.\nid\tflow\tcase\trun with\tverify with", echo(module))
-	shown := rows
-	if len(shown) > maxCases {
-		shown = shown[:maxCases]
-	}
-	for i, r := range shown {
-		fmt.Fprintf(&b, "\nC%d\t%s\t%s\t%s\t%s", i+1, r[0], r[1], r[2], r[3])
+	fmt.Fprintf(&b, "Cases of «%s»: a list to run, not a result. Run each with page; writes only with the user's approval, on ZZ_ rows.\n%s\nid\tflow\tcase\trun with", echo(module), casesLegend)
+	for i, r := range rows[:min(len(rows), maxCases)] {
+		fmt.Fprintf(&b, "\nC%d\t%s\t%s\t%s", i+1, r[0], r[1], r[2])
 	}
 	fmt.Fprintf(&b, "\n(%d cases", len(rows))
-	if len(shown) < len(rows) {
-		fmt.Fprintf(&b, ", %d shown: ask for a narrower module", len(shown))
+	if len(rows) > maxCases {
+		fmt.Fprintf(&b, ", %d shown", maxCases)
 	}
 	b.WriteString(")")
-	return capOut(b.String()), nil
+	return capOut(b.String())
 }

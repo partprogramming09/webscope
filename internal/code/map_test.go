@@ -268,9 +268,9 @@ func TestCasesListsTheTestsEachFlowNeedsWithWhatRunsThemAndWhatChecksThem(t *tes
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, want := range []string{"Cases of «crm/quotes»: a list to run, not a result", "id\tflow\tcase\trun with\tverify with",
+	for _, want := range []string{"Cases of «crm/quotes»: a list to run, not a result", "id\tflow\tcase\trun with", "Verify: happy = page payloads",
 		"QuoteIndex.vue\thappy: openCreate «Nueva»", "permission: quotes.create", "permission: quotes.delete",
-		"required empty: client", "status: ENPROCESO, APROBADA", "PUT quotes/approve/{}\thttp error", "GET quotes\tempty", `page simulate {match: "quotes/approve/", status: 500}`, " cases)"} {
+		"required empty: client", "status: ENPROCESO, APROBADA", "PUT quotes/approve/{}\thttp error", "GET quotes\tempty", `simulate {match: "quotes/approve/", status: 500}`, " cases)"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("lacks %q:\n%s", want, out)
 		}
@@ -292,7 +292,69 @@ func TestCasesWithoutABackendStillGivesTheScreenCases(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(out, "happy: openCreate") || strings.Contains(out, "http error") {
+	if !strings.Contains(out, "happy: openCreate") || strings.Contains(out, "\thttp error\t") {
 		t.Errorf("want the screen cases and no endpoint cases:\n%s", out)
+	}
+}
+
+func TestCasesKeepsEachCaseOnceAndDropsLabelsThatAreTranslationKeys(t *testing.T) {
+	screens := "statuses A B  x.ts\n### crm/quotes/views/V.vue\naction 1 save «{{ $t('common.save') }}»\naction 2 remove «$t('x')»\naction 3 open «Abrir»\nfields 4 rate*, rate*, notes"
+	out := casesFrom("crm/quotes", screens, "api DELETE quotes/{} -> C@d  f:1\napi GET quotes/{} -> C@s  f:2")
+	if strings.Count(out, "required empty: rate") != 1 {
+		t.Errorf("a case repeated:\n%s", out)
+	}
+	if strings.Contains(out, "$t(") || strings.Contains(out, "{{") {
+		t.Errorf("a translation key is not a label a screen shows:\n%s", out)
+	}
+	for _, want := range []string{"happy: save\tclick the button that calls it", "happy: open «Abrir»\tclick «Abrir»", "DELETE quotes/{}\thttp error\tsimulate {match: \"quotes/\"", "crm/quotes\tstatus: A, B"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("lacks %q:\n%s", want, out)
+		}
+	}
+	if strings.Contains(out, "GET quotes/{}\tempty") {
+		t.Errorf("the show endpoint is not a list:\n%s", out)
+	}
+}
+
+func TestFlowsKeepsRoomForTheEndpointsWhenTheScreensAreLong(t *testing.T) {
+	c := mapSetup(t)
+	big := "src/modules/crm/quotes/views/Big.vue"
+	var b strings.Builder
+	b.WriteString("<template><div>\n")
+	for i := 0; i < 600; i++ {
+		fmt.Fprintf(&b, "<v-btn @click=\"doThing%d\" title=\"Boton %d\">x</v-btn>\n", i, i)
+	}
+	b.WriteString("</div></template>\n")
+	p := filepath.Join(c.Front, big)
+	if err := os.WriteFile(p, []byte(b.String()), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	out, err := code(t, c, "flows", map[string]any{"module": "crm/quotes"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out, "## endpoints\napi") || !strings.Contains(out, "more lines of screens not shown") {
+		t.Errorf("long screens must be cut and the endpoints must still be there:\n%.300s", out)
+	}
+}
+
+func TestViewsComeBeforeComponentsAndStatusesStayOnTop(t *testing.T) {
+	in := "## m\nroute /a\n### m/components/C.vue\naction 1 c\n### m/views/V.vue\naction 2 v\nstatuses A B  s.ts\n### m/views/W.vue\nfields 3 x*"
+	out := viewsFirst(in)
+	want := "## m\nroute /a\nstatuses A B  s.ts\n### m/views/V.vue\naction 2 v\n### m/views/W.vue\nfields 3 x*\n### m/components/C.vue\naction 1 c"
+	if out != want {
+		t.Errorf("got:\n%s\nwant:\n%s", out, want)
+	}
+}
+
+func TestCasesGroupTheRequiredFieldsOfAScreenAndKeepBothPartsOfAPermission(t *testing.T) {
+	out := casesFrom("m", "### m/views/F.vue\naction 1 save if can('INS', 'COTIZA')\nfields 2 a*, b, c*, a*", "")
+	for _, want := range []string{"F.vue\trequired empty: a, c\tfill all but one of them at a time, save", "F.vue\tpermission: INS COTIZA\t"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("lacks %q:\n%s", want, out)
+		}
+	}
+	if strings.Count(out, "required empty") != 2 { // the legend and one row
+		t.Errorf("the required fields of one screen are one row:\n%s", out)
 	}
 }

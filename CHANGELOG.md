@@ -2,6 +2,28 @@
 
 One entry per version, newest first. Tool names are `query`, `page`, `check` and `code`. Each change says what it is, what was seen that made it necessary, how it was checked and what was not checked. A change in what a tool prints is listed as a change, because a client may read it.
 
+## 0.5.32 — 2026-10-29
+
+**`flows` and `cases` after the first run on the real quotes module (`crm/quotes`: 25 front files, 53 API calls, 60 endpoints).** Four defects the fixture tests could not show.
+
+- **`flows` lost the endpoints.** The screens used the whole 8000 bytes and the answer was cut before `## endpoints`, so `cases` had no endpoint cases. Now the screens keep 5/9 of the room and the endpoints the rest, each cut on a line with a count of what was left out (`… 49 more lines of screens not shown`).
+- **The main screens were the ones cut.** Files were listed in path order, so the 14 components came before `QuoteIndex.vue` and `QuoteShow.vue`. Screens under `/views/` now come first, and the module-level `statuses` line goes to the top.
+- **`cases` was too wide.** It repeated the same two long sentences on each of its first 40 rows and filled 8000 bytes. The verification text is now said once, in a `Verify:` line, and the table has four columns (`id`, `flow`, `case`, `run with`); the same case is never listed twice (`rateType` and `minimum` appear twice in the pre-settlement form); and a label that is a translation key (`{{ $t('common.cancel') }}`) is not used to click, because no screen shows it written like that: the row says to click the button that calls the action. The required fields of one screen are one row (`required empty: qty, grossWeight, weightUnit, dimensionUnit`, «fill all but one of them at a time, save»), not one per field. The limit is 150 rows.
+- **A permission lost half its name.** `can('INS', 'COTIZA')` was read as `INS`; it is now `INS COTIZA`.
+
+`flows` and `cases` use `map` and `map_back` unchanged; `map` still cuts at 8000 bytes as before (a new internal function gives the others the uncut text).
+
+What the first real run showed about the module (evidence, not verdicts):
+- The main list `QuoteIndex.vue` has actions guarded by status (`item.status === 'APROBADA'`) and by permission (`INS`, `UPD`, `DEL`, `MIGR`, `D` on `COTIZA`).
+- There are six statuses: `ENPROCESO`, `REQUERIMIENTO`, `APROBADA`, `DO_ASIGNADO`, `RECHAZADA`, `BORRADO`.
+- Ten API addresses called by the front have no route in `app/Modules/**/Routes/*.php` (`characteristics/quote/{}`, `pieces/quote/{}`, `quote-notes/{}`, `quote-pre-settlements/table/{}`, the `files/cotizacion/proveedor` family and others). They may be defined elsewhere or be dead calls; not checked.
+
+How it was checked:
+- Four new tests, each written against the old behaviour: long screens still leave the endpoints in `flows`; `cases` keeps each case once, groups required fields and drops translation-key labels; views come before components with the statuses on top; a two-part permission keeps both parts.
+- `go test -race ./...` passes (124 tests).
+- Real quotes module through the registered server, twice (before and after the first three fixes): the endpoints appear and `cases` lists the `http error` rows with the right prefix (`quotes/approve/`).
+- Not checked: the last two changes (views first, grouped required fields, two-part permission) on the real module; the row count after grouping; whether the ten addresses without a route are real defects.
+
 ## 0.5.31 — 2026-10-29
 
 **New skill `.claude/skills/parity-tests/SKILL.md`. From «the legacy did X» to a plan of unit tests that holds the new code to it.** No Go code changes: what the tools print is the same; only the version number moves.

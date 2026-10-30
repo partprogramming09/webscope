@@ -142,6 +142,12 @@ func capOut(s string) string {
 
 // mapFront is map: the routes, calls, composables and stores of the modules whose name contains module; with walkthrough, what can be clicked.
 func (c *Tool) mapFront(args map[string]any) (string, error) {
+	out, err := c.mapFrontRaw(args)
+	return capOut(out), err
+}
+
+// mapFrontRaw is mapFront without the cut at input.MaxAnswer, for callers that share the room between sections.
+func (c *Tool) mapFrontRaw(args map[string]any) (string, error) {
 	filter := input.Str(args, "module")
 	if filter == "" {
 		return "", errors.New("map needs a module, a part of the path such as configs/templates")
@@ -186,7 +192,7 @@ func (c *Tool) mapFront(args map[string]any) (string, error) {
 	if len(out) == 1 {
 		return fmt.Sprintf("no module contains «%s». Next: module is a part of the path of a front module, such as crm/quotes", echo(filter)), nil
 	}
-	return capOut(strings.Join(out, "\n")), nil
+	return strings.Join(out, "\n"), nil
 }
 
 // importTarget is an import (`@/…` or relative to file) relative to base, or "" if it falls outside.
