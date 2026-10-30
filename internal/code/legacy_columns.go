@@ -17,6 +17,7 @@ var (
 	dupUpdate   = regexp.MustCompile(`(?is)^.{0,600}?on\s+duplicate\s+key\s+update\s+(.{1,300}?)(?:"\s*[;),]|;|$)`)
 	assignedCol = regexp.MustCompile("(?:^|,)\\s*`?(\\w+)`?\\s*=")
 	plainName   = regexp.MustCompile(`^\w+$`)
+	phpConcat   = regexp.MustCompile(`["']\s*\.\s*["']`)
 )
 
 // columnsOf is the columns the SQL of a PHP file writes, by table, lower case: the list of an INSERT and the names assigned by an UPDATE or ON DUPLICATE KEY UPDATE.
@@ -27,7 +28,7 @@ func columnsOf(file string, all fsx.Lines) map[string][]string {
 			kept = append(kept, l)
 		}
 	}
-	src := strings.Join(kept, "\n")
+	src := phpConcat.ReplaceAllString(strings.Join(kept, "\n"), " ")
 	out := map[string][]string{}
 	add := func(table, col string) {
 		table, col = strings.ToLower(table), strings.ToLower(col)
@@ -92,9 +93,14 @@ func (c *Tool) columnGaps(shared []string, written map[string][]string) string {
 		return head + "\nnot compared: WEBSCOPE_BACKEND is not set"
 	}
 	var all []string
+	tables := 0
 	for _, t := range shared {
+		if len(written[t]) > 0 {
+			tables++
+		}
 		all = append(all, written[t]...)
 	}
+	head += fmt.Sprintf("\nchecked %d columns on %d tables", len(all), tables)
 	none := map[string]bool{}
 	for _, col := range c.unnamedColumns(all) {
 		none[col] = true
@@ -123,7 +129,7 @@ func (c *Tool) columnGaps(shared []string, written map[string][]string) string {
 		lines = append(lines, l)
 	}
 	if len(lines) == 0 {
-		return head + "\n-"
+		return head + "\nnone: every column is named somewhere in the backend (a loose test: `estado` or `usuario` is named by any file)"
 	}
 	if left > 0 {
 		lines = append(lines, fmt.Sprintf("(+%d more tables)", left))

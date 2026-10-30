@@ -2,6 +2,19 @@
 
 One entry per version, newest first. Tool names are `query`, `page`, `check` and `code`. Each change says what it is, what was seen that made it necessary, how it was checked and what was not checked. A change in what a tool prints is listed as a change, because a client may read it.
 
+## 0.5.42 — 2026-10-29
+
+**`code legacy` reads the columns of SQL that PHP builds by concatenation, and says how many it checked.**
+
+What was seen that made it necessary: the first run of 0.5.41 on the real quotes legacy answered `-`, and the 0.5.41 entry below read that as «the legacy writes through stored procedures». That was wrong. The SQL is inline, in `procedimientos/cotizaciones.php` (`INSERT  INTO  app_cotizaciones  (cotizacion_id, …," .` then the rest of the list on the next line as another string); the parser could not read a list cut by `" . "`.
+
+Now a `" . "` between two strings is read as a space, so a list or a `SET` built in pieces is read whole. The section also prints `checked N columns on M tables`, so an empty answer says what it covered.
+
+How it was checked:
+- The test of 0.5.41 grew an `INSERT` and an `UPDATE … SET` split by concatenation and failed (`otra_col`, `campo_union` lost), then passed; 48 tests pass with `-race`, `go vet` is clean.
+- Real quotes legacy: the file above gives 33 tables and about 400 columns (`app_cotizaciones` 32 columns, among them `motivo_rechazo`). Every one of the 32 is named somewhere in the backend, so the section is empty for a true reason, but the test is loose: a name such as `estado` or `usuario` is named by any file.
+- Not checked: that a column is written by the new module's own services (it counts a name anywhere in the backend); the `chk_*` flags, which are PHP variables of a call and not columns in the file.
+
 ## 0.5.41 — 2026-10-29
 
 **`code legacy {path, module}` lists the columns the legacy writes that the new backend never names.**
@@ -13,8 +26,8 @@ Now the answer of `legacy` with `module` ends with a section «columns the legac
 How it was checked:
 - A test written first and failing: an `INSERT` spread over lines, an `UPDATE … SET`, a commented statement, a variable in the list and a table only the legacy has; the listed columns are exactly the ones the backend does not name, and `chk_flete_nuevo` in the backend does not hide `chk_flete`.
 - `go vet` and `go test -race ./internal/code` pass (48 tests).
-- Run on the real quotes legacy: the section answered `-`, and that is not a clean result. The legacy there writes through PHP functions (`DMLC_*`) that call stored procedures, and has no inline `INSERT` and two `UPDATE … SET`, so its columns are not in the files. The seven `chk_*` flags travel as PHP variables of a `CALL`.
-- Not checked: a legacy that writes with inline SQL (only the fixture); the SQL inside stored procedures (`SHOW CREATE PROCEDURE` through `query` could read it, not built).
+- Run on the real quotes legacy: the section answered `-` (see 0.5.42: the parser missed SQL split by `" . "`).
+- Not checked: a legacy that writes with inline SQL beyond the fixture.
 
 ## 0.5.40 — 2026-10-29
 

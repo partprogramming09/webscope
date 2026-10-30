@@ -99,8 +99,8 @@ func TestLegacyListsTheColumnsItWritesThatTheBackendNeverNames(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	put(c.Legacy, "comercial/cotizadorX_new/server/estado.php", "<?php\n$db->query(\"INSERT INTO app_cotizaciones (CODIGO, `chk_flete`, ESTADO,\n   {$extra}) VALUES (1,2,3)\");\n$db->query(\"UPDATE app_cotizaciones SET MOTIVO_RECHAZO = 'x', USUARIO=1 WHERE id=3\");\n// UPDATE app_cotizaciones SET comentada = 1\n$db->query(\"UPDATE app_clientes SET solo_legado = 1\");\n")
-	put(c.Backend, "app/Modules/Crm/Quotes/Services/QuoteWriter.php", "<?php\n$q->update(['codigo' => 1, 'motivo_rechazo' => 'x']);\n$q->estado = 'A';\n$other = 'chk_flete_nuevo';\n")
+	put(c.Legacy, "comercial/cotizadorX_new/server/estado.php", "<?php\n$db->query(\"INSERT INTO app_cotizaciones (CODIGO, `chk_flete`, ESTADO,\n   {$extra}) VALUES (1,2,3)\");\n$db->query(\"UPDATE app_cotizaciones SET MOTIVO_RECHAZO = 'x', USUARIO=1 WHERE id=3\");\n// UPDATE app_cotizaciones SET comentada = 1\n$sql = \"INSERT  INTO  app_cotizaciones  (extra_col,\" .\n  \" otra_col, fecha_ingreso) VALUES (1,2,3)\";\n$sql = \"UPDATE app_cotizaciones SET \" .\n  \"campo_union = 1, \" .\n  \"fecha_ingreso = 2 WHERE id = 1\";\n$db->query(\"UPDATE app_clientes SET solo_legado = 1\");\n")
+	put(c.Backend, "app/Modules/Crm/Quotes/Services/QuoteWriter.php", "<?php\n$q->update(['codigo' => 1, 'motivo_rechazo' => 'x']);\n$q->estado = 'A';\n$f = ['fecha_ingreso' => 1];\n$other = 'chk_flete_nuevo';\n")
 	out, err := code(t, c, "legacy", map[string]any{"path": "comercial/cotizadorX_new", "module": "crm/quotes"})
 	if err != nil {
 		t.Fatal(err)
@@ -114,12 +114,12 @@ func TestLegacyListsTheColumnsItWritesThatTheBackendNeverNames(t *testing.T) {
 	if !strings.Contains(out, "## columns the legacy writes and the backend never names") || line == "" {
 		t.Fatalf("the section or the table line is missing:\n%s", out)
 	}
-	for _, want := range []string{"chk_flete", "usuario"} {
+	for _, want := range []string{"chk_flete", "usuario", "extra_col", "otra_col", "campo_union"} {
 		if !strings.Contains(line, want) {
 			t.Errorf("%q is written by the legacy and named nowhere in the backend:\n%s", want, line)
 		}
 	}
-	for _, not := range []string{"codigo", "estado", "motivo_rechazo", "comentada", "extra"} {
+	for _, not := range []string{"codigo", "estado", "motivo_rechazo", "comentada", "fecha_ingreso", "{"} {
 		if strings.Contains(line, not) {
 			t.Errorf("%q must not be listed (named in the backend, a comment or a variable):\n%s", not, line)
 		}
