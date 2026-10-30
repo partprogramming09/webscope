@@ -2,6 +2,19 @@
 
 One entry per version, newest first. Tool names are `query`, `page`, `check` and `code`. Each change says what it is, what was seen that made it necessary, how it was checked and what was not checked. A change in what a tool prints is listed as a change, because a client may read it.
 
+## 0.5.47 — 2026-10-30
+
+**`code help {topic?}`: the server tells the agent when and how to use its tools for a migration.**
+
+What was seen that made it necessary: the user asked for parity between an old and a new system many times, and the sessions of the test bed never used `legacy`, `flows`, `cases`, `rows`, `page shape` or `page parity`. The steps and the choice of tool lived in skills and in the project's own `CLAUDE.md`, which a server does not deliver: a session in another project had neither (its `CLAUDE.md` still named the tools of the old server, and the skills were only in this repository). The knowledge has to travel with the server. A second defect on the way: a failed `code` call ended with «Next: code(help) lists the actions», and `code` had no `help`.
+
+Now `code help` lists the actions with what each is for, and `code help {topic: "migration"}` returns the eight steps of a migration (stories, legacy side, screens, requests, writes, cases, unit tests, report) with the tool of each and the limits of each tool; it is embedded in the binary. The instructions of the server add one sentence: for a migration, parity, user stories or test cases, call that first. The skills stay for projects that load them; the text is no longer only there.
+
+How it was checked:
+- Tests written first and failing (`undefined: codeActions`): help names every action; every listed action is known to the dispatcher; the playbook names only actions that exist (it caught «legacy code is» read as an action, so the text was reworded); the playbook stays under 4000 bytes; an unknown topic lists the known ones. 56 tests of the package pass with `-race`; `go vet` is clean.
+- `tools/list` stays at 1431 bytes (the limit is 2500); the instructions of `initialize` grew to 1571.
+- Not checked: that a model in a fresh session of another project reads the sentence and calls `help` when asked for parity; it needs a session after `/mcp`.
+
 ## 0.5.46 — 2026-10-29
 
 **`code rows` leaves out the columns that pick the rows whatever their case.**
