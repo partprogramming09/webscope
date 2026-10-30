@@ -2,6 +2,28 @@
 
 One entry per version, newest first. Tool names are `query`, `page`, `check` and `code`. Each change says what it is, what was seen that made it necessary, how it was checked and what was not checked. A change in what a tool prints is listed as a change, because a client may read it.
 
+## 0.5.31 — 2026-10-29
+
+**New skill `.claude/skills/parity-tests/SKILL.md`. From «the legacy did X» to a plan of unit tests that holds the new code to it.** No Go code changes: what the tools print is the same; only the version number moves.
+
+The comparison tools (`flows`, `parity`, `cases`) say what differs, not who is right; a unit test says it. The skill takes the confirmed stories and the `migration-parity` report and walks the agent through:
+- one rule per finding, written as `Legacy: input → output. New: input → output`, with both sides from evidence, and anything deduced from a name marked `unconfirmed` and asked about;
+- the lowest layer that owns the rule (service, request or validator, policy, and only then a screen case), found with `code map_back` and read before deciding;
+- one case per behaviour: happy, the edge the legacy handled (empty, zero, maximum, a repeated value, `007`) and the refusal;
+- whether each test must pass or fail today (a failing one is a confirmed regression), and never changing an expected value to make it pass without asking which side is right;
+- following the project: the stack skill, two existing tests as a model, and asking before creating a test structure that does not exist;
+- a hand-over to the `tester` agent, not writing and planning in the same pass;
+- proof: run the tests, then plant one regression and see its test fail.
+
+Rules it keeps: no row values in tests, the legacy side of a test is a fixed expected value taken from evidence and not a call to the legacy system, no tests on names alone.
+
+What was seen that made it necessary: after the comparison the user wanted «to contrast functionalities» in unit tests, and nothing connected a finding to a test: each session decided by itself the layer, the cases and what to do with a test that failed on the new code.
+
+How it was checked:
+- `go vet` and `go test -race ./...` pass; the Go code did not change.
+- The skill was read against the layers each stack skill requires (services, request classes, permissions) and against the output of `code cases` and `parity`; every tool and field it names exists.
+- Not checked: the roadmap's condition for this version, that the `tester` agent writes tests of a real service from the skill and they fail on a planted regression. There was no real module in this session. The skill has never been run by an agent, so the steps may be too long or too short for one.
+
 ## 0.5.30 — 2026-10-29
 
 (There is no 0.5.29: it is the reading of the legacy code, which waits for the answers about where the legacy lives.)

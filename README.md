@@ -24,6 +24,7 @@ With the server registered, ask in plain words:
 - «Which endpoint, controller and table does this screen use?» (`code map_back`)
 - «What are the flows and user stories of this module?» (`code flows`, then the `module-flows` skill)
 - «What should I test in this module, and does the migration keep what the legacy did?» (`code cases`, then the `migration-parity` skill)
+- «Which unit tests pin what the legacy did?» (the `parity-tests` skill, which hands a plan to the `tester` agent)
 
 ## The four tools
 
