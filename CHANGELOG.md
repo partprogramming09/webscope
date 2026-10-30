@@ -2,6 +2,12 @@
 
 One entry per version, newest first. Tool names are `query`, `page`, `check` and `code`. Each change says what it is, what was seen that made it necessary, how it was checked and what was not checked. A change in what a tool prints is listed as a change, because a client may read it.
 
+## Note on 0.5.31 — 2026-10-29
+
+The condition of the skill `parity-tests` (the `tester` agent writes tests of a real service that fail on a planted regression) was met in part. On the quotes module of the test bed the agent wrote two tests of `QuoteService::isApprovable` for a rule the legacy code has (`grabar_aprobar_cotiza.php:70-72`: no approval without a client): an empty and a null client give `false`. Both passed, and both failed with the check inverted (`Failed asserting that true is false`); the code was restored and its `git diff` was empty. Checked by hand afterwards.
+
+Limits: the tests use no database, because the `.env` of that project points at a live demo tenant and `phpunit.xml` has no test connection. So the happy case of approving and `create()` (which builds `DocumentSequenceService` inside the method) are not covered. A client of only spaces is left open: the legacy compares `== ""`, the new code rejects it (`filled('  ')` is false); whether the legacy trims the value first is not known.
+
 ## 0.5.44 — 2026-10-29
 
 **The columns section of `code legacy` tells a column that is written from one that is only read.**
