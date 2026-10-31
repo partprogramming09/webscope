@@ -2,6 +2,18 @@
 
 One entry per version, newest first. Tool names are `query`, `page`, `check` and `code`. Each change says what it is, what was seen that made it necessary, how it was checked and what was not checked. A change in what a tool prints is listed as a change, because a client may read it.
 
+## 0.5.58 — 2026-10-31
+
+**`WEBSCOPE_LOG`: only the error lines written since the click or key began, not the last ones of the file.**
+
+What was seen that made it necessary: checked on the real screen of acme (a 500 forced with `simulate`), the three lines that 0.5.57 added were errors from the day before and from hours earlier, with no relation to the request: an agent could blame its click for an old error.
+
+Now `click` and `press` ask the listener to note where the log file ends (`/logmark`, which answers the offset) before the action, and the lines added afterwards come from the bytes after that offset (`/log?from=N`); `payloads` uses the offset of the last click or key. No clock and no timestamp format are needed, so it works for any log. Without a mark (`payloads` before any click), or if the file was rotated (it is shorter than the mark), it reads the end of the file as before. Nothing else changes: up to 3 lines, 200 characters each, only on status 0 or 5xx.
+
+How it was checked: a test in a real Chrome that failed before (it showed the old error line): the log has an old error before the click, the failing request writes a new one, and `click` and `payloads` show the new line and not the old one nor the normal lines. The first version of the change deadlocked `payloads` (it held the lock that `logLines` took); the test caught it (timeout) and it is fixed. `go vet` and the whole suite with `-race` pass.
+
+Not checked: on the real screen (needs one more reconnect); a backend that writes its error to the log after the answer reaches the screen (late lines are missed: the helper reads the log about 550 ms after the click); a log written by another process between the mark and the click, which counts as caused by the click; several clicks at once.
+
 ## 0.5.57 — 2026-10-31
 
 **`WEBSCOPE_LOG`: when a request ends with status 0 or 5xx, `click`, `press` and `payloads` add the last error lines of the backend log.**

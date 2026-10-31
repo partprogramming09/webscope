@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"os"
 	"regexp"
+	"strconv"
 	"strings"
 )
 
@@ -24,8 +25,20 @@ func (p *Tool) logPath() string {
 	return os.Getenv("WEBSCOPE_LOG")
 }
 
-// logLines are the last error lines of the backend log, oldest first, each cut short; it is the log's own text, so it can hold data. Empty without a log or an error.
+// logLines are the last error lines of the backend log, oldest first, each cut short: the lines written since the last click or key
+// when the helper marked one, else the end of the file. It is the log's own text, so it can hold data. Empty without a log or an error.
 func (p *Tool) logLines() string {
+	p.mu.Lock()
+	from, marked := p.logFrom, p.logMarked
+	p.mu.Unlock()
+	if !marked {
+		from = -1
+	}
+	return p.logLinesFrom(from)
+}
+
+// logLinesFrom is logLines for the bytes after offset from; a negative offset, or one past the end (the log was rotated), reads the end of the file.
+func (p *Tool) logLinesFrom(from int64) string {
 	path := p.logPath()
 	if path == "" {
 		return ""
@@ -35,9 +48,18 @@ func (p *Tool) logLines() string {
 		return ""
 	}
 	defer f.Close()
-	if i, err := f.Stat(); err == nil && i.Size() > logTail {
-		f.Seek(i.Size()-logTail, io.SeekStart)
+	size := int64(0)
+	if i, err := f.Stat(); err == nil {
+		size = i.Size()
 	}
+	start := size - logTail
+	if from >= 0 && from <= size && from > start {
+		start = from
+	}
+	if start < 0 {
+		start = 0
+	}
+	f.Seek(start, io.SeekStart)
 	raw, _ := io.ReadAll(io.LimitReader(f, logTail))
 	all := strings.Split(string(raw), "\n")
 	var out []string
@@ -49,8 +71,27 @@ func (p *Tool) logLines() string {
 	return strings.Join(out, "\n")
 }
 
-// logRoute answers the helper with logLines.
-func (p *Tool) logRoute(w http.ResponseWriter, _ *http.Request) {
+// logMark notes where the log ends now and answers that offset: what is written after it belongs to the action that follows.
+func (p *Tool) logMark(w http.ResponseWriter, _ *http.Request) {
+	size := int64(0)
+	if path := p.logPath(); path != "" {
+		if i, err := os.Stat(path); err == nil {
+			size = i.Size()
+		}
+	}
+	p.mu.Lock()
+	p.logFrom, p.logMarked = size, p.logPath() != ""
+	p.mu.Unlock()
 	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
-	io.WriteString(w, p.logLines())
+	io.WriteString(w, strconv.FormatInt(size, 10))
+}
+
+// logRoute answers the helper with the error lines written after the offset in the query (from), or the end of the file without one.
+func (p *Tool) logRoute(w http.ResponseWriter, r *http.Request) {
+	from, err := strconv.ParseInt(r.URL.Query().Get("from"), 10, 64)
+	if err != nil {
+		from = -1
+	}
+	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+	io.WriteString(w, p.logLinesFrom(from))
 }

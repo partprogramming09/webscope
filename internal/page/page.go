@@ -82,6 +82,8 @@ type Tool struct {
 
 	tampered []string // page functions replaced after the helper loaded, as the helper last said
 
+	logFrom      int64               // where the backend log ended when the last click or key began
+	logMarked    bool                // logFrom was set
 	LogPath      string              // the backend log; empty means WEBSCOPE_LOG
 	DownloadDir  string              // where Chrome saves files; empty means WEBSCOPE_DOWNLOADS, then ~/Downloads
 	dlSeen       map[string]fileMark // the files of that folder when download was armed; nil if not armed
@@ -237,6 +239,7 @@ func (p *Tool) handler() http.Handler {
 	mux.HandleFunc("/shape", p.guard(p.shape))
 	mux.HandleFunc("/tamper", p.guard(p.tamper))
 	mux.HandleFunc("/log", p.guard(p.logRoute))
+	mux.HandleFunc("/logmark", p.guard(p.logMark))
 	mux.HandleFunc("/sim", p.guard(func(w http.ResponseWriter, r *http.Request) {
 		status, err := strconv.Atoi(r.URL.Query().Get("status"))
 		if err != nil || status < 400 || status > 599 {
@@ -326,7 +329,11 @@ func (p *Tool) payloads(args map[string]any) string {
 		}
 		b.WriteString(e)
 	}
-	if l := p.logLines(); failed && l != "" {
+	from := int64(-1)
+	if p.logMarked {
+		from = p.logFrom
+	}
+	if l := p.logLinesFrom(from); failed && l != "" {
 		b.WriteString("\nBackend log (the last error lines of WEBSCOPE_LOG, as the log wrote them):\n" + l)
 	}
 	return strings.TrimRight(b.String(), "\n")

@@ -97,13 +97,16 @@ func TestStateOverTheLimitDropsWholeLinesInsteadOfCuttingAString(t *testing.T) {
 	}
 }
 
-func TestAFailedRequestBringsTheLastErrorLinesOfTheBackendLogNextToTheClick(t *testing.T) {
+func TestAFailedRequestBringsOnlyTheErrorLinesWrittenSinceTheClick(t *testing.T) {
 	logPath := t.TempDir() + "/php.log"
-	os.WriteFile(logPath, []byte("[10:00:00] GET /api/ok 200\n[10:00:01] PHP Fatal error:  Uncaught Error: Call to undefined function foo() in /app/Export.php:12\n[10:00:02] GET /api/ok 200\n"), 0o600)
+	os.WriteFile(logPath, []byte("[10:00:00] PHP Fatal error: OLD error from before the click\n[10:00:02] GET /api/ok 200\n"), 0o600)
 	t.Setenv("WEBSCOPE_LOG", logPath)
 	app := func(w http.ResponseWriter, r *http.Request) bool {
 		switch r.URL.Path {
 		case "/api/boom":
+			f, _ := os.OpenFile(logPath, os.O_APPEND|os.O_WRONLY, 0o600)
+			f.WriteString("[10:05:00] GET /api/ok 200\n[10:05:01] PHP Fatal error: NEW error caused by the click\n")
+			f.Close()
 			http.Error(w, "no", http.StatusInternalServerError)
 			return true
 		case "/api/ok":
@@ -123,11 +126,11 @@ func TestAFailedRequestBringsTheLastErrorLinesOfTheBackendLogNextToTheClick(t *t
 	if strings.Contains(out[2], "Backend log") {
 		t.Errorf("a request that went well brought the log: %q", out[2])
 	}
-	if !strings.Contains(out[3], "Backend log") || !strings.Contains(out[3], "Fatal error") || strings.Contains(out[3], "GET /api/ok 200") {
-		t.Errorf("a 500 must bring the error line of the log and only that: %q", out[3])
+	if !strings.Contains(out[3], "NEW error caused by the click") || strings.Contains(out[3], "OLD error") || strings.Contains(out[3], "GET /api/ok 200") {
+		t.Errorf("a 500 must bring only the error lines written since the click: %q", out[3])
 	}
-	if seen, _ := askPage(t, p, "payloads", nil); !strings.Contains(seen, "Backend log") || !strings.Contains(seen, "Fatal error") {
-		t.Errorf("payloads with a 500 must bring the log lines too: %s", seen)
+	if seen, _ := askPage(t, p, "payloads", nil); !strings.Contains(seen, "NEW error caused by the click") || strings.Contains(seen, "OLD error") {
+		t.Errorf("payloads must bring only the lines since the last click: %s", seen)
 	}
 }
 

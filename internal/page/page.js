@@ -309,6 +309,8 @@
   const withEffect = async f => {
     const url = () => location.pathname + location.search + location.hash;
     const before = { seq, cseq, alerts: new Set(texts(ALERTS)), errors: new Set(texts(ERRORS)), url: url(), text: norm(document.body.innerText) };
+    let mark = '';
+    try { const m = await realFetch(cfg.base + '/logmark?t=' + cfg.t); mark = m.ok ? await m.text() : ''; } catch (e) { /* no listener: no log lines */ }
     const r = f();
     if (/^Failed:/.test(r)) return r;
     await sleep(400);
@@ -317,7 +319,7 @@
     const out = [r], reqs = log.filter(e => e.i >= before.seq).map(e => e.t);
     if (reqs.length) out.push('Requests: ' + reqs.join(' | '));
     if (reqs.some(r => / (0 \(no answer\)|5\d\d)$/.test(r))) { // a request with no answer or a 5xx: the backend log may say why
-      try { const r = await realFetch(cfg.base + '/log?t=' + cfg.t); const t = r.ok ? await r.text() : ''; if (t) out.push('Backend log (the last error lines of WEBSCOPE_LOG, as the log wrote them):\n' + t); } catch (e) { /* the listener is gone: no log lines */ }
+      try { const r = await realFetch(cfg.base + '/log?t=' + cfg.t + '&from=' + mark); const t = r.ok ? await r.text() : ''; if (t) out.push('Backend log (the last error lines of WEBSCOPE_LOG, as the log wrote them):\n' + t); } catch (e) { /* the listener is gone: no log lines */ }
     }
     const na = texts(ALERTS).filter(x => !before.alerts.has(x));
     if (na.length) out.push('New alerts: ' + na.join(' | '));
