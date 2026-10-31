@@ -2,6 +2,16 @@
 
 One entry per version, newest first. Tool names are `query`, `page`, `check` and `code`. Each change says what it is, what was seen that made it necessary, how it was checked and what was not checked. A change in what a tool prints is listed as a change, because a client may read it.
 
+## 0.5.69 — 2026-10-31
+
+**New `page options {field, match?, max?}`: the choices of a select or menu, without choosing one.**
+
+What was seen that made it necessary: when `fill` found no option it listed the first 5 and the count (`no option "AACHEN" among 582 seen`), and there was no way to see the rest or to look for a name.
+
+Now `options` gives all the options of a native select, and of a Vuetify menu the rows seen while it scrolls (an autocomplete or combobox is searched with `match`). With `match` only the rows that contain it are kept; `max` (30 by default) stops the list and says how many more there are. A field that does not exist fails naming it; a field that is not a select or menu says so. `fill` and its error are unchanged. `page help` grows by about 300 bytes; `tools/list` is unchanged.
+
+How it was checked: a new Chrome test fails without the action and passes with it, on a native select, a virtual list of 300 rows (with `match` and with `max`) and an autocomplete that answers a search. The 182 tests pass. Not checked here: the real forms (batched with the other versions); a list longer than 400 scroll steps; the menu is closed with a click on the page body, as `fill` does.
+
 ## 0.5.68 — 2026-10-31
 
 **`code map_back` takes `offset` to page through endpoints.**

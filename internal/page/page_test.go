@@ -1593,3 +1593,78 @@ func TestPayloadsSaysHowLongAgoTheLastRequestCame(t *testing.T) {
 		t.Errorf("an old capture shows its age and the hint to load the helper again: %q", out)
 	}
 }
+
+// TestOptionsListsTheChoicesOfASelectAndOfAMenu runs in a real Chrome: a native select, a virtual list of 300 rows (with and without a text to look
+// for) and an autocomplete that answers a search, none of them filled.
+func TestOptionsListsTheChoicesOfASelectAndOfAMenu(t *testing.T) {
+	var mu sync.Mutex
+	var html_ string
+	app := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		defer mu.Unlock()
+		io.WriteString(w, html_)
+	}))
+	app.Start()
+	defer app.Close()
+	p := testPage(t, app.URL)
+	load, err := askPage(t, p, "load", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	steps := []string{load}
+	for _, a := range []map[string]any{
+		{"field": "Tipo"},
+		{"field": "Origen", "match": "PAIS 29"},
+		{"field": "Origen", "max": float64(5)},
+		{"field": "Cliente", "match": "Dem"},
+		{"field": "Nada"},
+		{},
+	} {
+		s, err := snippet("options", a)
+		if err != nil {
+			t.Fatal(err)
+		}
+		steps = append(steps, s)
+	}
+	raw, _ := json.Marshal(steps)
+	mu.Lock()
+	html_ = strings.Replace(fixturePage, "{{STEPS}}", string(raw), 1)
+	mu.Unlock()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
+	defer cancel()
+	flags := []string{"--headless=new", "--disable-gpu", "--no-first-run", "--no-default-browser-check", "--user-data-dir=" + t.TempDir(), "--virtual-time-budget=90000", "--dump-dom"}
+	if os.Getenv("CI") != "" {
+		flags = append(flags, "--no-sandbox")
+	}
+	dom, err := exec.CommandContext(ctx, chromePath(t), append(flags, app.URL+"/")...).Output()
+	if err != nil {
+		t.Fatalf("chrome: %v", err)
+	}
+	m := regexp.MustCompile(`(?s)<pre id="out">(.*?)</pre>`).FindSubmatch(dom)
+	if m == nil {
+		t.Fatalf("the page did not finish its steps; DOM tail: %.600s", dom[max(0, len(dom)-600):])
+	}
+	var out []string
+	if err := json.Unmarshal([]byte(html.UnescapeString(string(m[1]))), &out); err != nil || len(out) != len(steps) {
+		t.Fatalf("results %q: %v", m[1], err)
+	}
+	if out[1] != "Tipo: uno | dos" {
+		t.Errorf("a native select lists all its options: %q", out[1])
+	}
+	if !strings.HasPrefix(out[2], "Origen: ") || !strings.Contains(out[2], "PAIS 295") || strings.Contains(out[2], "PAIS 001") || strings.Count(out[2], "PAIS") > 10 {
+		t.Errorf("a list with a text to look for gives only the rows that contain it: %q", out[2])
+	}
+	if strings.Count(out[3], "PAIS") != 5 || !strings.Contains(out[3], "PAIS 000") || !strings.Contains(out[3], "more") {
+		t.Errorf("max stops the list and says there is more: %q", out[3])
+	}
+	if !strings.HasPrefix(out[4], "Cliente: ") || !strings.Contains(out[4], "Demo") {
+		t.Errorf("an autocomplete lists what the search answers: %q", out[4])
+	}
+	if !strings.HasPrefix(out[5], "Failed: no field «Nada»") {
+		t.Errorf("a field that does not exist fails and says so: %q", out[5])
+	}
+	if !strings.HasPrefix(out[6], "Failed: options needs field") {
+		t.Errorf("a call with no field says what it needs: %q", out[6])
+	}
+}

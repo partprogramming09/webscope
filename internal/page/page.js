@@ -253,6 +253,40 @@
     await sleep(300);
     return text;
   };
+  // listOptions is the text of the choices of a field: all of a native select; of a menu, the rows seen while it scrolls (and, in an autocomplete, searching match), until max rows contain match.
+  const listOptions = async (e, match, max) => {
+    const want = lower(match || ''), keep = l => l.filter(s => lower(s).includes(want));
+    if (e.tagName === 'SELECT') return [...e.options].map(o => norm(o.text)).filter(s => lower(s).includes(want));
+    if (!e.closest(MENU)) throw new Error('is not a select or a menu');
+    const field = e.closest('.v-field'), late = !!e.closest('.v-autocomplete,.v-combobox');
+    for (let i = 0; i < 14 && rows().length; i++) await sleep(70);
+    ['pointerdown', 'mousedown', 'pointerup', 'mouseup', 'click'].forEach(t => field.dispatchEvent(new MouseEvent(t, { bubbles: true, cancelable: true, view: window })));
+    if (late && match) { Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set.call(e, String(match)); e.dispatchEvent(new Event('input', { bubbles: true })); }
+    const seen = new Set();
+    let end = 0;
+    for (let i = 0; i < 400 && keep([...seen]).length < max; i++) { // shortcut: 400 steps of 70 ms at most, as fill
+      await sleep(70);
+      rows().forEach(r => seen.add(norm(r.innerText.split('\n')[0])));
+      const list = [...document.querySelectorAll('.v-overlay-container .v-list')].pop();
+      if (i < (late ? 25 : 4)) continue;
+      if (!list) { if (i > 30) break; continue; }
+      if (list.scrollTop + list.clientHeight >= list.scrollHeight - 2) { if (++end > 2) break; }
+      else list.scrollTop += list.clientHeight * 0.8;
+    }
+    document.body.click();
+    await sleep(300);
+    return keep([...seen]);
+  };
+  const options = async a => {
+    if (!a.field) return fail('options needs field, the label, name or id of a select or menu, e.g. options {"field":"Ciudad","match":"AAC"}');
+    const e = findFields(String(a.field))[0];
+    if (!e) return fail('no field «' + a.field + '». Next: page(state) lists the fields');
+    const max = Number(a.max) > 0 ? Number(a.max) : 30;
+    let list;
+    try { list = await listOptions(e, a.match, max); } catch (x) { return fail('«' + a.field + '» ' + x.message); }
+    return a.field + ': ' + (list.slice(0, max).join(' | ') || '(none)') + (list.length > max ? ' (… ' + (list.length - max) + ' more: narrow with match, or raise max)' : '');
+  };
+
   const setValue = async (e, v) => {
     e.focus();
     if (e.closest(MENU)) return choose(e, v);
@@ -504,5 +538,5 @@
   }, 400);
   const marked = r => { const l = patched(); return l.length ? MARK(l) + '\n' + r : r; };
   const wrap = f => a => { try { const r = f(a || {}); return r && r.then ? r.then(marked, e => fail(e.message)) : marked(r); } catch (e) { return fail(e.message); } };
-  window.__ws = { state: wrap(state), read: wrap(read), fill: wrap(fill), click: wrap(click), press: wrap(press), simulate: wrap(simulate), open: wrap(open), audit: wrap(audit), shape: wrap(shape) };
+  window.__ws = { state: wrap(state), read: wrap(read), fill: wrap(fill), click: wrap(click), press: wrap(press), simulate: wrap(simulate), open: wrap(open), options: wrap(options), audit: wrap(audit), shape: wrap(shape) };
 })();
