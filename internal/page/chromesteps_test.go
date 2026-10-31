@@ -169,3 +169,16 @@ func TestClickSaysWhenARequestWasStillPendingInsteadOfNoEffect(t *testing.T) {
 		t.Errorf("a request still pending must be said, not «No effect seen»: %q", out[4])
 	}
 }
+
+func TestClickShowsTheUrlChangeWithParameterNamesNeverValues(t *testing.T) {
+	out, _ := runSteps(t, func(load string) []string {
+		return []string{
+			load,
+			`(document.body.insertAdjacentHTML('beforeend','<button onclick="history.pushState(null,\'\',\'/next?token=SECRET9&id=7#top\')">Go</button>'),'ok')`,
+			"window.__ws.click({text:'Go'})",
+		}
+	}, nil)
+	if strings.Contains(out[2], "SECRET9") || strings.Contains(out[2], "token=") || !strings.Contains(out[2], "/next ?token,id") {
+		t.Errorf("the URL change must carry parameter names, not values: %q", out[2])
+	}
+}

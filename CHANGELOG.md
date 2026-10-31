@@ -2,6 +2,18 @@
 
 One entry per version, newest first. Tool names are `query`, `page`, `check` and `code`. Each change says what it is, what was seen that made it necessary, how it was checked and what was not checked. A change in what a tool prints is listed as a change, because a client may read it.
 
+## 0.5.62 — 2026-10-31
+
+**`click` and `press` show the URL change with parameter names, never values.**
+
+What was seen that made it necessary: in the real run of 0.5.61, clicking «Nueva Cotización` came back as `[BLOCKED: Cookie/query string data]`: the line `URL: <before> → <after>` still carried the whole query string, which 0.5.56 had removed only from `state`.
+
+Now that line uses the same form as `state` (`/path ?name1,name2 #hash`). The change is still detected by comparing the full addresses, so a change of only a value is reported. `tools/list` does not change.
+
+How it was checked: a test in a real Chrome that failed before (`/next?token=SECRET9&id=7#top` was shown whole) and passes after (`/next ?token,id`); the suite with `-race` passes (exit code checked, not only the last line); `node --check page.js` is clean.
+
+Not checked: the other lines of the answers that can hold an address (alerts, console errors, the text of a dialog): they show what the page wrote and are not cleaned.
+
 ## 0.5.61 — 2026-10-31
 
 **`page download {report:true}` lists the files the session saw appear; `code leftovers` counts the test rows left in a table.**

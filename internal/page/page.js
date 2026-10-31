@@ -161,6 +161,11 @@
 
   const wrongOrigin = () => cfg.o && !cfg.o.split(',').includes(location.origin) ? 'This tab is ' + location.origin + ' but WEBSCOPE_APP_URL is ' + cfg.o.split(',').join(', ') + ': captures and simulate are refused. Open the app at that address.' : '';
 
+  // showAddress is an address as the answers show it: parameter names only, because a value can be a token and a URL with a query is what output filters cut.
+  const showAddress = l => {
+    const names = [...new Set([...new URLSearchParams(l.search).keys()])].join(',');
+    return l.pathname + (names ? ' ?' + names : '') + (l.hash ? ' ' + l.hash.split('?')[0] : '');
+  };
   const NOT_FOUND = /(^|\D)404(\D|$)|not found|no (se )?encontrad[ao]|p[aá]gina no (existe|encontrada)/i;
   // lines keeps whole lines up to max characters and says how many it left out, instead of cutting one in the middle.
   const lines = (l, max) => {
@@ -171,8 +176,7 @@
   };
 
   const state = a => {
-    const names = [...new Set([...new URLSearchParams(location.search).keys()])].join(',');
-    const out = ['URL: ' + location.pathname + (names ? ' ?' + names : '') + (location.hash ? ' ' + location.hash.split('?')[0] : ''), 'Title: ' + norm(document.title)]; // parameter names only: a value can be a token, and a URL with a query is what output filters cut
+    const out = ['URL: ' + showAddress(location), 'Title: ' + norm(document.title)];
     if (NOT_FOUND.test([document.title, ...texts('h1,h2,h3')].join(' '))) out.unshift('Looks like a 404 page of the app (the title or a heading says not found): this is not the screen asked for. Next: open the right address.');
     if (wrongOrigin()) out.push('Warning: ' + wrongOrigin());
     const h = texts('h1,h2,h3').slice(0, 8);
@@ -328,7 +332,7 @@
     if (ne.length) out.push('New errors: ' + ne.join(' | '));
     const nc = clog.filter(e => e.i >= before.cseq).map(e => e.t);
     if (nc.length) out.push('New console errors: ' + nc.join(' | '));
-    if (url() !== before.url) out.push('URL: ' + before.url + ' → ' + url());
+    if (url() !== before.url) out.push('URL: ' + showAddress(new URL(before.url, location.origin)) + ' → ' + showAddress(location));
     if (out.length === 1) out.push(norm(document.body.innerText) === before.text ? 'No effect seen: no request, no new alert, the screen text is the same.' : 'The screen text changed; no request, alert or URL change.');
     if (wrongOrigin()) out.push('Warning: ' + wrongOrigin());
     return out.join('\n');
