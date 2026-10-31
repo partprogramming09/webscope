@@ -266,8 +266,8 @@
     let end = 0;
     for (let i = 0; i < 400 && keep([...seen]).length < max; i++) { // shortcut: 400 steps of 70 ms at most, as fill
       await sleep(70);
-      rows().forEach(r => seen.add(norm(r.innerText.split('\n')[0])));
-      const list = [...document.querySelectorAll('.v-overlay-container .v-list')].pop();
+      const list = [...document.querySelectorAll('.v-overlay-container .v-list')].pop(); // the newest menu: an older one may still be leaving
+      if (list) [...list.querySelectorAll('.v-list-item')].filter(vis).forEach(r => seen.add(norm(r.innerText.split('\n')[0])));
       if (i < (late ? 25 : 4)) continue;
       if (!list) { if (i > 30) break; continue; }
       if (list.scrollTop + list.clientHeight >= list.scrollHeight - 2) { if (++end > 2) break; }

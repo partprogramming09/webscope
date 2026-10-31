@@ -1619,7 +1619,11 @@ func TestOptionsListsTheChoicesOfASelectAndOfAMenu(t *testing.T) {
 		{"field": "Cliente", "match": "Dem"},
 		{"field": "Nada"},
 		{},
+		{"field": "Origen", "match": "STALE"},
 	} {
+		if a["match"] == "STALE" { // a menu of another field that is still leaving, earlier in the page than the new one
+			steps = append(steps, `(document.body.insertAdjacentHTML('afterbegin','<div class=v-overlay-container><div class=v-list><div class=v-list-item>STALE row</div></div></div>'),'stale')`)
+		}
 		s, err := snippet("options", a)
 		if err != nil {
 			t.Fatal(err)
@@ -1666,5 +1670,8 @@ func TestOptionsListsTheChoicesOfASelectAndOfAMenu(t *testing.T) {
 	}
 	if !strings.HasPrefix(out[6], "Failed: options needs field") {
 		t.Errorf("a call with no field says what it needs: %q", out[6])
+	}
+	if out[8] != "Origen: (none)" {
+		t.Errorf("rows of a menu that is leaving must not be listed as the options of the new one: %q", out[8])
 	}
 }

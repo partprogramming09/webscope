@@ -2,6 +2,16 @@
 
 One entry per version, newest first. Tool names are `query`, `page`, `check` and `code`. Each change says what it is, what was seen that made it necessary, how it was checked and what was not checked. A change in what a tool prints is listed as a change, because a client may read it.
 
+## 0.5.71 — 2026-10-31
+
+**`page options` lists only the rows of the newest menu.**
+
+What was seen that made it necessary: on the real tariffs screen, `options` of `Proveedor` right after `options` of `Tarifario` answered the 8 tariff names followed by the 3 suppliers: the menu of the first field was still in the page, and `options` read every row of the overlay container.
+
+Now it reads the rows of the last `.v-list` only, which is the one just opened. `fill` is not changed (it reads all the rows; a menu that is leaving could mislead it in the same way, and that was not checked).
+
+How it was checked: the Chrome test of `options` got a step with an older menu earlier in the page (`STALE row`); it failed (`Origen: STALE row`) and passes now. On the real screen the old helper reproduced the mix; the new one was checked on the real screen after this version (see the entry of the docs commit). The 183 tests pass.
+
 ## 0.5.70 — 2026-10-31
 
 **`code leftovers` takes `columns` (up to 10) and counts each one on its own line.**
