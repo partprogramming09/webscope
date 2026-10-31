@@ -80,6 +80,7 @@ After changing a variable, or after rebuilding, reconnect with `/mcp`: the conne
 ## Things worth taking advantage of
 
 - **Tenants.** `tenant` on `query`, `check` and `code fields` runs in another database, found in the central one (Hyn Tenancy by default).
+- **Right addresses.** `page open {path}` goes to a router path from `code map` through the app's own Vue Router (which adds the tenant prefix) and refuses a path no route owns, naming the similar ones, so a screen is never reached by a typed URL.
 - **Errors on demand.** `page simulate {match, status}` makes the next requests to a URL answer an HTTP error, so you see what the screen does with a 500 without breaking anything.
 - **What did the action really write?** `snap` before and `snap_diff` after show only what changed, child rows included.
 - **Old pages too.** The helper sees `fetch` and `XMLHttpRequest`, including pages that replace the constructor (the legacy PHP pages of the app that motivated this); a legacy link reloads the page, so run `page(load)` again after each one.

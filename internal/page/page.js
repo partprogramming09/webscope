@@ -371,6 +371,30 @@
   const click = a => withEffect(() => clickOnce(a));
   const press = a => withEffect(() => pressOnce(a));
 
+  // routerOf is the Vue Router of the app in this page, or undefined.
+  const routerOf = () => {
+    const e = document.querySelector('#app') || [...document.querySelectorAll('body *')].find(n => n.__vue_app__);
+    return e && e.__vue_app__ && e.__vue_app__.config.globalProperties.$router;
+  };
+
+  // open goes to a router path through the app's own router, so the base (such as a tenant prefix) is added by the app; a path no route owns is refused with the similar ones.
+  const open = a => {
+    const path = String(a.path || '');
+    if (path[0] !== '/') return fail('open needs path, a router path that starts with /, such as /crm/quotes. Next: take it from code map');
+    const r = routerOf();
+    if (!r) return fail('no Vue Router in this page. Next: navigate to the full address, with the tenant prefix if the app has one');
+    const res = r.resolve(path);
+    if (!res.matched.length || res.matched.some(m => /pathMatch/.test(m.path))) {
+      const word = (path.split('/').filter(Boolean).pop() || '').replace(/[^\w-]/g, '');
+      const near = word ? r.getRoutes().map(x => x.path).filter(p => p.includes(word)).slice(0, 8) : [];
+      return fail('no route «' + path + '» in this app' + (near.length ? '; similar: ' + near.join(' | ') : '') + '. Next: use a path from code map');
+    }
+    return r.push(path).then(() => {
+      const now = r.currentRoute.value.fullPath;
+      return 'opened ' + now + (now === res.fullPath ? '' : ' (redirected from ' + res.fullPath + ': session or permission?)');
+    });
+  };
+
   const simulate = a => {
     if (a.clear) { sims.length = 0; return 'simulations cleared'; }
     const status = Number(a.status);
@@ -480,5 +504,5 @@
   }, 400);
   const marked = r => { const l = patched(); return l.length ? MARK(l) + '\n' + r : r; };
   const wrap = f => a => { try { const r = f(a || {}); return r && r.then ? r.then(marked, e => fail(e.message)) : marked(r); } catch (e) { return fail(e.message); } };
-  window.__ws = { state: wrap(state), read: wrap(read), fill: wrap(fill), click: wrap(click), press: wrap(press), simulate: wrap(simulate), audit: wrap(audit), shape: wrap(shape) };
+  window.__ws = { state: wrap(state), read: wrap(read), fill: wrap(fill), click: wrap(click), press: wrap(press), simulate: wrap(simulate), open: wrap(open), audit: wrap(audit), shape: wrap(shape) };
 })();

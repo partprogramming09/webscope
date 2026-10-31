@@ -1486,3 +1486,87 @@ func TestAnInterceptorPutOnTheFetchIsMarkedInStateAndPayloads(t *testing.T) {
 		t.Errorf("payloads after the replacement does not start with the mark: %s", seen)
 	}
 }
+
+// routerPage has a fake Vue Router: the routes of the app, a catch-all that matches any other path, and a private path that redirects to the login.
+const routerPage = `<!doctype html><meta charset=utf-8><title>App</title>
+<div id=app></div><pre id=out></pre>
+<script type=application/json id=steps>{{STEPS}}</script>
+<script>
+const routes=[{path:'/crm/quotes'},{path:'/crm/quotes/:id'},{path:'/crm/private'},{path:'/:pathMatch(.*)*'}]
+const cur={value:{fullPath:'/'}}
+const resolve=p=>({fullPath:p,matched:[routes.find(r=>r.path===p)||routes[3]]})
+const push=p=>{cur.value.fullPath=p==='/crm/private'?'/auth/login':p;return Promise.resolve()}
+document.getElementById('app').__vue_app__={config:{globalProperties:{$router:{resolve,push,getRoutes:()=>routes,currentRoute:cur}}}}
+const pend=[],_ap=document.head.appendChild.bind(document.head);document.head.appendChild=e=>{if(e.tagName==='SCRIPT')pend.push(new Promise(r=>{e.addEventListener('load',r);e.addEventListener('error',r)}));return _ap(e)}
+const steps=JSON.parse(document.getElementById('steps').textContent),res_=[]
+const sleep=ms=>new Promise(r=>setTimeout(r,ms))
+;(async()=>{for(const s of steps){try{res_.push(String(await (0,eval)("(async()=>("+s+"))()")))}catch(e){res_.push('THROW '+e)}await Promise.all(pend.splice(0));await sleep(300)}out.textContent=JSON.stringify(res_)})()
+</script>`
+
+// TestOpenGoesThroughTheRouterAndRefusesAPathThatIsNoRoute runs in a real Chrome: a path that the router does not know is refused with the
+// similar ones, instead of landing on the not-found screen.
+func TestOpenGoesThroughTheRouterAndRefusesAPathThatIsNoRoute(t *testing.T) {
+	var mu sync.Mutex
+	var html_ string
+	app := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		defer mu.Unlock()
+		io.WriteString(w, html_)
+	}))
+	app.Start()
+	defer app.Close()
+	p := testPage(t, app.URL)
+	load, err := askPage(t, p, "load", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	steps := []string{load}
+	for _, a := range []map[string]any{{"path": "/crm/quotes"}, {"path": "/crm/quote"}, {"path": "/crm/private"}, {}} {
+		s, err := snippet("open", a)
+		if err != nil {
+			t.Fatal(err)
+		}
+		steps = append(steps, s)
+	}
+	steps = append(steps, "(delete document.getElementById('app').__vue_app__, 'x')")
+	s, _ := snippet("open", map[string]any{"path": "/crm/quotes"})
+	steps = append(steps, s)
+	raw, _ := json.Marshal(steps)
+	mu.Lock()
+	html_ = strings.Replace(routerPage, "{{STEPS}}", string(raw), 1)
+	mu.Unlock()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+	flags := []string{"--headless=new", "--disable-gpu", "--no-first-run", "--no-default-browser-check", "--user-data-dir=" + t.TempDir(), "--virtual-time-budget=60000", "--dump-dom"}
+	if os.Getenv("CI") != "" {
+		flags = append(flags, "--no-sandbox")
+	}
+	dom, err := exec.CommandContext(ctx, chromePath(t), append(flags, app.URL+"/")...).Output()
+	if err != nil {
+		t.Fatalf("chrome: %v", err)
+	}
+	m := regexp.MustCompile(`(?s)<pre id="out">(.*?)</pre>`).FindSubmatch(dom)
+	if m == nil {
+		t.Fatalf("the page did not finish its steps; DOM tail: %.600s", dom[max(0, len(dom)-600):])
+	}
+	var out []string
+	if err := json.Unmarshal([]byte(html.UnescapeString(string(m[1]))), &out); err != nil || len(out) != len(steps) {
+		t.Fatalf("results %q: %v", m[1], err)
+	}
+	if !strings.HasPrefix(out[1], "opened /crm/quotes") {
+		t.Errorf("a known path must be opened: %q", out[1])
+	}
+	if !strings.HasPrefix(out[2], "Failed: no route «/crm/quote»") || !strings.Contains(out[2], "/crm/quotes") {
+		t.Errorf("an unknown path must be refused and name the similar ones: %q", out[2])
+	}
+	if !strings.Contains(out[3], "redirected") || !strings.Contains(out[3], "/auth/login") {
+		t.Errorf("a path that ends elsewhere must say where: %q", out[3])
+	}
+	if !strings.HasPrefix(out[4], "Failed: open needs path") {
+		t.Errorf("a call with no path must fail and say what it needs: %q", out[4])
+	}
+	if !strings.HasPrefix(out[6], "Failed: no Vue Router") {
+		t.Errorf("a page with no router must say so: %q", out[6])
+	}
+}

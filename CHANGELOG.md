@@ -2,6 +2,16 @@
 
 One entry per version, newest first. Tool names are `query`, `page`, `check` and `code`. Each change says what it is, what was seen that made it necessary, how it was checked and what was not checked. A change in what a tool prints is listed as a change, because a client may read it.
 
+## 0.5.65 — 2026-10-31
+
+**New `page open {path}`: goes to a router path through the app's own Vue Router and refuses a path that no route owns.**
+
+What was seen that made it necessary: the model typed the address of a screen taken from `code map` (`/pricing/sales-tariffs`). In the real app that address is a router path, and the URL needs the tenant as its first segment (`router.ts`: `createWebHistory('/<tenant>/')`). The browser took `pricing` as the tenant and the app showed its not-found screen, then the login. Read from the live router: `resolve('/pricing/sales-tariffs').href` was `/pricing/pricing/sales-tariffs` under that wrong base.
+
+Now `open` resolves the path with the router of the page. A known path is opened (the app adds its base) and the answer says where it ended, with `redirected from … : session or permission?` when it is not the path asked. A path that only the catch-all route matches fails with up to 8 similar paths. Without a Vue Router in the page it says so. `help` lists it (about 300 bytes more); `tools/list` is unchanged.
+
+Checked: a new Chrome test (a fake router) fails without the action and passes with it; vet and the 178 tests pass. Not checked: the real app (the server must be reconnected with `/mcp` to serve the new helper), and a router that is not Vue Router.
+
 ## 0.5.64 — 2026-10-31
 
 **An `opaqueredirect` answer (a `redirect: manual` request) is also shown as opaque and not counted as a failure.**
