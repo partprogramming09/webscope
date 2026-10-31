@@ -360,16 +360,23 @@ func (c *Tool) mapBack(args map[string]any) (string, error) {
 		return strings.Join(append(append(head, apis...), out...), "\n"), nil
 	}
 	// The endpoints are the long part: when they do not fit, the last ones go and the services and tables stay.
+	offset := 0
+	if f, ok := args["offset"].(float64); ok && f > 0 {
+		offset = min(int(f), len(apis))
+	}
+	if offset > 0 { // the services and models came with the first page
+		out = nil
+	}
 	room := input.MaxAnswer - len(strings.Join(head, "\n")) - len(strings.Join(out, "\n")) - 120
 	var shown []string
-	for _, l := range apis {
+	for _, l := range apis[offset:] {
 		if room -= len(l) + 1; room < 0 {
 			break
 		}
 		shown = append(shown, l)
 	}
-	if len(shown) < len(apis) {
-		shown = append(shown, fmt.Sprintf("(… and %d more endpoints not shown: narrow the query)", len(apis)-len(shown)))
+	if end := offset + len(shown); end < len(apis) {
+		shown = append(shown, fmt.Sprintf("(… and %d more endpoints not shown: offset %d for the next page, or narrow the query)", len(apis)-end, end))
 	}
 	return capOut(strings.Join(append(append(head, shown...), out...), "\n")), nil
 }

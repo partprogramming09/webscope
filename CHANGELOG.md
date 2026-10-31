@@ -2,6 +2,16 @@
 
 One entry per version, newest first. Tool names are `query`, `page`, `check` and `code`. Each change says what it is, what was seen that made it necessary, how it was checked and what was not checked. A change in what a tool prints is listed as a change, because a client may read it.
 
+## 0.5.68 — 2026-10-31
+
+**`code map_back` takes `offset` to page through endpoints.**
+
+What was seen that made it necessary: when the endpoints did not fit in 8000 bytes, `map_back` said `… and 34 more endpoints not shown: narrow the query` and there was no way to see them except guessing a narrower query.
+
+Now the cut line reads `(… and N more endpoints not shown: offset M for the next page, or narrow the query)`, and `offset M` starts the list at endpoint M. A page after the first leaves out the services and models (the first page gave them), so it fits more endpoints. An `offset` past the end shows no endpoints and no cut line. `code(help)` says it.
+
+How it was checked: a new test (406 endpoints) failed (one page showed 59) and passes now: following the offsets shows every endpoint exactly once, and later pages carry no `model` line. The 181 tests pass. Not checked here: against the real project (batched with the other versions).
+
 ## 0.5.67 — 2026-10-31
 
 **`check` accepts a number as the value of a `where` entry.**

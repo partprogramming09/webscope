@@ -427,3 +427,52 @@ func TestTablesFirstSharesTheRoomBetweenTablesEndpointsAndWarnings(t *testing.T)
 		t.Error("the tables come before the endpoints")
 	}
 }
+
+// TestMapBackPagesTheEndpointsWithOffset: following the offset that each page names, every endpoint is shown once, and the pages after the first leave
+// out the services and models, which the first one already gave.
+func TestMapBackPagesTheEndpointsWithOffset(t *testing.T) {
+	c := mapSetup(t)
+	var b strings.Builder
+	b.WriteString("<?php\nuse App\\Modules\\Crm\\Quotes\\Controllers\\QuoteController;\n")
+	for i := 0; i < 400; i++ {
+		fmt.Fprintf(&b, "Route::get('quotes/extra-endpoint-number-%03d', [QuoteController::class, 'index']);\n", i)
+	}
+	if err := os.WriteFile(filepath.Join(c.Backend, "app/Modules/Crm/Quotes/Routes/many.php"), []byte(b.String()), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	all, err := code(t, c, "map_back", map[string]any{"query": "quotes", "uncut": true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := strings.Count("\n"+all, "\napi ")
+	seen := map[string]int{}
+	next := regexp.MustCompile(`offset (\d+) for the next page`)
+	off, pages := 0, 0
+	for ; pages < 30; pages++ {
+		out, err := code(t, c, "map_back", map[string]any{"query": "quotes", "offset": float64(off)})
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, l := range strings.Split(out, "\n") {
+			if strings.HasPrefix(l, "api ") {
+				seen[l]++
+			}
+		}
+		if off > 0 && strings.Contains(out, "\nmodel ") {
+			t.Errorf("page at offset %d repeats the models", off)
+		}
+		m := next.FindStringSubmatch(out)
+		if m == nil {
+			break
+		}
+		off, _ = strconv.Atoi(m[1])
+	}
+	if pages < 2 || len(seen) != want {
+		t.Errorf("%d pages showed %d endpoints, uncut has %d", pages+1, len(seen), want)
+	}
+	for l, n := range seen {
+		if n != 1 {
+			t.Errorf("%q shown %d times", l, n)
+		}
+	}
+}
