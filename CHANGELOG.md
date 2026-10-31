@@ -10,7 +10,7 @@ What was seen that made it necessary: on the real form the list of cities has 85
 
 Now, after each scroll, it waits (up to about 480 ms) until the first row drawn changes, reads the rows and, if none of them was in the window before the step, goes back half the step and halves the step size (down to 10% of the rows drawn). The limit of 400 steps stays.
 
-How it was checked: the Chrome test list of 2000 rows draws its rows only after the list has been still for 300 ms; the question `R19` (111 rows) must give all 111. With the loop of 0.5.75 it failed in some runs (59, 101, 103 of 111; the reproduction depends on the timing of Chrome) and passed in others; with this loop it passed in 6 of 6 runs. The 184 tests pass. Not checked on the real form yet.
+How it was checked: the Chrome test list of 2000 rows draws its rows only after the list has been still for 300 ms; the question `R19` (111 rows) must give all 111. With the loop of 0.5.75 it failed in some runs (59, 101, 103 of 111; the reproduction depends on the timing of Chrome) and passed in others; with this loop it passed in 6 of 6 runs. The 184 tests pass. Checked on the real form (856 cities): `options` with `max 2000` and no `match` answered exactly 856 rows, from `6TH OF OCTOBER` to `ZZ_E2E_TRY_CIUDAD`, with no «may have more», in 22 s the first time and 15.8 s the second (856 both times). `match "AAC"` answered `AACHEN` in 15.7 s and `match "ZHENG"` answered `ZHENGJIANG | ZHENGZHOU` in 15.8 s. That is slower than 0.5.75 (9 to 13 s), and is the price of reading the whole list without gaps: every call with `match` scrolls the whole list, because this field does not filter its list when a search is typed. A list of 5000 rows would need about 90 s and reach the limit of 400 steps; use a narrower question there. Not checked: a list that long.
 
 ## 0.5.75 — 2026-10-31
 
@@ -20,7 +20,7 @@ What was seen that made it necessary: on the real form (582 cities) each `option
 
 Now a step is the larger of 80% of the box and 60% of the span of the rows drawn, so no row is left out between steps. The limit of 400 steps stays; it now covers a much longer list. `fill` is not changed.
 
-How it was checked: the Chrome test got a list of 2000 rows (40 drawn, a box of 120 px) and asks for `R1999`; it failed (`(none) … may have more`, cut at 400 steps) and passes now. The 184 tests pass. Not checked on the real form yet.
+How it was checked: the Chrome test got a list of 2000 rows (40 drawn, a box of 120 px) and asks for `R1999`; it failed (`(none) … may have more`, cut at 400 steps) and passes now. The 184 tests pass. Checked on the real form: it did not make the calls faster (9.3 to 13.5 s for `AAC` and `ZHENG`), and it could skip rows (846 rows read against 856 in the list); both are in 0.5.76.
 
 ## 0.5.74 — 2026-10-31
 
