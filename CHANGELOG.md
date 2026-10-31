@@ -12,7 +12,7 @@ Now the helper marks a capture whose answer type is `opaque`. `click` shows `GET
 
 How it was checked: a test in a real Chrome that failed before: a click whose fetch is `no-cors` to a second server says `opaque` and not `no answer`, and `payloads` has no `Problems:` line; the suite with `-race` passes (exit code checked); `node --check page.js` is clean.
 
-Not checked: on the real screen; an `opaqueredirect` answer (a `redirect: manual` request) is not marked as opaque.
+Checked on the real screen of acme (2026-10-31), with the helper of this version served from a local static server (the running MCP server was still the previous build): a `no-cors` fetch to another local server showed `GET /x opaque (no-cors: its status cannot be read)`, and a fetch to a closed port still showed `GET /x 0 (no answer)`. Not checked: an `opaqueredirect` answer (a `redirect: manual` request) is not marked as opaque.
 
 ## 0.5.62 — 2026-10-31
 
