@@ -2,6 +2,16 @@
 
 One entry per version, newest first. Tool names are `query`, `page`, `check` and `code`. Each change says what it is, what was seen that made it necessary, how it was checked and what was not checked. A change in what a tool prints is listed as a change, because a client may read it.
 
+## 0.5.77 — 2026-10-31
+
+**`page options` remembers a menu that was read to its end for 2 minutes, and scrolls faster.**
+
+What was seen that made it necessary: on the real form every call to `options` took about 16 s on a list of 856 rows, even when the question was a second one on the same field (`AAC`, then `ZHENG`), because the field does not filter its list and each call scrolled the whole list again.
+
+Now a list that was seen to its end is kept for 2 minutes, by field, and the next question on that field (any `match`, any `max`) is answered from it without opening the menu; the answer ends with `(read N s ago: fresh:true reads it again)`, and `fresh: true` reads the menu again. Only an unfiltered list is kept (a search typed into an autocomplete filters its list: that one is not). The scroll loop no longer waits a fixed 70 ms once it is scrolling (it already waits for the page to draw) and makes its step longer, up to 90% of the rows drawn, when half of the rows read were already known; a step with no row in common still goes back and shrinks.
+
+How it was checked: in the Chrome test, a second question on the 2000-row list gives the 111 rows of `R19`, says how old the list is and leaves the menu opened once (a counter of presses on the field); with `fresh: true` it opens it a second time and gives the same rows. The earlier steps of that test that need the menu use `fresh: true`. The test ran 3 of 3 times; 184 tests pass. Not checked on the real form yet.
+
 ## 0.5.76 — 2026-10-31
 
 **`page options` waits for the page to draw the rows after each scroll and goes back when a step left a gap, so it does not skip rows.**

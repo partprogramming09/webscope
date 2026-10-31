@@ -48,7 +48,7 @@ const helpText = `page(action, args?) tests a screen in the user's Chrome throug
 Needs a tab of the app (WEBSCOPE_APP_URL) with the session already started: open one with tabs_create_mcp and navigate to a screen; if it shows the login, stop and ask the user for the session (never type credentials).
 load: one line of JavaScript; run it with javascript_tool again after every navigation, reload or /mcp: the helper is lost and the port changes (needs WEBSCOPE_APP_URL).
 state|read|fill|click|press|simulate|open|options|audit|shape: return a snippet; run it with javascript_tool, its value is the answer.
-  options {field, match?, max?}: the choices of a select or Vuetify menu, without choosing one: all of a native select, and of a menu the rows seen while it scrolls (an autocomplete is searched with match); only those that contain match, up to max (30).
+  options {field, match?, max?, fresh?}: the choices of a select or Vuetify menu, without choosing one: all of a native select, and of a menu the rows seen while it scrolls (an autocomplete is searched with match); only those that contain match, up to max (30). A menu read to its end is remembered 2 minutes (the answer says how old it is): fresh:true reads it again.
   open {path}: goes to a router path from code map (/pricing/sales-tariffs) through the app's own router, which adds the tenant prefix; a path that no route owns is refused with the similar ones, and a redirect (login) is told. Never type the URL of a screen by hand.
   state {max?}: URL, title, console, headings, fields, buttons (dialog first, side menu last, disabled ones marked), alerts, errors, dialog, tables.
   read {selector?, max?}: text of the first match, or of the page.

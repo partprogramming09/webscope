@@ -373,7 +373,7 @@ ci.oninput=()=>setTimeout(()=>{oc.innerHTML='<div class=v-overlay--active><div c
 // an autocomplete that toggles its menu on a press of the field, lists a search only while the menu is open and stays open on a click outside; it closes with Escape
 const rrender=()=>{oc.dataset.owner='ri';oc.innerHTML='<div class=v-overlay--active><div class=v-list></div></div>';for(const t of ['Aachen','Aarhus','Bogota']){if(t.toLowerCase().includes(ri.value.toLowerCase())){const d=document.createElement('div');d.className='v-list-item';d.textContent=t;oc.querySelector('.v-list').appendChild(d)}}}
 // a long virtual list: 2000 rows of 20 px, the 40 around the scroll position rendered, in a box of 120 px
-gf.onmousedown=()=>{oc.innerHTML='<div class=v-overlay--active><div class=v-list style="height:120px;overflow:auto;position:relative"><div style="height:40000px"></div></div></div>'
+gf.onmousedown=()=>{window.__gfOpens=(window.__gfOpens||0)+1;oc.innerHTML='<div class=v-overlay--active><div class=v-list style="height:120px;overflow:auto;position:relative"><div style="height:40000px"></div></div></div>'
  const l=oc.querySelector('.v-list');let lastS=0;l.addEventListener('scroll',()=>{lastS=Date.now()})
  const draw=()=>{const k=Math.floor(l.scrollTop/20);[...l.querySelectorAll('.v-list-item')].forEach(e=>e.remove())
   for(let i=Math.max(0,k-10);i<k+30&&i<2000;i++){const d=document.createElement('div');d.className='v-list-item';d.style.cssText='position:absolute;height:20px;top:'+i*20+'px';d.textContent='R'+i;l.appendChild(d)}}
@@ -1629,18 +1629,25 @@ func TestOptionsListsTheChoicesOfASelectAndOfAMenu(t *testing.T) {
 	for _, a := range []map[string]any{
 		{"field": "Tipo"},
 		{"field": "Origen", "match": "PAIS 29"},
-		{"field": "Origen", "max": float64(5)},
+		{"field": "Origen", "max": float64(5), "fresh": true},
 		{"field": "Cliente", "match": "Dem"},
 		{"field": "Nada"},
 		{},
-		{"field": "Origen", "match": "STALE"},
-		{"field": "Origen", "max": float64(5), "scrolled": true},
+		{"field": "Origen", "match": "STALE", "fresh": true},
+		{"field": "Origen", "max": float64(5), "scrolled": true, "fresh": true},
 		{"field": "Tipo", "max": float64(1)},
 		{"field": "Ciudad", "match": "Aa"},
 		{"field": "Ciudad", "match": "Aa"},
 		{"field": "Region", "match": "R1999"},
 		{"field": "Region", "match": "R19", "max": float64(200)},
+		{"raw": "String(window.__gfOpens)"},
+		{"field": "Region", "match": "R19", "max": float64(200), "fresh": true},
+		{"raw": "String(window.__gfOpens)"},
 	} {
+		if raw, ok := a["raw"].(string); ok {
+			steps = append(steps, raw)
+			continue
+		}
 		if a["scrolled"] == true { // a menu that opens already scrolled down
 			steps = append(steps, "(window.__startScrolled=true,'scrolled')")
 		}
@@ -1711,6 +1718,12 @@ func TestOptionsListsTheChoicesOfASelectAndOfAMenu(t *testing.T) {
 	}
 	if got := strings.Count(out[15], " | ") + 1; !strings.HasPrefix(out[15], "Region: R19 | R190") || got != 111 {
 		t.Errorf("rows drawn late must not be skipped: %d of the 111 rows with R19: %.120q", got, out[15])
+	}
+	if out[16] != "1" || !strings.Contains(out[15], "R19 | R190") || strings.Count(out[15], " | ")+1 != 111 || !strings.Contains(out[15], "s ago: fresh:true") {
+		t.Errorf("a second question on a list read to its end must come from memory, say how old it is and not open the menu (opens: %q): %.150q", out[16], out[15])
+	}
+	if out[17] != strings.Replace(out[15], out[15][strings.LastIndex(out[15], " (read "):], "", 1) || out[18] != "2" {
+		t.Errorf("fresh:true must read the menu again and give the same rows (opens: %q): %.150q", out[18], out[17])
 	}
 	for _, i := range []int{12, 13} {
 		if !strings.HasPrefix(out[i], "Ciudad: Aachen | Aarhus") {

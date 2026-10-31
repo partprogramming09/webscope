@@ -254,11 +254,15 @@
     return text;
   };
   // listOptions is the text of the choices of a field: all of a native select; of a menu, the rows seen while it scrolls (and, in an autocomplete, searching match), until max rows contain match.
-  const listOptions = async (e, match, max) => {
+  const optionCache = new WeakMap(); // the whole list of a menu that was read to its end, by field, for OPTION_TTL ms
+  const OPTION_TTL = 120000;
+  const listOptions = async (e, match, max, fresh) => {
     const want = lower(match || ''), keep = l => l.filter(s => lower(s).includes(want));
     if (e.tagName === 'SELECT') return { list: [...e.options].map(o => norm(o.text)).filter(s => lower(s).includes(want)), whole: true };
     if (!e.closest(MENU)) throw new Error('is not a select or a menu');
     const field = e.closest('.v-field'), late = !!e.closest('.v-autocomplete,.v-combobox');
+    const hit = optionCache.get(e);
+    if (!fresh && hit && Date.now() - hit.at < OPTION_TTL) return { list: keep(hit.list), whole: true, age: Math.round((Date.now() - hit.at) / 1000) };
     const closeMenu = async () => { // pressing a field that has its menu open closes it, so an open one is closed first
       e.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
       document.body.click();
@@ -275,8 +279,9 @@
     const seen = new Set();
     let end = 0, topped = null, whole = false, factor = 0.6;
     const drawn = l => [...l.querySelectorAll('.v-list-item')].filter(vis).map(r => norm(r.innerText.split('\n')[0]));
+    let scrolled = false;
     for (let i = 0; i < 400 && keep([...seen]).length < max; i++) { // shortcut: 400 steps at most, as fill
-      await sleep(70);
+      await sleep(scrolled ? 0 : 70); // once scrolling, each step already waited for the page to draw
       const list = [...document.querySelectorAll('.v-overlay-container .v-list')].pop(); // the newest menu: an older one may still be leaving
       if (list && topped !== list) { topped = list; list.scrollTop = 0; seen.clear(); await sleep(120); continue; } // a menu may open scrolled: the rows come from its top
       if (list) [...list.querySelectorAll('.v-list-item')].filter(vis).forEach(r => seen.add(norm(r.innerText.split('\n')[0])));
@@ -287,14 +292,17 @@
         const r = [...list.querySelectorAll('.v-list-item')].filter(vis), span = r.length > 1 ? r[r.length - 1].getBoundingClientRect().bottom - r[0].getBoundingClientRect().top : 0;
         const before = drawn(list), step = Math.max(list.clientHeight * 0.8, span * factor); // the rows already drawn reach beyond the box
         list.scrollTop += step;
+        scrolled = true;
         for (let w = 0; w < 30 && drawn(list)[0] === before[0]; w++) await sleep(16); // the page draws the new rows a moment after the scroll
-        const now = drawn(list);
+        const now = drawn(list), common = now.filter(s => before.includes(s)).length;
         now.forEach(s => seen.add(s));
-        if (now.length && before.length && !now.some(s => before.includes(s))) { list.scrollTop -= step / 2; factor = Math.max(factor / 2, 0.1); } // no row in common: some may have been missed, go back half and take smaller steps
+        if (now.length && before.length && !common) { list.scrollTop -= step / 2; factor = Math.max(factor / 2, 0.1); } // no row in common: some may have been missed, go back half and take smaller steps
+        else if (common * 2 >= now.length) factor = Math.min(factor * 1.2, 0.9); // half the rows were already seen: a longer step still leaves none out
       }
     }
     await closeMenu();
     await sleep(300);
+    if (whole && (!late || !match)) optionCache.set(e, { at: Date.now(), list: [...seen] }); // a search typed into an autocomplete filters its list: only the unfiltered list is kept
     return { list: keep([...seen]), whole };
   };
   const options = async a => {
@@ -303,10 +311,11 @@
     if (!e) return fail('no field «' + a.field + '». Next: page(state) lists the fields');
     const max = Number(a.max) > 0 ? Number(a.max) : 30;
     let got;
-    try { got = await listOptions(e, a.match, max); } catch (x) { return fail('«' + a.field + '» ' + x.message); }
+    try { got = await listOptions(e, a.match, max, a.fresh === true); } catch (x) { return fail('«' + a.field + '» ' + x.message); }
     const list = got.list;
     const tail = got.whole ? (list.length > max ? ' (… ' + (list.length - max) + ' more: narrow with match, or raise max)' : '') : ' (… may have more: narrow with match, or raise max)'; // no count unless the list was seen to its end
-    return a.field + ': ' + (list.slice(0, max).join(' | ') || '(none)') + tail;
+    const old = got.age === undefined ? '' : ' (read ' + got.age + ' s ago: fresh:true reads it again)';
+    return a.field + ': ' + (list.slice(0, max).join(' | ') || '(none)') + tail + old;
   };
 
   const setValue = async (e, v) => {
