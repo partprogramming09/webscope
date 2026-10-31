@@ -90,3 +90,16 @@ func TestVerifyUsesWhatCheckFoundAsEvidence(t *testing.T) {
 		t.Errorf("a check over a request seen through an interceptor is INFERIDO: %q", out)
 	}
 }
+
+func TestPayloadsOpensWithASummaryOfTheFailuresOnlyWhenThereAreAny(t *testing.T) {
+	p := testPage(t, appOrigin)
+	p.caps = []Capture{{M: "GET", U: "http://x/a", S: 200}, {M: "GET", U: "http://x/b", S: 404}, {M: "POST", U: "http://x/c", S: 500}, {M: "GET", U: "http://x/d", S: 0}, {M: "GET", U: "http://x/e", S: 200}}
+	out, _ := askPage(t, p, "payloads", map[string]any{"limit": 1})
+	if !strings.Contains(out, "Problems: 1 with 4xx, 1 with 5xx, 1 with no answer (status 0) of 5 captured") {
+		t.Errorf("the summary must count every capture, not only the shown ones: %q", out)
+	}
+	p.caps = []Capture{{M: "GET", U: "http://x/a", S: 200}}
+	if out, _ := askPage(t, p, "payloads", nil); strings.Contains(out, "Problems:") {
+		t.Errorf("no failures, no summary: %q", out)
+	}
+}

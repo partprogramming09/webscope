@@ -141,3 +141,31 @@ func TestTheLogRouteNeedsTheTokenAndAnswersNothingWithoutAConfiguredLog(t *testi
 		t.Errorf("no log configured must give nothing: %q", got)
 	}
 }
+
+func TestClickSaysWhenARequestWasStillPendingInsteadOfNoEffect(t *testing.T) {
+	app := func(w http.ResponseWriter, r *http.Request) bool {
+		if r.URL.Path == "/api/ok" {
+			io.WriteString(w, "{}")
+			return true
+		}
+		return false
+	}
+	// virtual time waits for the network, so a slow request cannot stay pending in this Chrome: one request is left counted by the helper
+	// (its send reaches the wrapper and then fails on a stand-in object) and never ends.
+	stuck := `(()=>{const P=Object.getPrototypeOf(new XMLHttpRequest());try{P.send.call({__ws:{m:'GET',u:'/stuck'},addEventListener(){}},null)}catch(e){}return 'stuck'})()`
+	out, _ := runSteps(t, func(load string) []string {
+		return []string{
+			load,
+			`(document.body.insertAdjacentHTML('beforeend','<button onclick="fetch(\'/api/ok\')">Fine</button><button>Noop</button>'),'ok')`,
+			"window.__ws.click({text:'Fine'})",
+			stuck,
+			"window.__ws.click({text:'Noop'})",
+		}
+	}, app)
+	if strings.Contains(out[2], "pending") {
+		t.Errorf("a request that answered in time was called pending: %q", out[2])
+	}
+	if !strings.Contains(out[4], "Still pending") || strings.Contains(out[4], "No effect seen") {
+		t.Errorf("a request still pending must be said, not «No effect seen»: %q", out[4])
+	}
+}

@@ -308,6 +308,9 @@ func (p *Tool) payloads(args map[string]any) string {
 		fmt.Fprintf(&b, "Interceptor: %s replaced after the helper loaded. These requests are what the page did with that patch, not what a real click did: do not report them as a check of the real flow.\n", strings.Join(p.tampered, ", "))
 	}
 	fmt.Fprintf(&b, "%d requests captured (showing last %d)\n", len(p.caps), len(list))
+	if s := problems(p.caps); s != "" {
+		b.WriteString(s + "\n")
+	}
 	if p.refused { // the origin itself is not repeated: it comes from the browser, and the agent can read the tab's address with state
 		fmt.Fprintf(&b, "(requests from another origin were refused: the tab's address must be one of those in WEBSCOPE_APP_URL, %s; restart the server after changing it)\n", strings.Join(p.origins(), ", "))
 	}
@@ -338,6 +341,34 @@ func (p *Tool) payloads(args map[string]any) string {
 		b.WriteString("\nBackend log (the last error lines of WEBSCOPE_LOG, as the log wrote them):\n" + l)
 	}
 	return strings.TrimRight(b.String(), "\n")
+}
+
+// problems summarises the captured requests that failed (4xx, 5xx, no answer) over all of them, or "" when none did.
+func problems(caps []Capture) string {
+	var c4, c5, c0 int
+	for _, c := range caps {
+		switch {
+		case c.S == 0:
+			c0++
+		case c.S >= 500:
+			c5++
+		case c.S >= 400:
+			c4++
+		}
+	}
+	var parts []string
+	for _, x := range []struct {
+		n    int
+		what string
+	}{{c4, "4xx"}, {c5, "5xx"}, {c0, "no answer (status 0)"}} {
+		if x.n > 0 {
+			parts = append(parts, fmt.Sprintf("%d with %s", x.n, x.what))
+		}
+	}
+	if len(parts) == 0 {
+		return ""
+	}
+	return fmt.Sprintf("Problems: %s of %d captured", strings.Join(parts, ", "), len(caps))
 }
 
 func oneLine(s string) string { return strings.NewReplacer("\r", "", "\n", `\n`).Replace(s) }

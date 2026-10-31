@@ -318,6 +318,7 @@
     await sleep(150); // the screen draws the answer
     const out = [r], reqs = log.filter(e => e.i >= before.seq).map(e => e.t);
     if (reqs.length) out.push('Requests: ' + reqs.join(' | '));
+    if (pending > 0) out.push('Still pending: ' + pending + ' request(s) had not answered when this was written (it waited about 2.5 s), so the effect may be incomplete. Next: page(payloads) later shows how they ended.');
     if (reqs.some(r => / (0 \(no answer\)|5\d\d)$/.test(r))) { // a request with no answer or a 5xx: the backend log may say why
       try { const r = await realFetch(cfg.base + '/log?t=' + cfg.t + '&from=' + mark); const t = r.ok ? await r.text() : ''; if (t) out.push('Backend log (the last error lines of WEBSCOPE_LOG, as the log wrote them):\n' + t); } catch (e) { /* the listener is gone: no log lines */ }
     }

@@ -2,6 +2,18 @@
 
 One entry per version, newest first. Tool names are `query`, `page`, `check` and `code`. Each change says what it is, what was seen that made it necessary, how it was checked and what was not checked. A change in what a tool prints is listed as a change, because a client may read it.
 
+## 0.5.60 — 2026-10-31
+
+**`click` and `press` say when a request was still pending; `payloads` opens with a summary of the failed requests.**
+
+What was seen that made it necessary: `click` waits about 2.5 s for the answers. When a request was slower, it could report `No effect seen` and the agent took the click for dead. And in `payloads`, one failed request among ten is easy to miss: in the real session the console had `Cannot read properties of undefined` and nobody looked.
+
+Now, if any request counted by the helper has not answered when `click` or `press` writes its answer, the answer has `Still pending: N request(s) had not answered when this was written (it waited about 2.5 s), so the effect may be incomplete. Next: page(payloads) later shows how they ended.`, and `No effect seen` is not said. `payloads` adds, under its first line, `Problems: 1 with 4xx, 1 with 5xx, 1 with no answer (status 0) of N captured` when any captured request (all of them, not only the shown ones) failed, and nothing when none did. It is information; nothing is refused. `tools/list` is unchanged.
+
+How it was checked: 2 tests that failed before: in a real Chrome, a click whose request answers in time does not say pending, and with a request left counted by the helper a click with no effect says `Still pending` and not `No effect seen`; and the summary counts 4xx, 5xx and status 0 over all the captures and is absent without failures. The suite with `-race` passes.
+
+Not checked: a really slow request on a screen (the test Chrome waits for the network, so it was simulated with a request that never ends); the 2.5 s is the helper's, not configurable.
+
 ## 0.5.59 — 2026-10-31
 
 **`page verify` takes `check METHOD address` as evidence: what `check` found about the stored row.**

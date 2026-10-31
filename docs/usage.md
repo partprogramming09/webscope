@@ -30,7 +30,7 @@ The contract of each tool: when to use it, what it guarantees, what it cannot do
 Run `page(help)` first. The order of a session:
 
 1. `page(load)` and run the snippet. Run it again after every navigation, reload or `/mcp`: the helper is lost and the port changes.
-2. `state` to see the screen (a first line says when it looks like a 404; the URL shows the names of its query parameters, never the values), then `fill`, `click` or `press`. `click` and `press` report the requests (method, path, status), new alerts, field errors and console errors, or `No effect seen`.
+2. `state` to see the screen (a first line says when it looks like a 404; the URL shows the names of its query parameters, never the values), then `fill`, `click` or `press`. `click` and `press` report the requests (method, path, status), new alerts, field errors and console errors, or `No effect seen`; if a request had not answered after about 2.5 s they say `Still pending` and the effect may be incomplete (look at `payloads` later). `payloads` opens with a `Problems:` line when any captured request was a 4xx, a 5xx or had no answer.
 3. `payloads` for the requests and their answers; `simulate` to force an HTTP error on the next requests to a URL.
 4. To compare an old screen and a new one: `shape {name, selector?}` on each (`selector` limits it to a part of the screen), then `parity {a, b}` for what only one side has. To compare what an action sends and receives: do the same action on both and `parity {req_a, req_b, map?}` (field names only, a GET's query names included, never values). `WEBSCOPE_APP_URL` may hold both origins, separated by commas.
 5. `fill` warns when a name fits several fields (a list filter and a form field with the same label); name one by its id.
