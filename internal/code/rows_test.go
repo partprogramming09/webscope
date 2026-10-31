@@ -122,3 +122,35 @@ func TestLeftoversCountsTheRowsATestLeftBehindWithoutShowingThem(t *testing.T) {
 		t.Error("an invalid prefix must be refused")
 	}
 }
+
+// TestLeftoversCountsSeveralColumnsOneLineEach: columns gives a list, each is counted on its own line, and the warning comes once.
+func TestLeftoversCountsSeveralColumnsOneLineEach(t *testing.T) {
+	c := codeSetup(t)
+	conn := writeDB(t, c)
+	for _, q := range []string{
+		"CREATE TABLE lo2 (code TEXT, name TEXT, note TEXT)",
+		"INSERT INTO lo2 VALUES ('ZZ_A', 'real', 'x'), ('real', 'ZZ_B', 'y'), ('ZZ_C', 'ZZ_D', 'z')",
+	} {
+		if _, err := conn.Exec(q); err != nil {
+			t.Fatal(err)
+		}
+	}
+	out, err := code(t, c, "leftovers", map[string]any{"table": "lo2", "columns": []any{"code", "name", "note"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{"leftovers lo2.code starting with ZZ_: 2 rows", "leftovers lo2.name starting with ZZ_: 2 rows", "leftovers lo2.note starting with ZZ_: 0 rows"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("lacks %q: %q", want, out)
+		}
+	}
+	if strings.Count(out, "clean them through the screen") != 1 || strings.Contains(out, "ZZ_A") {
+		t.Errorf("the warning comes once and no value is shown: %q", out)
+	}
+	if _, err := code(t, c, "leftovers", map[string]any{"table": "lo2", "columns": []any{"code", "na;me"}}); err == nil {
+		t.Error("an invalid column name must be refused")
+	}
+	if _, err := code(t, c, "leftovers", map[string]any{"table": "lo2", "columns": []any{"a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k"}}); err == nil {
+		t.Error("more than 10 columns must be refused")
+	}
+}

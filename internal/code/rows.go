@@ -233,32 +233,67 @@ func (c *Tool) rows(ctx context.Context, args map[string]any) (string, error) {
 
 var leftoverPrefix = regexp.MustCompile(`^[A-Za-z0-9_-]{1,20}$`)
 
-// leftovers counts the rows of table whose column starts with prefix (ZZ_ by default), the mark of the rows a test wrote: a count, never a value.
+// leftoverColumns are the columns to count: column, then columns (a list), at most maxLeftoverColumns.
+func leftoverColumns(args map[string]any) ([]string, error) {
+	var cols []string
+	if c := input.Str(args, "column"); c != "" {
+		cols = append(cols, c)
+	}
+	if l, ok := args["columns"].([]any); ok {
+		for _, v := range l {
+			s, _ := v.(string)
+			cols = append(cols, s)
+		}
+	}
+	if len(cols) == 0 || len(cols) > maxLeftoverColumns {
+		return nil, fmt.Errorf("leftovers needs table and column or columns (1 to %d): letters, digits and _ only", maxLeftoverColumns)
+	}
+	return cols, nil
+}
+
+const maxLeftoverColumns = 10
+
+// leftovers counts the rows of table whose column (or each of columns) starts with prefix (ZZ_ by default), the mark of the rows a test wrote: a count, never a value.
 func (c *Tool) leftovers(ctx context.Context, args map[string]any) (string, error) {
-	table, col, prefix := input.Str(args, "table"), input.Str(args, "column"), input.Str(args, "prefix")
+	table, prefix := input.Str(args, "table"), input.Str(args, "prefix")
 	if prefix == "" {
 		prefix = "ZZ_"
 	}
-	if !db.ValidName.MatchString(table) || !db.ValidName.MatchString(col) {
+	cols, err := leftoverColumns(args)
+	if err != nil {
+		return "", err
+	}
+	if !db.ValidName.MatchString(table) {
 		return "", errors.New("leftovers needs table and column: letters, digits and _ only")
+	}
+	for _, col := range cols {
+		if !db.ValidName.MatchString(col) {
+			return "", errors.New("leftovers needs table and column: letters, digits and _ only")
+		}
 	}
 	if !leftoverPrefix.MatchString(prefix) {
 		return "", fmt.Errorf("the prefix must be 1 to 20 letters, digits, _ or -")
 	}
 	like := strings.NewReplacer("_", "!_", "%", "!%").Replace(prefix) + "%"
-	stmt, err := db.CheckSQL(fmt.Sprintf("SELECT COUNT(*) FROM %s WHERE %s LIKE '%s' ESCAPE '!'", table, col, like))
-	if err != nil {
-		return "", err
+	var lines []string
+	left := false
+	for _, col := range cols {
+		stmt, err := db.CheckSQL(fmt.Sprintf("SELECT COUNT(*) FROM %s WHERE %s LIKE '%s' ESCAPE '!'", table, col, like))
+		if err != nil {
+			return "", err
+		}
+		_, rows, err := c.readAll(ctx, stmt, input.Str(args, "tenant"))
+		if err != nil {
+			return "", err
+		}
+		if len(rows) != 1 || len(rows[0]) != 1 {
+			return "", errors.New("the count did not come back")
+		}
+		lines = append(lines, fmt.Sprintf("leftovers %s.%s starting with %s: %s rows", table, col, prefix, rows[0][0]))
+		left = left || rows[0][0] != "0"
 	}
-	_, rows, err := c.readAll(ctx, stmt, input.Str(args, "tenant"))
-	if err != nil {
-		return "", err
-	}
-	if len(rows) != 1 || len(rows[0]) != 1 {
-		return "", errors.New("the count did not come back")
-	}
-	out := fmt.Sprintf("leftovers %s.%s starting with %s: %s rows", table, col, prefix, rows[0][0])
-	if rows[0][0] != "0" {
+	out := strings.Join(lines, "\n")
+	if left {
 		out += ". They are test rows: clean them through the screen, not through the database, and say in the report that they were left."
 	}
 	return out, nil

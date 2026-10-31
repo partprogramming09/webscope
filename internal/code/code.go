@@ -139,7 +139,7 @@ func (c *Tool) do(ctx context.Context, in input.Args) (string, error) {
 	case "help":
 		return help(in.Args)
 	}
-	return "", fmt.Errorf("unknown action %q: fields {table, tenant?}, consumers {table, column} or {column_only}, map {module, walkthrough?}, map_back {query, offset?}, flows {module}, cases {module}, legacy {path, module?}, rows {table, a, b, children?, tenant?}, snap {name, sql, key?, tenant?} or snap_diff {name}, leftovers {table, column, prefix?, tenant?}", in.Action)
+	return "", fmt.Errorf("unknown action %q: fields {table, tenant?}, consumers {table, column} or {column_only}, map {module, walkthrough?}, map_back {query, offset?}, flows {module}, cases {module}, legacy {path, module?}, rows {table, a, b, children?, tenant?}, snap {name, sql, key?, tenant?} or snap_diff {name}, leftovers {table, column or columns[≤10], prefix?, tenant?}", in.Action)
 }
 
 // consumers lists who reads and who writes a column in the PHP of WEBSCOPE_BACKEND.

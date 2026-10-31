@@ -2,6 +2,16 @@
 
 One entry per version, newest first. Tool names are `query`, `page`, `check` and `code`. Each change says what it is, what was seen that made it necessary, how it was checked and what was not checked. A change in what a tool prints is listed as a change, because a client may read it.
 
+## 0.5.70 — 2026-10-31
+
+**`code leftovers` takes `columns` (up to 10) and counts each one on its own line.**
+
+What was seen that made it necessary: `leftovers` took one table and one column per call, so finding which column of a table held the `ZZ_` rows took one call per guess.
+
+Now `columns: ["code", "name", …]` (alone or with `column`) answers one `leftovers table.col starting with ZZ_: N rows` line per column, and the warning to clean through the screen comes once, at the end, when some column has rows. With one `column` the answer is the same as before. More than 10 columns, or an invalid name, is refused. Only counts: no value is shown.
+
+How it was checked: a new test failed (`leftovers needs table and column`) and passes now (3 columns: 2, 2 and 0 rows, the warning once, no value, a bad name and 11 columns refused); the earlier leftovers test still passes. The 183 tests pass. Not checked here: against the real database (batched with the other versions).
+
 ## 0.5.69 — 2026-10-31
 
 **New `page options {field, match?, max?}`: the choices of a select or menu, without choosing one.**
