@@ -523,3 +523,29 @@ func TestMapBackKeepsRoomForEndpointsWhenTheServicesAndModelsAreMany(t *testing.
 		t.Errorf("%d bytes: some tables must stay and the cut of services and models must be said:\n...%s", len(out), out[max(0, len(out)-300):])
 	}
 }
+
+// TestMapBackFindsAModuleByTheRoutePathOfItsScreen: a query that has a slash and is part of the path of a route of the front finds the module that owns the route,
+// though the name of the module has nothing of it.
+func TestMapBackFindsAModuleByTheRoutePathOfItsScreen(t *testing.T) {
+	c := mapSetup(t)
+	routes := filepath.Join(c.Front, "src/modules/crm/tariffs/routes/TariffRoutes.ts")
+	if err := os.MkdirAll(filepath.Dir(routes), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	body := "const TariffRoutes = [\n    {\n        name: 'sales-bulk',\n        path: '/pricing/sales-tariffs/bulk-upload/:tariffTypeId(\\\\d+)',\n        component: () => import('@/modules/crm/tariffs/views/Bulk.vue'),\n    },\n];\n"
+	if err := os.WriteFile(routes, []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	for _, q := range []string{"sales-tariffs/bulk-upload", "/pricing/sales-tariffs/bulk-upload/:tariffTypeId", "Sales-Tariffs/Bulk-Upload"} {
+		out, err := code(t, c, "map_back", map[string]any{"query": q})
+		if err != nil || !strings.Contains(out, "## front crm/tariffs") || !strings.Contains(out, "route /pricing/sales-tariffs/bulk-upload/:tariffTypeId") {
+			t.Errorf("%q must find the module of that screen: %q, %v", q, out, err)
+		}
+	}
+	if out, _ := code(t, c, "map_back", map[string]any{"query": "crm/quotes"}); strings.Contains(out, "## front crm/tariffs") {
+		t.Errorf("a query for another module must not bring this one: %q", out)
+	}
+	if out, _ := code(t, c, "map_back", map[string]any{"query": "nada-aqui/no-existe"}); !strings.Contains(out, "no module or route contains") {
+		t.Errorf("a path that no route has is still not found: %q", out)
+	}
+}

@@ -17,7 +17,7 @@ const helpText = `code(action, args?) reads the project and the database; it nev
 fields {table, tenant?}: columns of a table, rows with a value, who reads and writes each.
 consumers {table, column} or {column_only}: each read and write of a column, file:line.
 map {module, walkthrough?}: routes, calls and screens of a front module.
-map_back {query, offset?}: from a screen or API address to endpoint, controller, service and table; when endpoints do not fit, the last line gives the offset of the next page.
+map_back {query, offset?}: from a screen (its module, or a part of its route path with a slash, such as sales-tariffs/bulk-upload) or an API address to endpoint, controller, service and table; when endpoints do not fit, the last line gives the offset of the next page.
 flows {module}: screens, endpoints and tables together, as evidence for user stories.
 cases {module}: the test cases of a module as a list; it runs nothing.
 legacy {path, module?}: endpoints, callers and tables of a legacy PHP folder, against the new module's.

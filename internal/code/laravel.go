@@ -210,6 +210,21 @@ func importsOf(file, folder string) []string {
 	return out
 }
 
+// routePathHas is true when query, with a slash in it, is part of the path of a route of the module (compared without case and without the slashes at its ends):
+// the path of a screen, such as sales-tariffs/bulk-upload, names the module that owns it though the name of the module has nothing of it.
+func routePathHas(m *frontModule, query string) bool {
+	q := strings.ToLower(strings.Trim(query, "/"))
+	if m == nil || !strings.Contains(q, "/") {
+		return false
+	}
+	for _, r := range m.routes {
+		if strings.Contains(strings.ToLower(r.path), q) {
+			return true
+		}
+	}
+	return false
+}
+
 // minEndpointRoom is the share of a map_back answer, in bytes, that the endpoints keep on the first page.
 const minEndpointRoom = 3000
 
@@ -288,7 +303,7 @@ func (c *Tool) mapBack(args map[string]any) (string, error) {
 	requested := map[string]bool{}
 	var found []string
 	for _, n := range names {
-		if strings.Contains(n, query) || matches(query, n) {
+		if strings.Contains(n, query) || matches(query, n) || routePathHas(mods[n], query) {
 			found = append(found, n)
 		}
 	}

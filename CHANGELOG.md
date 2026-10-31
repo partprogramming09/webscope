@@ -2,6 +2,16 @@
 
 One entry per version, newest first. Tool names are `query`, `page`, `check` and `code`. Each change says what it is, what was seen that made it necessary, how it was checked and what was not checked. A change in what a tool prints is listed as a change, because a client may read it.
 
+## 0.6.3 — 2026-10-31
+
+**`code map_back` finds a module by the route path of one of its screens (`sales-tariffs/bulk-upload`).**
+
+What was seen that made it necessary: `map_back {query: "sales-tariffs/bulk-upload"}` answered `no module or route contains «sales-tariffs/bulk-upload»` (seen on the real project). That text is the path of a screen of the front; `map_back` looked for it in the names of the front modules (`crm/tariffs`) and in the addresses of the backend (`tariffs/{}/{}/bulk/import`), and the path of a screen is in neither.
+
+Now a query with a slash that is part of the path of a route of a front module (compared without case and without the slashes at its ends, so `sales-tariffs/bulk-upload`, `Sales-Tariffs/Bulk-Upload` and `/pricing/sales-tariffs/bulk-upload/:tariffTypeId` all work) finds that module, and the answer is the one that the name of the module would have given: all of its routes, then the endpoints its calls reach. A query without a slash is read as before, so `tariff` finds the same modules. `code(help)` says it.
+
+How it was checked: a new test (a module `crm/tariffs` whose route path has no word of its name in common with the query) failed with the message above for the three forms and passes; a query for another module does not bring it, and a path that no route has is still not found. 197 tests pass. Not checked on the real project yet.
+
 ## 0.6.2 — 2026-10-31
 
 **A long `batch` shows the first line of each of its steps to `javascript_tool`, not only the start of the first one.**
