@@ -341,6 +341,7 @@ const fixturePage = `<!doctype html><meta charset=utf-8><title>Pedido</title><h1
 <div class=v-select><div class=v-field id=df><label for=di>Destino</label><input id=di></div></div>
 <div class=v-autocomplete><div class=v-field><label for=ai>Cliente</label><input id=ai></div></div>
 <div class=v-autocomplete><div class=v-field><label for=ci>Contacto</label><input id=ci></div></div>
+<div class=v-autocomplete><div class=v-field id=rif><label for=ri>Ciudad</label><input id=ri></div></div>
 <label for=on>Nota</label><input id=on>
 <div role=dialog><label for=dn>Nota</label><input id=dn></div>
 <div class=v-overlay-container id=oc></div>
@@ -368,6 +369,12 @@ mf.onmousedown=()=>{oc.innerHTML='<div class=v-overlay--active><div class=v-list
 ai.oninput=()=>setTimeout(()=>{oc.innerHTML='<div class=v-overlay--active><div class=v-list></div></div>';for(const t of ['Demo','Otro']){const q=ai.value.toLowerCase();if(!q.includes(t.toLowerCase())&&!t.toLowerCase().includes(q))continue;const d=document.createElement('div');d.className='v-list-item';d.innerHTML=t+' <small>+57300</small>';d.onclick=()=>{ai.value=t;oc.innerHTML='';cl.textContent='cliente '+t;const f=ai.closest('.v-field');f.querySelectorAll('.v-autocomplete__selection').forEach(x=>x.remove());f.insertAdjacentHTML('beforeend','<div class=v-autocomplete__selection><span class=v-autocomplete__selection-text>'+t+'</span></div>')};oc.querySelector('.v-list').appendChild(d)}},1500)
 // a strict autocomplete: the server answers only when the search is part of the name, so the whole text of an option finds nothing
 ci.oninput=()=>setTimeout(()=>{oc.innerHTML='<div class=v-overlay--active><div class=v-list></div></div>';if('laura'.includes(ci.value.toLowerCase())){const d=document.createElement('div');d.className='v-list-item';d.innerHTML='Laura <small>+57311</small>';d.onclick=()=>{ci.value='Laura';oc.innerHTML='';ct.textContent='contacto Laura'};oc.querySelector('.v-list').appendChild(d)}},300)
+// an autocomplete that toggles its menu on a press of the field, lists a search only while the menu is open and stays open on a click outside; it closes with Escape
+const rrender=()=>{oc.dataset.owner='ri';oc.innerHTML='<div class=v-overlay--active><div class=v-list></div></div>';for(const t of ['Aachen','Aarhus','Bogota']){if(t.toLowerCase().includes(ri.value.toLowerCase())){const d=document.createElement('div');d.className='v-list-item';d.textContent=t;oc.querySelector('.v-list').appendChild(d)}}}
+const rclose=()=>{oc.innerHTML='';delete oc.dataset.owner}
+rif.onmousedown=()=>{if(oc.dataset.owner==='ri'&&oc.querySelector('.v-list'))rclose();else rrender()}
+ri.oninput=()=>{if(ri.value===ri.dataset.last)return;ri.dataset.last=ri.value;if(oc.dataset.owner==='ri'&&oc.querySelector('.v-list'))setTimeout(rrender,200)}
+ri.onkeydown=e=>{if(e.key==='Escape')rclose()}
 df.onmousedown=()=>{oc.innerHTML='<div class=v-overlay--active><div class=v-list><div class=v-list-item id=u>Uno</div></div></div>';u.onclick=()=>{}} // a menu that keeps its list and does not keep the option
 on.oninput=()=>nn.textContent='outside';dn.oninput=()=>nn.textContent='dialog'
 n.onkeydown=e=>{if(e.key==='Escape')al.textContent='esc'}
@@ -1622,6 +1629,8 @@ func TestOptionsListsTheChoicesOfASelectAndOfAMenu(t *testing.T) {
 		{"field": "Origen", "match": "STALE"},
 		{"field": "Origen", "max": float64(5), "scrolled": true},
 		{"field": "Tipo", "max": float64(1)},
+		{"field": "Ciudad", "match": "Aa"},
+		{"field": "Ciudad", "match": "Aa"},
 	} {
 		if a["scrolled"] == true { // a menu that opens already scrolled down
 			steps = append(steps, "(window.__startScrolled=true,'scrolled')")
@@ -1687,5 +1696,10 @@ func TestOptionsListsTheChoicesOfASelectAndOfAMenu(t *testing.T) {
 	}
 	if out[11] != "Tipo: uno (… 1 more: narrow with match, or raise max)" {
 		t.Errorf("a native select knows how many options are left: %q", out[11])
+	}
+	for _, i := range []int{12, 13} {
+		if !strings.HasPrefix(out[i], "Ciudad: Aachen | Aarhus") {
+			t.Errorf("the same search twice must list the same rows (call %d): %q", i-11, out[i])
+		}
 	}
 }

@@ -2,6 +2,16 @@
 
 One entry per version, newest first. Tool names are `query`, `page`, `check` and `code`. Each change says what it is, what was seen that made it necessary, how it was checked and what was not checked. A change in what a tool prints is listed as a change, because a client may read it.
 
+## 0.5.74 — 2026-10-31
+
+**`page options` closes a menu that is open before it opens it, and leaves it closed.**
+
+What was seen that made it necessary: on the real form, `options {field: "Ciudad de origen", match: "AAC"}` answered `AACHEN` the first time and `(none)` when the same call was repeated, and also after a call with another `match` on that field. Looking at the page between calls showed the cause: the menu of the first call was still open (a list with 62 rows) and pressing a field that has its menu open closes it, so the second call typed its search with no menu.
+
+Now `options` closes an open menu first (Escape on the field and a click outside, waiting up to about a second for its rows to go) and does the same when it ends, so the next call finds it closed. For an autocomplete or combobox with `match` it also sets the search to an empty text, waits 300 ms and then types `match`. `fill` is not changed.
+
+How it was checked: the Chrome test got an autocomplete that toggles its menu on a press of the field, lists a search only while the menu is open and stays open on a click outside; the second identical call failed with `Ciudad: (none)` (as on the real form) and both pass now. The 184 tests pass. A first version of this change (only the empty search before typing) did not fix the real form: the same `AAC` call still gave `(none)` the second time; that commit was replaced before being pushed. Not checked on the real screen yet (see the docs commit that follows, if there is one).
+
 ## 0.5.73 — 2026-10-31
 
 **`code map_back` keeps at least 3000 bytes for endpoints on the first page; the services and models give way.**
@@ -10,7 +20,7 @@ What was seen that made it necessary: on the real project, `map_back tariff` sho
 
 Now, on the first page (`offset` 0), if the services and models would leave the endpoints less than 3000 bytes (or less than what they need, when they are fewer), lines of services are dropped from the end first, then lines of models, and the last line says `(… N more services and models not shown: narrow the query)`. Pages after the first are as in 0.5.68. A project whose services and models fit is answered as before.
 
-How it was checked: a new test (a controller that reaches 80 services and 80 models, and 100 more endpoints) failed (1 endpoint on the first page, the answer cut in the middle of the models) and passes now (20 or more endpoints, some tables kept, the cut said, at most 8000 bytes plus the closing line); the earlier test that the tables survive 400 endpoints passes too. The 184 tests pass. Not checked here: on the real project (see the next entry of the docs commit). The dropped models are not reachable by `offset`: only a narrower query shows them.
+How it was checked: a new test (a controller that reaches 80 services and 80 models, and 100 more endpoints) failed (1 endpoint on the first page, the answer cut in the middle of the models) and passes now (20 or more endpoints, some tables kept, the cut said, at most 8000 bytes plus the closing line); the earlier test that the tables survive 400 endpoints passes too. The 184 tests pass. Checked on the real project: `map_back tariff` showed 13 endpoints on the first page (3 before) and `24 more … offset 13`; `offset 13` showed 24 endpoints with none of the first 13 (13+24 = 37, as before); the first page dropped all 17 services and 29 models (`29 more services and models not shown`). The dropped models are not reachable by `offset`: only a narrower query shows them; all the services went before any model.
 
 ## 0.5.72 — 2026-10-31
 
@@ -20,7 +30,7 @@ What was seen that made it necessary: on the real form (582 cities) `options` wi
 
 Now `options` scrolls the newest menu to its top before it reads, and the `(… N more …)` count is given only when the list was seen to its end (a native select, or a menu scrolled to the bottom). When it stopped because it had `max` rows and had not seen the end, the answer says `(… may have more: narrow with match, or raise max)`. `fill` is not changed.
 
-How it was checked: the Chrome test of `options` got a menu that opens scrolled to row 120 and a native select with `max 1`; against the old `page.js` it failed with `PAIS 120 … (… 1 more …)` and with the new one it passes (`PAIS 000 … 004`, `may have more`; `Tipo: uno (… 1 more …)`). The 183 tests pass. Checked on the real screen: `fill` of `Proveedor` with a tariff name right after `fill` and after `options` of `Tarifario` answered `no option … among 3 seen` both times: the rows of the other menu did not mix into `fill` there, so it was left as it is. Not checked: a list that needs more than 400 scroll steps (it stops there; the answer then says `may have more`).
+How it was checked: the Chrome test of `options` got a menu that opens scrolled to row 120 and a native select with `max 1`; against the old `page.js` it failed with `PAIS 120 … (… 1 more …)` and with the new one it passes (`PAIS 000 … 004`, `may have more`; `Tipo: uno (… 1 more …)`). The 183 tests pass. Checked on the real screen: `fill` of `Proveedor` with a tariff name right after `fill` and after `options` of `Tarifario` answered `no option … among 3 seen` both times: the rows of the other menu did not mix into `fill` there, so it was left as it is. Checked on the real form (582 cities): `max 5` with no `match` gave `6TH OF OCTOBER | AACHEN | AARHUS | ABIYAN | ABU DABI (… may have more …)`, from the top. With `max 600` the list stopped at `PRAGA` after 400 steps (about 330 of the 582 rows) and said `may have more`: a list that long needs `match`. Seen on the same form: the same `match` twice gave `(none)` the second time (0.5.74).
 
 ## 0.5.71 — 2026-10-31
 

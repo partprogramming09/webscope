@@ -259,9 +259,19 @@
     if (e.tagName === 'SELECT') return { list: [...e.options].map(o => norm(o.text)).filter(s => lower(s).includes(want)), whole: true };
     if (!e.closest(MENU)) throw new Error('is not a select or a menu');
     const field = e.closest('.v-field'), late = !!e.closest('.v-autocomplete,.v-combobox');
-    for (let i = 0; i < 14 && rows().length; i++) await sleep(70);
+    const closeMenu = async () => { // pressing a field that has its menu open closes it, so an open one is closed first
+      e.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+      document.body.click();
+      for (let i = 0; i < 14 && rows().length; i++) await sleep(70);
+    };
+    if (rows().length) await closeMenu();
     ['pointerdown', 'mousedown', 'pointerup', 'mouseup', 'click'].forEach(t => field.dispatchEvent(new MouseEvent(t, { bubbles: true, cancelable: true, view: window })));
-    if (late && match) { Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set.call(e, String(match)); e.dispatchEvent(new Event('input', { bubbles: true })); }
+    if (late && match) { // clear the search first: an autocomplete may ignore a search equal to the last one it heard
+      const type = s => { Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set.call(e, s); e.dispatchEvent(new Event('input', { bubbles: true })); };
+      type('');
+      await sleep(300);
+      type(String(match));
+    }
     const seen = new Set();
     let end = 0, topped = null, whole = false;
     for (let i = 0; i < 400 && keep([...seen]).length < max; i++) { // shortcut: 400 steps of 70 ms at most, as fill
@@ -274,7 +284,7 @@
       if (list.scrollTop + list.clientHeight >= list.scrollHeight - 2) { if (++end > 2) { whole = true; break; } }
       else list.scrollTop += list.clientHeight * 0.8;
     }
-    document.body.click();
+    await closeMenu();
     await sleep(300);
     return { list: keep([...seen]), whole };
   };
