@@ -2,6 +2,18 @@
 
 One entry per version, newest first. Tool names are `query`, `page`, `check` and `code`. Each change says what it is, what was seen that made it necessary, how it was checked and what was not checked. A change in what a tool prints is listed as a change, because a client may read it.
 
+## 0.7.1 — 2026-10-31
+
+**`page find` also searches the option text that a menu field draws.**
+
+What was seen that made it necessary: on the real app, after `fill {Tarifario: "IMPO AIR"}` (answer `ok`), `find {text: "IMPO AIR"}` found nothing: a Vuetify menu keeps a code in its input (`3`) and draws the option text in another element, and `find` looked only at the input.
+
+Now `find` matches the drawn text too and prints it after the code: `f1 [text] Tarifario #input-46 = "3" shows "IMPO AIR"`. Nothing else changes.
+
+How it was checked: the Chrome test of `find` fills a menu field and looks for its option text; it fails without the change and passes with it; 201 tests pass with `-race`. On the real app (ventas) the same `fill` then `find` gave the line above. Also run on the real app with 0.7.0: `open`, `shape` and `find` on sales, purchase and tariff-configuration screens; `parity` of sales and purchase with a Tarifario chosen showed only the real differences (`V-#` and `C-#` fields and buttons ×10, columns `Contrato` and `compra`), while with no Tarifario both screens had 0 columns and no differences; `fill {f1}` by ref; times in `payloads` for XMLHttpRequest calls.
+
+What was not checked: `fill` by ref and parity against the legacy (its session was at the login, and credentials are the user's); `simulate` with a body.
+
 ## 0.7.0 — 2026-10-31
 
 **`page find` and element refs, `payloads` filters and times, `code legacy rejects`, `code leftovers ids`.**

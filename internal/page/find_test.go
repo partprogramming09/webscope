@@ -27,6 +27,8 @@ func TestFindListsOnlyWhatMatchesAndRefsPickElements(t *testing.T) {
 		{"find", map[string]any{"text": "alfa"}},
 		{"click", map[string]any{"ref": "b36"}},
 		{"click", map[string]any{"ref": "b999"}},
+		{"fill", map[string]any{"fields": map[string]any{"Origen": "PAIS 250"}}},
+		{"find", map[string]any{"text": "pais 250"}},
 	} {
 		sn, err := snippet(s.action, s.args)
 		if err != nil {
@@ -55,5 +57,8 @@ func TestFindListsOnlyWhatMatchesAndRefsPickElements(t *testing.T) {
 	}
 	if !strings.HasPrefix(out[8], "Failed: no button b999") {
 		t.Errorf("a ref past the last button is refused: %q", out[8])
+	}
+	if !strings.Contains(out[10], `Origen #mi = "C250" shows "PAIS 250"`) {
+		t.Errorf("a menu field is found by the option text it draws, not only by its code: %q", out[10])
 	}
 }

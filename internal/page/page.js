@@ -226,8 +226,8 @@
     };
     const hits = [];
     fields().forEach((e, i) => {
-      const l = labelOf(e), v = valueOf(e);
-      if (re.test([l, e.name, e.id, e.placeholder, v].filter(Boolean).join(' '))) hits.push('f' + (i + 1) + ' [' + (e.isContentEditable ? 'editor' : e.type || e.tagName.toLowerCase()) + '] ' + (l || '(no label)') + (e.id ? ' #' + e.id : '') + ' = "' + clip(v.replace(/\n/g, '⏎'), 40) + '"' + (where(e) ? ' · ' + where(e) : ''));
+      const l = labelOf(e), v = valueOf(e), menu = e.closest(MENU) && e.closest('.v-field') ? shown(e) : ''; // a menu keeps a code in the input and draws the option text
+      if (re.test([l, e.name, e.id, e.placeholder, v, menu].filter(Boolean).join(' '))) hits.push('f' + (i + 1) + ' [' + (e.isContentEditable ? 'editor' : e.type || e.tagName.toLowerCase()) + '] ' + (l || '(no label)') + (e.id ? ' #' + e.id : '') + ' = "' + clip(v.replace(/\n/g, '⏎'), 40) + '"' + (menu && menu !== v ? ' shows "' + clip(menu, 40) + '"' : '') + (where(e) ? ' · ' + where(e) : ''));
     });
     clickables().forEach((e, i) => {
       if (re.test(textOf(e))) hits.push('b' + (i + 1) + ' [button] ' + clip(textOf(e), 60) + (disabled(e) ? ' (disabled)' : '') + (where(e) ? ' · ' + where(e) : ''));
