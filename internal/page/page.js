@@ -282,7 +282,10 @@
       if (i < (late ? 25 : 4)) continue;
       if (!list) { if (i > 30) { whole = true; break; } continue; }
       if (list.scrollTop + list.clientHeight >= list.scrollHeight - 2) { if (++end > 2) { whole = true; break; } }
-      else list.scrollTop += list.clientHeight * 0.8;
+      else {
+        const r = [...list.querySelectorAll('.v-list-item')].filter(vis), span = r.length > 1 ? r[r.length - 1].getBoundingClientRect().bottom - r[0].getBoundingClientRect().top : 0;
+        list.scrollTop += Math.max(list.clientHeight * 0.8, span * 0.6); // the rows already drawn reach beyond the box: a step of 60% of them leaves none out
+      }
     }
     await closeMenu();
     await sleep(300);

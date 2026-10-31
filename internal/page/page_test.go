@@ -342,6 +342,7 @@ const fixturePage = `<!doctype html><meta charset=utf-8><title>Pedido</title><h1
 <div class=v-autocomplete><div class=v-field><label for=ai>Cliente</label><input id=ai></div></div>
 <div class=v-autocomplete><div class=v-field><label for=ci>Contacto</label><input id=ci></div></div>
 <div class=v-autocomplete><div class=v-field id=rif><label for=ri>Ciudad</label><input id=ri></div></div>
+<div class=v-select><div class=v-field id=gf><label for=gi>Region</label><input id=gi></div></div>
 <label for=on>Nota</label><input id=on>
 <div role=dialog><label for=dn>Nota</label><input id=dn></div>
 <div class=v-overlay-container id=oc></div>
@@ -371,6 +372,11 @@ ai.oninput=()=>setTimeout(()=>{oc.innerHTML='<div class=v-overlay--active><div c
 ci.oninput=()=>setTimeout(()=>{oc.innerHTML='<div class=v-overlay--active><div class=v-list></div></div>';if('laura'.includes(ci.value.toLowerCase())){const d=document.createElement('div');d.className='v-list-item';d.innerHTML='Laura <small>+57311</small>';d.onclick=()=>{ci.value='Laura';oc.innerHTML='';ct.textContent='contacto Laura'};oc.querySelector('.v-list').appendChild(d)}},300)
 // an autocomplete that toggles its menu on a press of the field, lists a search only while the menu is open and stays open on a click outside; it closes with Escape
 const rrender=()=>{oc.dataset.owner='ri';oc.innerHTML='<div class=v-overlay--active><div class=v-list></div></div>';for(const t of ['Aachen','Aarhus','Bogota']){if(t.toLowerCase().includes(ri.value.toLowerCase())){const d=document.createElement('div');d.className='v-list-item';d.textContent=t;oc.querySelector('.v-list').appendChild(d)}}}
+// a long virtual list: 2000 rows of 20 px, the 40 around the scroll position rendered, in a box of 120 px
+gf.onmousedown=()=>{oc.innerHTML='<div class=v-overlay--active><div class=v-list style="height:120px;overflow:auto;position:relative"><div style="height:40000px"></div></div></div>'
+ const l=oc.querySelector('.v-list');const draw=()=>{const k=Math.floor(l.scrollTop/20);[...l.querySelectorAll('.v-list-item')].forEach(e=>e.remove())
+  for(let i=Math.max(0,k-15);i<k+25&&i<2000;i++){const d=document.createElement('div');d.className='v-list-item';d.style.cssText='position:absolute;height:20px;top:'+i*20+'px';d.textContent='R'+i;l.appendChild(d)}}
+ draw();const id=setInterval(()=>{if(l.isConnected)draw();else clearInterval(id)},20)}
 const rclose=()=>{oc.innerHTML='';delete oc.dataset.owner}
 rif.onmousedown=()=>{if(oc.dataset.owner==='ri'&&oc.querySelector('.v-list'))rclose();else rrender()}
 ri.oninput=()=>{if(ri.value===ri.dataset.last)return;ri.dataset.last=ri.value;if(oc.dataset.owner==='ri'&&oc.querySelector('.v-list'))setTimeout(rrender,200)}
@@ -1631,6 +1637,7 @@ func TestOptionsListsTheChoicesOfASelectAndOfAMenu(t *testing.T) {
 		{"field": "Tipo", "max": float64(1)},
 		{"field": "Ciudad", "match": "Aa"},
 		{"field": "Ciudad", "match": "Aa"},
+		{"field": "Region", "match": "R1999"},
 	} {
 		if a["scrolled"] == true { // a menu that opens already scrolled down
 			steps = append(steps, "(window.__startScrolled=true,'scrolled')")
@@ -1696,6 +1703,9 @@ func TestOptionsListsTheChoicesOfASelectAndOfAMenu(t *testing.T) {
 	}
 	if out[11] != "Tipo: uno (… 1 more: narrow with match, or raise max)" {
 		t.Errorf("a native select knows how many options are left: %q", out[11])
+	}
+	if out[14] != "Region: R1999" {
+		t.Errorf("a list of 2000 rows must be read to its end in less than 400 steps: %q", out[14])
 	}
 	for _, i := range []int{12, 13} {
 		if !strings.HasPrefix(out[i], "Ciudad: Aachen | Aarhus") {

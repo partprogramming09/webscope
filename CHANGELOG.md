@@ -2,6 +2,16 @@
 
 One entry per version, newest first. Tool names are `query`, `page`, `check` and `code`. Each change says what it is, what was seen that made it necessary, how it was checked and what was not checked. A change in what a tool prints is listed as a change, because a client may read it.
 
+## 0.5.75 — 2026-10-31
+
+**`page options` scrolls a menu by the rows already drawn, so a long list is read in far fewer steps.**
+
+What was seen that made it necessary: on the real form (582 cities) each `options` with `match` took about 12 s for one or two rows, and a list of more than about 330 rows was cut at the limit of 400 steps (`PRAGA`). Each step moved the list by 80% of its box (248 px, 3 or 4 rows) while Vuetify keeps about 62 rows (4000 px) drawn around the box.
+
+Now a step is the larger of 80% of the box and 60% of the span of the rows drawn, so no row is left out between steps. The limit of 400 steps stays; it now covers a much longer list. `fill` is not changed.
+
+How it was checked: the Chrome test got a list of 2000 rows (40 drawn, a box of 120 px) and asks for `R1999`; it failed (`(none) … may have more`, cut at 400 steps) and passes now. The 184 tests pass. Not checked on the real form yet.
+
 ## 0.5.74 — 2026-10-31
 
 **`page options` closes a menu that is open before it opens it, and leaves it closed.**
@@ -10,7 +20,7 @@ What was seen that made it necessary: on the real form, `options {field: "Ciudad
 
 Now `options` closes an open menu first (Escape on the field and a click outside, waiting up to about a second for its rows to go) and does the same when it ends, so the next call finds it closed. For an autocomplete or combobox with `match` it also sets the search to an empty text, waits 300 ms and then types `match`. `fill` is not changed.
 
-How it was checked: the Chrome test got an autocomplete that toggles its menu on a press of the field, lists a search only while the menu is open and stays open on a click outside; the second identical call failed with `Ciudad: (none)` (as on the real form) and both pass now. The 184 tests pass. A first version of this change (only the empty search before typing) did not fix the real form: the same `AAC` call still gave `(none)` the second time; that commit was replaced before being pushed. Not checked on the real screen yet (see the docs commit that follows, if there is one).
+How it was checked: the Chrome test got an autocomplete that toggles its menu on a press of the field, lists a search only while the menu is open and stays open on a click outside; the second identical call failed with `Ciudad: (none)` (as on the real form) and both pass now. The 184 tests pass. A first version of this change (only the empty search before typing) did not fix the real form: the same `AAC` call still gave `(none)` the second time; that commit was replaced before being pushed. Checked on the real form: `match "AAC"`, `"AAC"`, `"ZHENG"`, `"AAC"` in four separate calls answered `AACHEN`, `AACHEN`, `ZHENGJIANG | ZHENGZHOU`, `AACHEN`. Each took about 12 s: the field did not filter its list when the search was typed (the list kept its 62 rows and 38491 px), so `match` was found by scrolling the whole list; see 0.5.75.
 
 ## 0.5.73 — 2026-10-31
 
