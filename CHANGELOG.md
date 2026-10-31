@@ -2,6 +2,16 @@
 
 One entry per version, newest first. Tool names are `query`, `page`, `check` and `code`. Each change says what it is, what was seen that made it necessary, how it was checked and what was not checked. A change in what a tool prints is listed as a change, because a client may read it.
 
+## 0.5.66 — 2026-10-31
+
+**`page payloads` says how long ago the last request was captured, and after 30 s adds how to bring the helper back.**
+
+What was seen that made it necessary: after a full reload of the tab without `page(load)`, `payloads` kept saying «23 requests captured» and showed the last request of the screen before, with nothing that told the helper was gone. A user compared the endpoints of two screens with it.
+
+Now the first line ends with `; last one N s ago` (only when something was captured). From 30 s on it adds `If the page was reloaded since, the helper is gone and nothing new is captured: run page(load) again`. A quiet screen gets the same hint: the server cannot tell a quiet page from a reloaded one, so the text says «if».
+
+How it was checked: a new test with a fake clock fails without the change (it does not build) and passes with it (5 s: age and no hint; 95 s: age and hint); vet and the suite pass.
+
 ## 0.5.65 — 2026-10-31
 
 **New `page open {path}`: goes to a router path through the app's own Vue Router and refuses a path that no route owns.**

@@ -35,6 +35,7 @@ var pageVer = fmt.Sprintf("%x", sha256.Sum256([]byte(pageJS)))[:8]
 const (
 	maxCaptureBody = 256 << 10 // a capture bigger than this is refused (413)
 	maxCaptures    = 50        // requests kept; the oldest go first
+	staleAfter     = 30        // seconds without a capture after which payloads says how to reload the helper
 	storeClip      = 16 << 10  // bytes of each body kept (check compares them whole; a list answer of Acme passed 2000)
 	showClip       = 600       // bytes of each body shown by payloads
 	defaultShown   = 10        // requests shown by payloads unless limit says otherwise
@@ -77,10 +78,12 @@ type Tool struct {
 	token  string
 	Life   context.Context
 
-	mu     sync.Mutex
-	base   string
-	caps   []Capture
-	shapes map[string]Shape
+	mu      sync.Mutex
+	base    string
+	caps    []Capture
+	lastCap time.Time        // when the last capture came
+	now     func() time.Time // the clock; a test sets it
+	shapes  map[string]Shape
 
 	tampered []string // page functions replaced after the helper loaded, as the helper last said
 
@@ -102,7 +105,7 @@ type Tool struct {
 func New(appURL string) *Tool {
 	b := make([]byte, 16)
 	rand.Read(b)
-	return &Tool{appURL: appURL, token: hex.EncodeToString(b), Life: context.Background()}
+	return &Tool{appURL: appURL, token: hex.EncodeToString(b), Life: context.Background(), now: time.Now}
 }
 
 // origins are the scheme://host of each address in WEBSCOPE_APP_URL (several are separated by commas): the only origins the listener answers.
@@ -276,6 +279,7 @@ func (p *Tool) capture(w http.ResponseWriter, r *http.Request) {
 	c.Req, c.Res = clip(c.Req, storeClip), clip(c.Res, storeClip)
 	p.mu.Lock()
 	p.caps = append(p.caps, c)
+	p.lastCap = p.now()
 	if len(p.caps) > maxCaptures {
 		p.caps = p.caps[len(p.caps)-maxCaptures:]
 	}
@@ -310,7 +314,15 @@ func (p *Tool) payloads(args map[string]any) string {
 	if len(p.tampered) > 0 {
 		fmt.Fprintf(&b, "Interceptor: %s replaced after the helper loaded. These requests are what the page did with that patch, not what a real click did: do not report them as a check of the real flow.\n", strings.Join(p.tampered, ", "))
 	}
-	fmt.Fprintf(&b, "%d requests captured (showing last %d)\n", len(p.caps), len(list))
+	fmt.Fprintf(&b, "%d requests captured (showing last %d)", len(p.caps), len(list))
+	if len(p.caps) > 0 {
+		age := int(p.now().Sub(p.lastCap).Seconds())
+		fmt.Fprintf(&b, "; last one %d s ago", age)
+		if age >= staleAfter {
+			b.WriteString(". If the page was reloaded since, the helper is gone and nothing new is captured: run page(load) again")
+		}
+	}
+	b.WriteString("\n")
 	if s := problems(p.caps); s != "" {
 		b.WriteString(s + "\n")
 	}

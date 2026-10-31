@@ -1570,3 +1570,26 @@ func TestOpenGoesThroughTheRouterAndRefusesAPathThatIsNoRoute(t *testing.T) {
 		t.Errorf("a page with no router must say so: %q", out[6])
 	}
 }
+
+// TestPayloadsSaysHowLongAgoTheLastRequestCame tells a screen that sent nothing since a reload from one that is quiet: the age shows, and an old
+// one adds the hint to load the helper again.
+func TestPayloadsSaysHowLongAgoTheLastRequestCame(t *testing.T) {
+	p := testPage(t, appOrigin)
+	now := time.Date(2026, 10, 31, 12, 0, 0, 0, time.UTC)
+	p.now = func() time.Time { return now }
+	srv := httptest.NewServer(p.handler())
+	defer srv.Close()
+	if res := send(t, "POST", srv.URL+"/capture?t="+p.token, appOrigin, `{"m":"GET","u":"/api/a","s":200}`); res.StatusCode >= 300 {
+		t.Fatalf("capture %d", res.StatusCode)
+	}
+	now = now.Add(5 * time.Second)
+	out, _ := askPage(t, p, "payloads", nil)
+	if !strings.Contains(out, "last one 5 s ago") || strings.Contains(out, "page(load)") {
+		t.Errorf("a recent capture shows its age and no hint: %q", out)
+	}
+	now = now.Add(90 * time.Second)
+	out, _ = askPage(t, p, "payloads", nil)
+	if !strings.Contains(out, "last one 95 s ago") || !strings.Contains(out, "page(load)") {
+		t.Errorf("an old capture shows its age and the hint to load the helper again: %q", out)
+	}
+}
