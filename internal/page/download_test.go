@@ -91,3 +91,32 @@ func TestDownloadFailsExplicitlyWhenNoFileAppears(t *testing.T) {
 		t.Errorf("it did not wait for the limit")
 	}
 }
+
+func TestDownloadReportListsTheFilesTheSessionSawAppearSoTheUserCanDeleteThem(t *testing.T) {
+	p, dir := dlTool(t)
+	if out, err := askPage(t, p, "download", map[string]any{"report": true}); err != nil || !strings.Contains(out, "none") {
+		t.Fatalf("no download yet: %q %v", out, err)
+	}
+	askPage(t, p, "download", map[string]any{"arm": true})
+	os.WriteFile(filepath.Join(dir, "one.pdf"), []byte("%PDF-1.4"), 0o600)
+	if _, err := askPage(t, p, "download", map[string]any{"wait": true, "seconds": 3}); err != nil {
+		t.Fatal(err)
+	}
+	askPage(t, p, "download", map[string]any{"arm": true})
+	writeXLSX(t, filepath.Join(dir, "two.xlsx"))
+	if _, err := askPage(t, p, "download", map[string]any{"wait": true, "seconds": 3}); err != nil {
+		t.Fatal(err)
+	}
+	out, err := askPage(t, p, "download", map[string]any{"report": true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{"one.pdf", "two.xlsx", dir, "delete"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("missing %q in %q", want, out)
+		}
+	}
+	if strings.Contains(out, "secret-value") {
+		t.Errorf("a cell value shows: %q", out)
+	}
+}

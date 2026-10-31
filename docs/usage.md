@@ -34,7 +34,7 @@ Run `page(help)` first. The order of a session:
 3. `payloads` for the requests and their answers; `simulate` to force an HTTP error on the next requests to a URL.
 4. To compare an old screen and a new one: `shape {name, selector?}` on each (`selector` limits it to a part of the screen), then `parity {a, b}` for what only one side has. To compare what an action sends and receives: do the same action on both and `parity {req_a, req_b, map?}` (field names only, a GET's query names included, never values). `WEBSCOPE_APP_URL` may hold both origins, separated by commas.
 5. `fill` warns when a name fits several fields (a list filter and a form field with the same label); name one by its id.
-6. To prove a download: `download {arm:true}`, the real click in the page, then `download {wait:true}`. It gives the file's name, size, type by bytes and, for an xlsx, header names and row count (no values); no file in time is a failure. An export counts as downloaded only if this finds the file.
+6. To prove a download: `download {arm:true}`, the real click in the page, then `download {wait:true}`. It gives the file's name, size, type by bytes and, for an xlsx, header names and row count (no values); no file in time is a failure. An export counts as downloaded only if this finds the file. `download {report:true}` lists the files the session saw appear, to say in the report what was left in the downloads folder; `code(leftovers {table, column})` counts the `ZZ_` rows a test left in a table. Both only list: deleting is the user's.
 
 7. To build the final report: `verify {claim, evidence}` for each thing it will say, with `evidence` as `capture METHOD address`, `check METHOD address` (the last `check` of that request) or `download`; then `verify {report:true}` and write the report from that table. The server gives the state (OBSERVADO, INFERIDO if an interceptor was seen, NO VERIFICADO without a reference it can find).
 
@@ -59,6 +59,7 @@ Not covered: `v-combobox`, date pickers, menus of other libraries, file uploads,
 | `cases {module}` | The test cases of the module as a table (happy path, permission, required field, status, HTTP error, empty list), each with what runs it; it runs nothing | Vue + Laravel (built on `flows`) |
 | `legacy {path, module?}` | The PHP endpoints of a legacy folder with their callers and the tables their SQL writes and reads; with `module`, the tables against the new module's and the columns the legacy writes that the backend never names (inline `INSERT` and `UPDATE … SET` only) | Legacy PHP with SQL in the file and jQuery calls (`WEBSCOPE_LEGACY`) |
 | `rows {table, a, b, children?, tenant?}` | How two rows of one table differ, column by column, without a value (`a filled, b empty`, `case only`, `same number, other text`), and how many rows of other tables point at each | Any database |
+| `leftovers {table, column, prefix?, tenant?}` | How many rows of a table have a column that starts with the test prefix (`ZZ_` by default): what a test left behind, a count and no values | Any database |
 | `help {topic?}` | The list of actions and what each is for; `topic: "migration"` gives the steps of a migration with the tool of each | None |
 | `snap {name, sql, key?, tenant?}` / `snap_diff {name}` | What a query returned, then only what changed | Any database; snapshots live in memory |
 

@@ -8,6 +8,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -70,8 +71,17 @@ func (p *Tool) download(args map[string]any) (string, error) {
 		p.mu.Unlock()
 		return fmt.Sprintf("armed: %d files already in %s are ignored. Next: make the real click in the page, then page(download, {wait:true}).", len(seen), dir), nil
 	}
+	if v, _ := args["report"].(bool); v {
+		p.mu.Lock()
+		files := slices.Clone(p.dlFiles)
+		p.mu.Unlock()
+		if len(files) == 0 {
+			return "none: this session has not seen a file appear in " + dir + ".", nil
+		}
+		return fmt.Sprintf("this session saw %d file(s) appear in %s: %s. They may hold data of the app: tell the user, who can delete them (the server does not).", len(files), dir, strings.Join(files, ", ")), nil
+	}
 	if v, _ := args["wait"].(bool); !v {
-		return "", fmt.Errorf("download needs {arm:true} before the click or {wait:true} after it")
+		return "", fmt.Errorf("download needs {arm:true} before the click, {wait:true} after it, or {report:true}")
 	}
 	p.mu.Lock()
 	seen := p.dlSeen
@@ -143,6 +153,9 @@ func (p *Tool) describeFile(path string, m fileMark) (string, error) {
 	}
 	p.mu.Lock()
 	p.dlLast = filepath.Base(path)
+	if note := fmt.Sprintf("%s (%d bytes)", clip(p.dlLast, 80), m.size); !slices.Contains(p.dlFiles, note) {
+		p.dlFiles = append(p.dlFiles, note)
+	}
 	p.mu.Unlock()
 	return fmt.Sprintf("downloaded: %s, %d bytes, type %s (by its first bytes), %s%s", clip(filepath.Base(path), 80), m.size, kind, m.mod.Format("15:04:05"), extra), nil
 }

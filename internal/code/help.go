@@ -11,7 +11,7 @@ import (
 var migrationPlaybook string
 
 // codeActions are the actions of code, in the order help lists them.
-var codeActions = []string{"fields", "consumers", "map", "map_back", "flows", "cases", "legacy", "rows", "snap", "snap_diff", "help"}
+var codeActions = []string{"fields", "consumers", "map", "map_back", "flows", "cases", "legacy", "rows", "snap", "snap_diff", "leftovers", "help"}
 
 const helpText = `code(action, args?) reads the project and the database; it never writes.
 fields {table, tenant?}: columns of a table, rows with a value, who reads and writes each.
@@ -23,6 +23,7 @@ cases {module}: the test cases of a module as a list; it runs nothing.
 legacy {path, module?}: endpoints, callers and tables of a legacy PHP folder, against the new module's.
 rows {table, a, b, children?, tenant?}: how two rows differ, no values, and the rows that point at each.
 snap {name, sql, key?, tenant?} then snap_diff {name}: what an action changed; key is a column, or several separated by commas.
+leftovers {table, column, prefix?, tenant?}: how many rows of a table have a column that starts with the test prefix (ZZ_ by default): what a test left behind; a count, no values.
 help {topic?}: this list. Topics: migration.
 Migrating a module, parity with a legacy system, user stories or test cases: code(help, {topic: "migration"}) gives the steps and the tool for each.`
 

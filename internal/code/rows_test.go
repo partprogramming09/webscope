@@ -93,3 +93,32 @@ func TestRowsOfTwoEqualRowsSaysSo(t *testing.T) {
 		t.Errorf("%q, %v", out, err)
 	}
 }
+
+func TestLeftoversCountsTheRowsATestLeftBehindWithoutShowingThem(t *testing.T) {
+	c := codeSetup(t)
+	conn := writeDB(t, c)
+	for _, q := range []string{
+		"CREATE TABLE lo (id TEXT, code TEXT)",
+		"INSERT INTO lo VALUES ('1', 'ZZ_A'), ('2', 'ZZ_B'), ('3', 'ZZXC'), ('4', 'real'), ('5', NULL)",
+	} {
+		if _, err := conn.Exec(q); err != nil {
+			t.Fatal(err)
+		}
+	}
+	out, err := code(t, c, "leftovers", map[string]any{"table": "lo", "column": "code"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out, "2 rows") || strings.Contains(out, "ZZ_A") || strings.Contains(out, "real") {
+		t.Errorf("only ZZ_ rows, counted and not shown (the _ is not a wildcard): %q", out)
+	}
+	if out, _ := code(t, c, "leftovers", map[string]any{"table": "lo", "column": "code", "prefix": "NOPE_"}); !strings.Contains(out, "0 rows") {
+		t.Errorf("none left must say 0 rows: %q", out)
+	}
+	if _, err := code(t, c, "leftovers", map[string]any{"table": "lo; DROP", "column": "code"}); err == nil {
+		t.Error("an invalid table name must be refused")
+	}
+	if _, err := code(t, c, "leftovers", map[string]any{"table": "lo", "column": "code", "prefix": "a'b"}); err == nil {
+		t.Error("an invalid prefix must be refused")
+	}
+}

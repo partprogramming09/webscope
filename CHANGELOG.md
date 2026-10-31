@@ -2,6 +2,18 @@
 
 One entry per version, newest first. Tool names are `query`, `page`, `check` and `code`. Each change says what it is, what was seen that made it necessary, how it was checked and what was not checked. A change in what a tool prints is listed as a change, because a client may read it.
 
+## 0.5.61 — 2026-10-31
+
+**`page download {report:true}` lists the files the session saw appear; `code leftovers` counts the test rows left in a table.**
+
+What was seen that made it necessary: twice in this work an export left a file with customer data in `~/Downloads`, and the warning to delete it was written by hand each time; and the rows a test leaves (`ZZ_`) were counted by hand with `query`.
+
+Now `download {report:true}` answers the files that `download wait` reported this session, with their size and the folder, and says that the user can delete them (the server does not). `code leftovers {table, column, prefix?, tenant?}` answers `leftovers table.column starting with ZZ_: N rows` (a count, never a value; `_` and `%` of the prefix are not wildcards) and, when N is not 0, says that they are test rows to clean through the screen and to mention in the report. The prefix is 1 to 20 letters, digits, `_` or `-`; table and column are valid names only. Both only list and count: nothing is deleted. `code(help)` lists the new action; `tools/list` does not change.
+
+How it was checked: 2 tests that failed before: the report is `none` at first and then lists a pdf and an xlsx (with the folder and no cell value); `leftovers` counts the 2 `ZZ_` rows of 5 without showing them, does not take `ZZXC` for a match, says 0 rows for another prefix, and refuses a table name with `;` and a prefix with a quote. The suite with `-race` passes.
+
+Not checked: `leftovers` against MySQL on the real database (the `LIKE … ESCAPE '!'` is standard and was run on SQLite); a file that appeared before `arm` is not listed; the list is lost when the server restarts.
+
 ## 0.5.60 — 2026-10-31
 
 **`click` and `press` say when a request was still pending; `payloads` opens with a summary of the failed requests.**
