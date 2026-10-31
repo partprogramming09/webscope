@@ -2,6 +2,18 @@
 
 One entry per version, newest first. Tool names are `query`, `page`, `check` and `code`. Each change says what it is, what was seen that made it necessary, how it was checked and what was not checked. A change in what a tool prints is listed as a change, because a client may read it.
 
+## 0.5.55 — 2026-10-31
+
+**`page verify {claim, evidence}`: a table of the claims of a report, with a state that the server decides.**
+
+What was seen that made it necessary: the same session as 0.5.53. The final report said what the agent believed, with nothing tying each sentence to something seen.
+
+Now `verify {claim, evidence?}` adds a claim and answers `n. STATE claim`. `evidence` is a reference: `capture METHOD address` (a request `page` captured; the match is the one of `parity`) or `download` (a file that `download wait` found). The state is `OBSERVADO` when the reference exists, `INFERIDO` when a capture exists but an interceptor was seen on the page since the last `load` (the label of 0.5.53 stays on for the rest of that load), and `NO VERIFICADO` when there is no evidence, no request matches, no file was found, or the text is not a reference (free text never counts). The caller cannot set the state. `verify {report:true}` prints the table (`n. STATE claim (evidence: …)`), `{clear:true}` empties it; up to 50 claims of 200 characters. It is answered by the server, optional, and blocks nothing. `tools/list` is unchanged.
+
+How it was checked: 3 tests that failed before (they did not compile) and pass after: a real capture is OBSERVADO, a missing capture, free text and `download` without a found file are NO VERIFICADO, a found file is OBSERVADO, an interceptor downgrades a capture to INFERIDO, and the report lists a claim without evidence as NO VERIFICADO and `clear` empties it. `go vet` and the whole suite with `-race` pass.
+
+Not checked: a session where an agent builds its report from the table; whether `capture` is enough evidence for effects that only the database shows (that is `check` and `query`, whose results `verify` does not see); the table lives in memory and is lost when the server restarts.
+
 ## 0.5.54 — 2026-10-31
 
 **`page download`: `{arm:true}` before a real click and `{wait:true}` after it, to prove that a file was downloaded.**

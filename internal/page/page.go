@@ -57,6 +57,7 @@ state|read|fill|click|press|simulate|audit|shape: return a snippet; run it with 
 payloads {limit?}: the requests the page sent and their answers (answered here, no snippet).
 parity {a, b, kinds?}: compares two saved shapes (say the old and the new screen) and shows only what one has and the other lacks (a repeated name once, with ×N), and fields whose kind changed (answered here, no snippet); kinds "field,column" limits it, e.g. to leave out the step buttons of a wizard. parity {req_a, req_b, map?} compares instead the latest captured request that matches each ("POST save.php": the method, then a part of the address): status and the field names sent and received, never values; map {name in a: name in b} renames a's names first.
 download {arm:true} before a real click, then {wait:true, seconds?} after it (answered here, no snippet): waits for a new file in the downloads folder (WEBSCOPE_DOWNLOADS, else ~/Downloads) and gives its name, size, type by its first bytes and time, and for an xlsx its header names and row count, never a value. No file in time is a failure: an export counts as downloaded only if this finds the file.
+verify {claim, evidence?}: adds a claim of the final report to a table and answers its state, which the server decides: OBSERVADO (evidence «capture METHOD address» of a request that was captured, or «download» of a file that download wait found), INFERIDO (that capture was seen after an interceptor was put on the page) or NO VERIFICADO (no evidence, or none the server can find). verify {report:true} prints the table, {clear:true} empties it; build the report from it (answered here, no snippet).
 Writes only with the user's approval, and rows prefixed ZZ_.`
 
 // Capture is one request the page sent, as reported by page.js.
@@ -81,9 +82,12 @@ type Tool struct {
 
 	tampered []string // page functions replaced after the helper loaded, as the helper last said
 
-	DownloadDir string              // where Chrome saves files; empty means WEBSCOPE_DOWNLOADS, then ~/Downloads
-	dlSeen      map[string]fileMark // the files of that folder when download was armed; nil if not armed
-	dlLast      string              // the name of the file the last download wait reported, empty if none
+	DownloadDir  string              // where Chrome saves files; empty means WEBSCOPE_DOWNLOADS, then ~/Downloads
+	dlSeen       map[string]fileMark // the files of that folder when download was armed; nil if not armed
+	claims       []claim             // the claims of the report, with the state the server gave each
+	tamperedEver bool                // an interceptor was seen since the last page(load)
+
+	dlLast string // the name of the file the last download wait reported, empty if none
 
 	refused bool // a request that held the token came from another origin than the app's
 }
@@ -125,7 +129,7 @@ func originOf(appURL string) string {
 // snippet is the JavaScript for action. The arguments enter as JSON (json.Marshal escapes <, > and line separators), never as text.
 func snippet(action string, args map[string]any) (string, error) {
 	if !slices.Contains(snippetActions, action) {
-		return "", fmt.Errorf("unknown action %q (load, state, read, fill, click, press, payloads, simulate, audit, shape, parity, download or help)", action)
+		return "", fmt.Errorf("unknown action %q (load, state, read, fill, click, press, payloads, simulate, audit, shape, parity, download, verify or help)", action)
 	}
 	if args == nil {
 		args = map[string]any{}
@@ -145,6 +149,8 @@ func (p *Tool) answer(in input.Args) (string, error) {
 		return p.payloads(in.Args), nil
 	case "download":
 		return p.download(in.Args)
+	case "verify":
+		return p.verify(in.Args)
 	case "parity":
 		return p.parity(in.Args)
 	case "load":
@@ -155,6 +161,9 @@ func (p *Tool) answer(in input.Args) (string, error) {
 		if err != nil {
 			return "", err
 		}
+		p.mu.Lock()
+		p.tamperedEver = false
+		p.mu.Unlock()
 		return fmt.Sprintf(`(()=>{if(window.__ws&&window.__wsVer!==%q)return "Failed: an older helper is in this page: reload the page, then page(load)";var s=document.createElement("script");s.src=%q;document.head.appendChild(s);return "loading the webscope helper; next: page(state)"})()`, pageVer, base+"/page.js?t="+p.token+"&v="+pageVer+"&o="+url.QueryEscape(strings.Join(p.origins(), ","))), nil
 	}
 	return snippet(in.Action, in.Args)
@@ -275,6 +284,7 @@ func (p *Tool) tamper(w http.ResponseWriter, r *http.Request) {
 	}
 	p.mu.Lock()
 	p.tampered = l
+	p.tamperedEver = p.tamperedEver || len(l) > 0
 	p.mu.Unlock()
 	w.WriteHeader(http.StatusNoContent)
 }
