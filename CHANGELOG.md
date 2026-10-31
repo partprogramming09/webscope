@@ -2,6 +2,16 @@
 
 One entry per version, newest first. Tool names are `query`, `page`, `check` and `code`. Each change says what it is, what was seen that made it necessary, how it was checked and what was not checked. A change in what a tool prints is listed as a change, because a client may read it.
 
+## 0.6.4 — 2026-10-31
+
+**`page` answers no longer carry the text that `javascript_tool` blocks: an `=` together with a `;` or an `&`.**
+
+What was seen that made it necessary: on the real app the long `batch` of 0.6.2 (`state`, `shape`, `audit` on a screen with 40 checkboxes) came back as `[BLOCKED: Cookie/query string data]`, which 0.5.81 was meant to prevent. Its short answer had two `id=switch-…` and, in the note that the helper itself wrote, a `;`. Strings returned by `javascript_tool` and measured: `id=a1 id=a2`, `x id=a1 y`, `k1=v1 | k2=v2` and `?page=2` pass; `a=1;b=2`, `a=1&b=2`, `id=a1 y; z`, `id=a1 y & z` and `a=1; b` are blocked; a `;` or an `&` with no `=` pass. So the rule of the filter is an `=` and also a `;` or `&` anywhere in the text, not only a chained query string (0.5.81 read it as that).
+
+Now the text that goes to `javascript_tool` has, when it holds an `=` and a `;` or `&`, a comma for each `;` and the word `and` for each `&` (the `=` stays), after the values of chained query strings are hidden as before; the answer says `query values hidden and separators changed` and `page(result)` has the text as it was. The notes that the helper adds (the pointer to `page(result)`, the summary of a `batch`, the lines about steps not run) have no `;` and no `&`. The changed text is stored in full like any other long answer.
+
+How it was checked: the Chrome test of the result channel got a paragraph `campo id=a1 y; z & w`; it failed before (the answer came back as it was) and passes (`id=a1 y, z and w`), and the test now fails if any answer holds an `=` with a `;` or `&`; it ran 3 of 3 times; 197 tests pass. Not checked on the real app yet. Known limit: the filter was measured with 12 strings, not read, so another pattern may exist.
+
 ## 0.6.3 — 2026-10-31
 
 **`code map_back` finds a module by the route path of one of its screens (`sales-tariffs/bulk-upload`).**
@@ -99,7 +109,7 @@ How it was checked: a Chrome test on the fixture, which has a «Nota» in a dial
 
 **New `page result`: the helper keeps the whole answer of a snippet when `javascript_tool` would cut it or block it, and returns a short one.**
 
-What was seen that made it necessary: two users reported `state` ending in `[TRUNCATED]` and answers replaced by `[BLOCKED: Cookie/query string data]` (3 and 4 times). Measured on the real app with fixed strings returned by `javascript_tool`: it cuts what it returns at exactly 1000 characters and puts `[TRUNCATED]` (the default cap of `state` and `read` is 3000, so any long screen was cut, with 40 checkboxes or none); it blocks text with chained query values (`a=1&b=2`, `?page=2&token=abc`) but not a single `?page=2`, nor `?page&token`, nor e-mail addresses or plain URLs.
+What was seen that made it necessary: two users reported `state` ending in `[TRUNCATED]` and answers replaced by `[BLOCKED: Cookie/query string data]` (3 and 4 times). Measured on the real app with fixed strings returned by `javascript_tool`: it cuts what it returns at exactly 1000 characters and puts `[TRUNCATED]` (the default cap of `state` and `read` is 3000, so any long screen was cut, with 40 checkboxes or none); it blocks text with chained query values (`a=1&b=2`, `?page=2&token=abc`) but not a single `?page=2`, nor `?page&token`, nor e-mail addresses or plain URLs. (That was read too narrowly: 0.6.4 measured that the filter blocks any text with an `=` and also a `;` or an `&`.)
 
 Now the helper loads with the limit (`k`, 900 characters by default; 0 turns it off). When the answer of an action is longer, or has chained query values, the helper posts the whole answer to the local listener (the same token and origin check as the captures) and returns a short one: the first lines, cut at a line, with `(… N more chars: javascript_tool cuts at 1000, page(result) gives all)`; the values of chained query strings are hidden in what it returns (`a&b&c`; the stored answer keeps them) and it says so. `page(result)` gives the stored answer, in parts of about 8000 bytes with `result {offset}` for the next. If the listener cannot be reached, the answer is returned as it was. The steps of a `batch` answer to the batch, which is the answer that is kept. Only the last answer is kept.
 

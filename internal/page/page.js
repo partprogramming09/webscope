@@ -334,11 +334,11 @@
     const start = Date.now(), out = [];
     for (let i = 0; i < steps.length; i++) {
       const s = steps[i] || {}, f = s.action !== 'batch' && plain[s.action];
-      if (Date.now() - start > 38000) { out.push('(' + (steps.length - i) + ' steps not run: a snippet has about 45 s; run them in another call)'); break; }
+      if (Date.now() - start > 38000) { out.push('(' + (steps.length - i) + ' steps not run: a snippet has about 45 s, run them in another call)'); break; }
       if (!f) { out.push((i + 1) + '. ' + s.action + ': Failed: not an action to run in a snippet'); break; }
       const r = String(await f(s.args || {}));
       out.push((i + 1) + '. ' + s.action + ': ' + r);
-      if (/^Failed:/.test(r) && a.keepGoing !== true && i + 1 < steps.length) { out.push('(' + (steps.length - i - 1) + ' steps not run after the failure; keepGoing:true runs them anyway)'); break; }
+      if (/^Failed:/.test(r) && a.keepGoing !== true && i + 1 < steps.length) { out.push('(' + (steps.length - i - 1) + ' steps not run after the failure, keepGoing:true runs them anyway)'); break; }
     }
     return out.join('\n');
   };
@@ -596,17 +596,22 @@
   const wrap = f => a => { try { const r = f(a || {}); return r && r.then ? r.then(marked, e => fail(e.message)) : marked(r); } catch (e) { return fail(e.message); } };
   // hideQuery drops the values of query strings that carry several (a=1&b=2 becomes a&b): javascript_tool blocks such text. A single ?name=value is not blocked and stays.
   const hideQuery = s => s.replace(/([?&][\w.%[\]-]+)=[^&\s#"'<>)]*(?=&[\w.%[\]-]+=)/g, '$1').replace(/&([\w.%[\]-]+)=[^&\s#"'<>)]*/g, '&$1');
-  // sink keeps the whole answer in the listener (page(result) gives it) and returns only what javascript_tool shows: it cuts at 1000 characters and blocks chained query values.
+  // unblock: javascript_tool blocks a text that has an = and also a ; or an & (measured: a=1;b=2, id=a1 y; z and id=a1 y & z are blocked; an = alone, a ; alone or an & alone are not),
+  // so the text it is given keeps the = and has a comma for each ; and the word and for each &.
+  const unblock = s => (s.includes('=') && /[;&]/.test(s) ? s.replace(/;/g, ',').replace(/\s*&\s*/g, ' and ') : s);
+  const safe = s => unblock(hideQuery(s));
+  // sink keeps the whole answer in the listener (page(result) gives it) and returns only what javascript_tool shows: it cuts at 1000 characters and blocks the text of unblock.
+  // The notes it adds have no ; and no &.
   const sink = (f, brief) => async a => {
-    const r = String(await f(a)), lim = cfg.k, hid = hideQuery(r);
+    const r = String(await f(a)), lim = cfg.k, hid = safe(r);
     if (!lim || (r.length <= lim && hid === r)) return r;
     try { await realFetch(cfg.base + '/result?t=' + cfg.t, { method: 'POST', body: r }); } catch (e) { return r; } // no listener: the answer as it is
-    const note = hid !== r ? ' query values hidden;' : '';
-    if (hid.length <= lim) return hid + '\n(' + note.trim() + ' page(result) gives the answer as it is)';
+    const note = hid !== r ? 'query values hidden and separators changed, ' : '';
+    if (hid.length <= lim) return hid + '\n(' + note + 'page(result) gives the answer as it is)';
     const b = brief && brief(hid); // a batch: the first line of each step, so the last steps are not lost behind the first
-    if (b && b.length <= lim - 140) return b + '\n(first line of each step;' + note + ' javascript_tool cuts at 1000, page(result) gives all)';
+    if (b && b.length <= lim - 140) return b + '\n(first line of each step, ' + note + 'javascript_tool cuts at 1000, page(result) gives all)';
     const cut = hid.lastIndexOf('\n', lim - 140), head = hid.slice(0, cut > 0 ? cut : lim - 140);
-    return head + '\n(… ' + (r.length - head.length) + ' more chars:' + note + ' javascript_tool cuts at 1000, page(result) gives all)';
+    return head + '\n(… ' + (r.length - head.length) + ' more chars: ' + note + 'javascript_tool cuts at 1000, page(result) gives all)';
   };
   plain = { state: wrap(state), read: wrap(read), fill: wrap(fill), click: wrap(click), press: wrap(press), simulate: wrap(simulate), open: wrap(open), options: wrap(options), batch: wrap(batch), audit: wrap(audit), shape: wrap(shape) };
   const stepLines = s => (s.match(/^\d+\. \w+: .*$/gm) || []).map(l => clip(l, 110)).join('\n');
