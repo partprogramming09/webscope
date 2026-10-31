@@ -2,6 +2,18 @@
 
 One entry per version, newest first. Tool names are `query`, `page`, `check` and `code`. Each change says what it is, what was seen that made it necessary, how it was checked and what was not checked. A change in what a tool prints is listed as a change, because a client may read it.
 
+## 0.5.57 — 2026-10-31
+
+**`WEBSCOPE_LOG`: when a request ends with status 0 or 5xx, `click`, `press` and `payloads` add the last error lines of the backend log.**
+
+What was seen that made it necessary: in the session of 0.5.53, a request with status 0 was a fatal PHP error, and it took several steps to see it because the log was somewhere else.
+
+Now, with `WEBSCOPE_LOG` set to a file, a click or key that caused a request with no answer (status 0) or a 5xx adds `Backend log (the last error lines of WEBSCOPE_LOG, as the log wrote them):` and up to 3 lines (the last ones that contain fatal, exception, error, panic, stack trace or uncaught; 200 characters each; read from the last 64 KiB of the file). `payloads` adds the same when any request it shows failed. The helper asks the local listener for the lines on a new route, `/log`, which needs the token like the others. Without `WEBSCOPE_LOG`, or without an error line, nothing is added and nothing fails. `tools/list` is unchanged.
+
+How it was checked: 2 tests that failed before (they did not compile). In a real Chrome with a log file: a click whose request answers 200 brings no log, a click whose request answers 500 brings the fatal-error line and not the normal lines, and `payloads` brings it too; with no log configured the lines are empty. `go vet` and the whole suite with `-race` pass.
+
+Not checked: a real PHP log (the format of each project differs; the match is by words, and a line that says «error» without being one shows); a log that rotates between the error and the click; a log on another machine; the lines are the log's own text and can hold data (a SQL with values, an address with a token): they are cut to 200 characters and the README says so, but they are not cleaned.
+
 ## 0.5.56 — 2026-10-31
 
 **`page state`: the URL line carries the names of the query parameters, never their values; a 404 screen is said on the first line; over the limit it drops whole lines instead of cutting one.**

@@ -316,6 +316,9 @@
     await sleep(150); // the screen draws the answer
     const out = [r], reqs = log.filter(e => e.i >= before.seq).map(e => e.t);
     if (reqs.length) out.push('Requests: ' + reqs.join(' | '));
+    if (reqs.some(r => / (0 \(no answer\)|5\d\d)$/.test(r))) { // a request with no answer or a 5xx: the backend log may say why
+      try { const r = await realFetch(cfg.base + '/log?t=' + cfg.t); const t = r.ok ? await r.text() : ''; if (t) out.push('Backend log (the last error lines of WEBSCOPE_LOG, as the log wrote them):\n' + t); } catch (e) { /* the listener is gone: no log lines */ }
+    }
     const na = texts(ALERTS).filter(x => !before.alerts.has(x));
     if (na.length) out.push('New alerts: ' + na.join(' | '));
     const ne = texts(ERRORS).filter(x => !before.errors.has(x));

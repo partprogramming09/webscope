@@ -96,3 +96,45 @@ func TestStateOverTheLimitDropsWholeLinesInsteadOfCuttingAString(t *testing.T) {
 		t.Errorf("state cut a string or did not say how many lines went: %q", out[2])
 	}
 }
+
+func TestAFailedRequestBringsTheLastErrorLinesOfTheBackendLogNextToTheClick(t *testing.T) {
+	logPath := t.TempDir() + "/php.log"
+	os.WriteFile(logPath, []byte("[10:00:00] GET /api/ok 200\n[10:00:01] PHP Fatal error:  Uncaught Error: Call to undefined function foo() in /app/Export.php:12\n[10:00:02] GET /api/ok 200\n"), 0o600)
+	t.Setenv("WEBSCOPE_LOG", logPath)
+	app := func(w http.ResponseWriter, r *http.Request) bool {
+		switch r.URL.Path {
+		case "/api/boom":
+			http.Error(w, "no", http.StatusInternalServerError)
+			return true
+		case "/api/ok":
+			io.WriteString(w, "{}")
+			return true
+		}
+		return false
+	}
+	out, p := runSteps(t, func(load string) []string {
+		return []string{
+			load,
+			`(document.body.insertAdjacentHTML('beforeend','<button onclick="fetch(\'/api/ok\')">Fine</button><button onclick="fetch(\'/api/boom\')">Boom</button>'),'ok')`,
+			"window.__ws.click({text:'Fine'})",
+			"window.__ws.click({text:'Boom'})",
+		}
+	}, app)
+	if strings.Contains(out[2], "Backend log") {
+		t.Errorf("a request that went well brought the log: %q", out[2])
+	}
+	if !strings.Contains(out[3], "Backend log") || !strings.Contains(out[3], "Fatal error") || strings.Contains(out[3], "GET /api/ok 200") {
+		t.Errorf("a 500 must bring the error line of the log and only that: %q", out[3])
+	}
+	if seen, _ := askPage(t, p, "payloads", nil); !strings.Contains(seen, "Backend log") || !strings.Contains(seen, "Fatal error") {
+		t.Errorf("payloads with a 500 must bring the log lines too: %s", seen)
+	}
+}
+
+func TestTheLogRouteNeedsTheTokenAndAnswersNothingWithoutAConfiguredLog(t *testing.T) {
+	t.Setenv("WEBSCOPE_LOG", "")
+	p := testPage(t, appOrigin)
+	if got := p.logLines(); got != "" {
+		t.Errorf("no log configured must give nothing: %q", got)
+	}
+}

@@ -50,7 +50,7 @@ state|read|fill|click|press|simulate|audit|shape: return a snippet; run it with 
   state {max?}: URL, title, console, headings, fields, buttons (dialog first, side menu last, disabled ones marked), alerts, errors, dialog, tables.
   read {selector?, max?}: text of the first match, or of the page.
   fill {fields:{label:value}} or {label:value}: by label, name, placeholder or id (a name that fits several fields fills the first, a dialog's before the page's, and the answer warns and lists the others: use an id); true/false for checkboxes; select by option text; Vuetify menus too (long lists are scrolled); a rich-text editor (contenteditable) by its aria-label or id, or as "editor" when it has neither.
-  click {text} or {selector} (a text that belongs to no button is found as a plain element); press {key, selector?}: both then say what happened (requests with status, new alerts, errors and console errors, URL change, or "No effect seen").
+  click {text} or {selector} (a text that belongs to no button is found as a plain element); press {key, selector?}: both then say what happened (requests with status, new alerts, errors and console errors, URL change, or "No effect seen"; with WEBSCOPE_LOG set, a status 0 or 5xx adds the last error lines of the backend log).
   audit {selector?}: what the page shows about itself, no reference screen: unrendered text ({{x}}, undefined, null, NaN, [object Object]), controls covered by another element, fields with no label, repeated labels, buttons with no name. A hint to look at, not a verdict; selector limits it to a part of the screen.
   shape {name, selector?}: saves what the screen, or only the part a CSS selector names, offers under a name (field labels and kinds, buttons, table columns, tabs, headings; no values) for parity.
   simulate {match, status, times?, method?}: the next requests whose URL contains match answer HTTP status 400-599 without reaching the app; {clear:true} cancels.
@@ -82,6 +82,7 @@ type Tool struct {
 
 	tampered []string // page functions replaced after the helper loaded, as the helper last said
 
+	LogPath      string              // the backend log; empty means WEBSCOPE_LOG
 	DownloadDir  string              // where Chrome saves files; empty means WEBSCOPE_DOWNLOADS, then ~/Downloads
 	dlSeen       map[string]fileMark // the files of that folder when download was armed; nil if not armed
 	claims       []claim             // the claims of the report, with the state the server gave each
@@ -235,6 +236,7 @@ func (p *Tool) handler() http.Handler {
 	mux.HandleFunc("/capture", p.guard(p.capture))
 	mux.HandleFunc("/shape", p.guard(p.shape))
 	mux.HandleFunc("/tamper", p.guard(p.tamper))
+	mux.HandleFunc("/log", p.guard(p.logRoute))
 	mux.HandleFunc("/sim", p.guard(func(w http.ResponseWriter, r *http.Request) {
 		status, err := strconv.Atoi(r.URL.Query().Get("status"))
 		if err != nil || status < 400 || status > 599 {
@@ -305,6 +307,10 @@ func (p *Tool) payloads(args map[string]any) string {
 	if p.refused { // the origin itself is not repeated: it comes from the browser, and the agent can read the tab's address with state
 		fmt.Fprintf(&b, "(requests from another origin were refused: the tab's address must be one of those in WEBSCOPE_APP_URL, %s; restart the server after changing it)\n", strings.Join(p.origins(), ", "))
 	}
+	failed := false
+	for _, c := range list {
+		failed = failed || c.S == 0 || c.S >= 500
+	}
 	for i, c := range list {
 		// The method and the URL come from the page under test: one line each, and short.
 		e := fmt.Sprintf("%s %s %d\n", clip(oneLine(c.M), 10), clip(oneLine(c.U), 300), c.S)
@@ -319,6 +325,9 @@ func (p *Tool) payloads(args map[string]any) string {
 			return b.String()
 		}
 		b.WriteString(e)
+	}
+	if l := p.logLines(); failed && l != "" {
+		b.WriteString("\nBackend log (the last error lines of WEBSCOPE_LOG, as the log wrote them):\n" + l)
 	}
 	return strings.TrimRight(b.String(), "\n")
 }

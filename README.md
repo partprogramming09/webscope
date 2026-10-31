@@ -62,6 +62,8 @@ Only `WEBSCOPE_DB_URL` is needed to start (`query`). The others switch on the re
 - `WEBSCOPE_FRONT`: the folder of the Vue front (its `src/modules` is read if it exists). `code map` and `map_back` use it.
 - `WEBSCOPE_LEGACY`: the folder of the legacy PHP (the one that holds the module folders, for example `public_html`). `code legacy` reads it; it never leaves it, follows no link and opens no `.env*`.
 - `WEBSCOPE_TENANT_QUERY`: a tenant lookup other than Hyn Tenancy's (see below).
+- `WEBSCOPE_DOWNLOADS`: the folder Chrome saves files to, for `page download` (default `~/Downloads`).
+- `WEBSCOPE_LOG`: the backend log (for example PHP's error log): when a request ends with status 0 or 5xx, `click`, `press` and `payloads` add its last error lines (up to 3, 200 characters each, as the log wrote them: they can hold data).
 
 After changing a variable, or after rebuilding, reconnect with `/mcp`: the connected client keeps talking to the old process. To check it works, ask the agent for `query` with `SELECT 1` and for `page(help)`.
 
