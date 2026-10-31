@@ -461,6 +461,18 @@
   const click = a => withEffect(() => clickOnce(a));
   const press = a => withEffect(() => pressOnce(a));
 
+  // settle waits for a screen that just opened to draw its data: until the requests it sent have answered (about 5 s at most) and the text has stayed the same for two looks of 200 ms.
+  const settle = async () => {
+    let last = '', same = 0;
+    for (let i = 0; i < 60 && same < 2; i++) {
+      await sleep(i === 0 ? 100 : 200);
+      if (pending > 0) { same = 0; continue; }
+      const now = norm(document.body.innerText);
+      same = now === last ? same + 1 : 0;
+      last = now;
+    }
+  };
+
   // routerOf is the Vue Router of the app in this page, or undefined.
   const routerOf = () => {
     const e = document.querySelector('#app') || [...document.querySelectorAll('body *')].find(n => n.__vue_app__);
@@ -479,7 +491,8 @@
       const near = word ? r.getRoutes().map(x => x.path).filter(p => p.includes(word)).slice(0, 8) : [];
       return fail('no route «' + path + '» in this app' + (near.length ? '; similar: ' + near.join(' | ') : '') + '. Next: use a path from code map');
     }
-    return r.push(path).then(() => {
+    return r.push(path).then(async () => {
+      await settle();
       const now = r.currentRoute.value.fullPath;
       return 'opened ' + now + (now === res.fullPath ? '' : ' (redirected from ' + res.fullPath + ': session or permission?)');
     });

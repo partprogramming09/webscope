@@ -1505,14 +1505,14 @@ func TestAnInterceptorPutOnTheFetchIsMarkedInStateAndPayloads(t *testing.T) {
 
 // routerPage has a fake Vue Router: the routes of the app, a catch-all that matches any other path, and a private path that redirects to the login.
 const routerPage = `<!doctype html><meta charset=utf-8><title>App</title>
-<div id=app></div><pre id=out></pre>
+<div id=app></div><p id=slow></p><pre id=out></pre>
 <script type=application/json id=steps>{{STEPS}}</script>
 <script>
-const routes=[{path:'/crm/quotes'},{path:'/crm/quotes/:id'},{path:'/crm/private'},{path:'/:pathMatch(.*)*'}]
+const routes=[{path:'/crm/quotes'},{path:'/crm/quotes/:id'},{path:'/crm/private'},{path:'/crm/slow'},{path:'/:pathMatch(.*)*'}]
 const cur={value:{fullPath:'/'}}
-const resolve=p=>({fullPath:p,matched:[routes.find(r=>r.path===p)||routes[3]]})
-const push=p=>{cur.value.fullPath=p==='/crm/private'?'/auth/login':p;return Promise.resolve()}
-document.getElementById('app').__vue_app__={config:{globalProperties:{$router:{resolve,push,getRoutes:()=>routes,currentRoute:cur}}}}
+const resolve=p=>({fullPath:p,matched:[routes.find(r=>r.path===p)||routes[routes.length-1]]})
+const push=p=>{cur.value.fullPath=p==='/crm/private'?'/auth/login':p;if(p==='/crm/slow')fetch('/api/slow').then(()=>{document.getElementById('slow').textContent='ready'});return Promise.resolve()}
+window.__vapp=document.getElementById('app').__vue_app__={config:{globalProperties:{$router:{resolve,push,getRoutes:()=>routes,currentRoute:cur}}}}
 const pend=[],_ap=document.head.appendChild.bind(document.head);document.head.appendChild=e=>{if(e.tagName==='SCRIPT')pend.push(new Promise(r=>{e.addEventListener('load',r);e.addEventListener('error',r)}));return _ap(e)}
 const steps=JSON.parse(document.getElementById('steps').textContent),res_=[]
 const sleep=ms=>new Promise(r=>setTimeout(r,ms))
@@ -1525,6 +1525,11 @@ func TestOpenGoesThroughTheRouterAndRefusesAPathThatIsNoRoute(t *testing.T) {
 	var mu sync.Mutex
 	var html_ string
 	app := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/api/slow" { // the data of a screen that takes its time
+			time.Sleep(900 * time.Millisecond)
+			io.WriteString(w, "{}")
+			return
+		}
 		mu.Lock()
 		defer mu.Unlock()
 		io.WriteString(w, html_)
@@ -1547,6 +1552,12 @@ func TestOpenGoesThroughTheRouterAndRefusesAPathThatIsNoRoute(t *testing.T) {
 	steps = append(steps, "(delete document.getElementById('app').__vue_app__, 'x')")
 	s, _ := snippet("open", map[string]any{"path": "/crm/quotes"})
 	steps = append(steps, s)
+	steps = append(steps, "(document.getElementById('app').__vue_app__=window.__vapp,'back')")
+	b, _ := snippet("batch", map[string]any{"steps": []any{
+		map[string]any{"action": "open", "args": map[string]any{"path": "/crm/slow"}},
+		map[string]any{"action": "read", "args": map[string]any{"selector": "#slow"}},
+	}})
+	steps = append(steps, b) // 8: a screen that draws its content 900 ms after the route changed
 	raw, _ := json.Marshal(steps)
 	mu.Lock()
 	html_ = strings.Replace(routerPage, "{{STEPS}}", string(raw), 1)
@@ -1584,6 +1595,9 @@ func TestOpenGoesThroughTheRouterAndRefusesAPathThatIsNoRoute(t *testing.T) {
 	}
 	if !strings.HasPrefix(out[6], "Failed: no Vue Router") {
 		t.Errorf("a page with no router must say so: %q", out[6])
+	}
+	if !strings.Contains(out[8], "1. open: opened /crm/slow") || !strings.Contains(out[8], "2. read: ready") {
+		t.Errorf("open must wait for the screen to draw its content, so the next step finds it: %q", out[8])
 	}
 }
 

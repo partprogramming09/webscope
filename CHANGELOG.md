@@ -2,6 +2,16 @@
 
 One entry per version, newest first. Tool names are `query`, `page`, `check` and `code`. Each change says what it is, what was seen that made it necessary, how it was checked and what was not checked. A change in what a tool prints is listed as a change, because a client may read it.
 
+## 0.6.5 — 2026-10-31
+
+**`page open` waits for the screen to draw its data before it answers.**
+
+What was seen that made it necessary: on the real app a `batch` of `open /configs/roles`, `shape`, `open /configs/roles/1`, `shape` saved the detail screen with `0 fields`, while the same screen read later had 40: `open` answered as soon as the route changed, before the screen had loaded its data, so the next step of a batch read an empty screen. (`page parity {a, b}` of those two shapes worked, in one snippet and one tab, but compared an empty detail.)
+
+Now, after the route changes, `open` waits until the requests the page sent have answered (about 5 s at most) and the text of the page has stayed the same for two looks of 200 ms; it takes about half a second on a screen that is already still. The answer is the same (`opened /path`, or `redirected from …`). A screen that draws without sending a request, after a timer, is not waited for.
+
+How it was checked: the Chrome test of `open` got a screen that draws `ready` when a `fetch` that takes 900 ms ends and a `batch` of `open` and `read`; it failed before (`2. read: ` empty) and passes now, 3 of 3 times; 197 tests pass. Not checked on the real app yet.
+
 ## 0.6.4 — 2026-10-31
 
 **`page` answers no longer carry the text that `javascript_tool` blocks: an `=` together with a `;` or an `&`.**
@@ -10,7 +20,7 @@ What was seen that made it necessary: on the real app the long `batch` of 0.6.2 
 
 Now the text that goes to `javascript_tool` has, when it holds an `=` and a `;` or `&`, a comma for each `;` and the word `and` for each `&` (the `=` stays), after the values of chained query strings are hidden as before; the answer says `query values hidden and separators changed` and `page(result)` has the text as it was. The notes that the helper adds (the pointer to `page(result)`, the summary of a `batch`, the lines about steps not run) have no `;` and no `&`. The changed text is stored in full like any other long answer.
 
-How it was checked: the Chrome test of the result channel got a paragraph `campo id=a1 y; z & w`; it failed before (the answer came back as it was) and passes (`id=a1 y, z and w`), and the test now fails if any answer holds an `=` with a `;` or `&`; it ran 3 of 3 times; 197 tests pass. Not checked on the real app yet. Known limit: the filter was measured with 12 strings, not read, so another pattern may exist.
+How it was checked: the Chrome test of the result channel got a paragraph `campo id=a1 y; z & w`; it failed before (the answer came back as it was) and passes (`id=a1 y, z and w`), and the test now fails if any answer holds an `=` with a `;` or `&`; it ran 3 of 3 times; 197 tests pass. Checked on the real app: the batch of `state`, `shape` and `audit` on the roles screen (40 checkboxes), blocked before, came back with the three lines and the pointer, and `page(result)` with `offset: 1500` gave the end of `state` and the whole `shape` and `audit`. Known limit: the filter was measured with 12 strings, not read, so another pattern may exist.
 
 ## 0.6.3 — 2026-10-31
 
@@ -20,7 +30,7 @@ What was seen that made it necessary: `map_back {query: "sales-tariffs/bulk-uplo
 
 Now a query with a slash that is part of the path of a route of a front module (compared without case and without the slashes at its ends, so `sales-tariffs/bulk-upload`, `Sales-Tariffs/Bulk-Upload` and `/pricing/sales-tariffs/bulk-upload/:tariffTypeId` all work) finds that module, and the answer is the one that the name of the module would have given: all of its routes, then the endpoints its calls reach. A query without a slash is read as before, so `tariff` finds the same modules. `code(help)` says it.
 
-How it was checked: a new test (a module `crm/tariffs` whose route path has no word of its name in common with the query) failed with the message above for the three forms and passes; a query for another module does not bring it, and a path that no route has is still not found. 197 tests pass. Not checked on the real project yet.
+How it was checked: a new test (a module `crm/tariffs` whose route path has no word of its name in common with the query) failed with the message above for the three forms and passes; a query for another module does not bring it, and a path that no route has is still not found. 197 tests pass. Checked on the real project: `map_back {query: "sales-tariffs/bulk-upload"}` answered the module `crm/tariffs` with its 6 routes, 3 endpoints (`create-quote`, `tariff-columns`, `bulk/interpret`), 4 services and 12 models.
 
 ## 0.6.2 — 2026-10-31
 
@@ -30,7 +40,7 @@ What was seen that made it necessary: a `batch` of `state`, `shape` and `audit` 
 
 Now, when the answer of a `batch` is longer than what `javascript_tool` shows, the short answer is the first line of each step (`1. state: URL: …`, `2. shape: shape «zz-roles» saved: 40 fields, …`, `3. audit: no label (40): …`, each cut at 110 characters) followed by `(first line of each step; javascript_tool cuts at 1000, page(result) gives all)`. If those lines do not fit either, it falls back to the start of the answer, as in 0.5.81. The stored answer is the whole one, as before.
 
-How it was checked: the Chrome test of the result channel got a batch of a long `read`, a short `read` and a `shape`; the short answer failed before (it showed only the long read) and now has the three lines and the pointer, under 1000 characters; it ran 2 of 2 times; 196 tests pass. On the real app the batch of `state`, `shape` and `audit` before this change showed only `1. state` (seen); the new answer was not run there yet.
+How it was checked: the Chrome test of the result channel got a batch of a long `read`, a short `read` and a `shape`; the short answer failed before (it showed only the long read) and now has the three lines and the pointer, under 1000 characters; it ran 2 of 2 times; 196 tests pass. On the real app the batch of `state`, `shape` and `audit` before this change showed only `1. state` (seen); the new answer, first run, came back `[BLOCKED: Cookie/query string data]` (see 0.6.4); after 0.6.4 it shows `1. state: URL: …`, `2. shape: shape «zz-roles» saved: 40 fields, …`, `3. audit: no label (40): …` and the pointer, and `page(result)` has the whole text.
 
 ## 0.6.1 — 2026-10-31
 
@@ -40,7 +50,7 @@ What was seen that made it necessary: `code rows {table: app_tarifario_prov, a: 
 
 Now, when the error is a missing table (`Error 1146` or `no such table`), the call named no tenant and the server uses the default tenant lookup of Hyn Tenancy, the error ends with `; the call named no tenant, so it read the central database: pass tenant to read the one of the app (host names: demo.localhost)` (up to 4 names, read with `SELECT fqdn FROM hostnames WHERE deleted_at IS NULL`). With a tenant, with another error or with a `WEBSCOPE_TENANT_QUERY` of its own (the layout is not known) the hint does not come or has no names. The tenant is not guessed: the call still fails and the model decides.
 
-How it was checked: a new test in `db` (no tenant, a table that is not in the central database: the hint and the first host names; with a tenant, a missing column and a tenant query of its own: none) failed before and passes; a test in `check` for the wiring; 196 tests pass. On the real server: `code rows` already had the shorter hint (seen before this change); the version with host names was not run there yet.
+How it was checked: a new test in `db` (no tenant, a table that is not in the central database: the hint and the first host names; with a tenant, a missing column and a tenant query of its own: none) failed before and passes; a test in `check` for the wiring; 196 tests pass. On the real server: `code rows {app_tarifario_prov}` and `query SELECT id FROM app_tarifario_prov` with no tenant ended with `pass tenant to read the one of the app (host names: demo.localhost)`, and `rows` with `tenant: demo.localhost` compared the rows 1 and 2. Not checked: `check` on the real server; a central database with several tenants.
 
 ## 0.6.0 — 2026-10-31
 
