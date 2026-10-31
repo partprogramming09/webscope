@@ -2,6 +2,18 @@
 
 One entry per version, newest first. Tool names are `query`, `page`, `check` and `code`. Each change says what it is, what was seen that made it necessary, how it was checked and what was not checked. A change in what a tool prints is listed as a change, because a client may read it.
 
+## 0.5.59 — 2026-10-31
+
+**`page verify` takes `check METHOD address` as evidence: what `check` found about the stored row.**
+
+What was seen that made it necessary: until 0.5.58, `verify` could back a claim only with a captured request or a downloaded file, so «the row was saved as sent» could not be tied to what the database said, which is the thing `check` already finds.
+
+Now `check` tells the page tool, after each comparison, how many fields it compared, how many were different and how many only equivalent (`empty~`, `space~`), by the request it compared (`POST /api/quotes`). `verify {claim, evidence: "check POST /api/quotes"}` answers `OBSERVADO` when the last check of that request found no difference, `NO VERIFICADO` when it found some (`check found N differ of M fields`) or none was run, and `INFERIDO` when the fields were only equivalent or an interceptor was seen since `load`. `check` does not change: its answer and its arguments are the same, and `tools/list` is unchanged (1431 bytes). `query` is not accepted as evidence: a count or a row says nothing about which claim it backs.
+
+How it was checked: 2 tests that failed before (they did not compile): `check` notes 4 fields and 0 differences for an equal row and a difference for another row; `verify` gives each of the five states above, including an interceptor. `go vet` and the whole suite with `-race` pass.
+
+Not checked: on the real screen with a real `check`; a check of the same request run for two different rows counts only the last one; the note lives in memory and is lost when the server restarts.
+
 ## 0.5.58 — 2026-10-31
 
 **`WEBSCOPE_LOG`: only the error lines written since the click or key began, not the last ones of the file.**

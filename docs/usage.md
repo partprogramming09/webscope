@@ -36,7 +36,7 @@ Run `page(help)` first. The order of a session:
 5. `fill` warns when a name fits several fields (a list filter and a form field with the same label); name one by its id.
 6. To prove a download: `download {arm:true}`, the real click in the page, then `download {wait:true}`. It gives the file's name, size, type by bytes and, for an xlsx, header names and row count (no values); no file in time is a failure. An export counts as downloaded only if this finds the file.
 
-7. To build the final report: `verify {claim, evidence}` for each thing it will say, with `evidence` as `capture METHOD address` or `download`; then `verify {report:true}` and write the report from that table. The server gives the state (OBSERVADO, INFERIDO if an interceptor was seen, NO VERIFICADO without a reference it can find).
+7. To build the final report: `verify {claim, evidence}` for each thing it will say, with `evidence` as `capture METHOD address`, `check METHOD address` (the last `check` of that request) or `download`; then `verify {report:true}` and write the report from that table. The server gives the state (OBSERVADO, INFERIDO if an interceptor was seen, NO VERIFICADO without a reference it can find).
 
 Not covered: `v-combobox`, date pickers, menus of other libraries, file uploads, pages whose Content-Security-Policy blocks the helper. If the screen shows the login, stop and ask the user for the session; never type credentials. Use one Chrome agent at a time.
 

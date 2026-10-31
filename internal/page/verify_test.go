@@ -66,3 +66,27 @@ func TestVerifyReportComesFromTheTableAndAClaimWithoutEvidenceIsNotVerified(t *t
 		t.Errorf("clear must empty the table: %q", out)
 	}
 }
+
+func TestVerifyUsesWhatCheckFoundAsEvidence(t *testing.T) {
+	p := testPage(t, appOrigin)
+	p.NoteCheck("POST /api/quotes", 5, 0, 0)
+	if out := verifyOf(t, p, "the quote was saved as sent", "check POST /api/quotes"); !strings.Contains(out, "OBSERVADO") {
+		t.Errorf("a check with no differences must be OBSERVADO: %q", out)
+	}
+	p.NoteCheck("POST /api/quotes", 5, 2, 0)
+	if out := verifyOf(t, p, "the quote was saved as sent", "check POST /api/quotes"); !strings.Contains(out, "NO VERIFICADO") || !strings.Contains(out, "2 differ") {
+		t.Errorf("a check that found differences contradicts the claim: %q", out)
+	}
+	p.NoteCheck("POST /api/quotes", 5, 0, 1)
+	if out := verifyOf(t, p, "the quote was saved as sent", "check POST /api/quotes"); !strings.Contains(out, "INFERIDO") {
+		t.Errorf("only equivalent fields (empty~, space~) is INFERIDO: %q", out)
+	}
+	if out := verifyOf(t, p, "the quote was deleted", "check DELETE /api/quotes"); !strings.Contains(out, "NO VERIFICADO") {
+		t.Errorf("a check nobody ran is NO VERIFICADO: %q", out)
+	}
+	p.NoteCheck("POST /api/quotes", 5, 0, 0)
+	p.tamperedEver = true
+	if out := verifyOf(t, p, "the quote was saved as sent", "check POST /api/quotes"); !strings.Contains(out, "INFERIDO") {
+		t.Errorf("a check over a request seen through an interceptor is INFERIDO: %q", out)
+	}
+}

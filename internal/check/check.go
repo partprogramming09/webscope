@@ -22,6 +22,11 @@ import (
 // CaptureSource is where the requests the screen sent come from: the page tool.
 type CaptureSource interface{ Captures() []page.Capture }
 
+// Noter is a page source that wants to know what check found, so its verify can use it as evidence.
+type Noter interface {
+	NoteCheck(spec string, fields, differ, unsure int)
+}
+
 // Tool compares what the screen sent, what the database stored and what the screen read afterwards.
 type Tool struct {
 	Src  *db.Source
@@ -372,6 +377,9 @@ func (c *Tool) compare(ctx context.Context, in checkArgs) (string, error) {
 	}
 	if soft > 0 {
 		b.WriteString("\nempty~ (null, empty text or NULL, not the same): " + strings.Join(emptied, ", "))
+	}
+	if n, ok := c.Page.(Noter); ok {
+		n.NoteCheck(in.Sent, len(fields), differ, soft+spaces)
 	}
 	return b.String(), nil
 }

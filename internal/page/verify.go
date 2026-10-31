@@ -63,6 +63,17 @@ func (p *Tool) stateOf(ev string) (state, why string) {
 			return "OBSERVADO", ""
 		}
 		return "NO VERIFICADO", "no file was seen by download wait"
+	case strings.HasPrefix(ev, "check "):
+		n, ok := p.checks[strings.ToLower(strings.TrimSpace(strings.TrimPrefix(ev, "check ")))]
+		switch {
+		case !ok:
+			return "NO VERIFICADO", "no check was run for that request"
+		case n.differ > 0:
+			return "NO VERIFICADO", fmt.Sprintf("check found %d differ of %d fields", n.differ, n.fields)
+		case n.unsure > 0 || p.tamperedEver:
+			return "INFERIDO", "check found fields only equivalent (empty~, space~), or an interceptor was seen since page(load)"
+		}
+		return "OBSERVADO", ""
 	case strings.HasPrefix(ev, "capture "):
 		if !p.hasCapture(strings.TrimSpace(strings.TrimPrefix(ev, "capture "))) {
 			return "NO VERIFICADO", "no captured request matches"
@@ -72,7 +83,7 @@ func (p *Tool) stateOf(ev string) (state, why string) {
 		}
 		return "OBSERVADO", ""
 	}
-	return "NO VERIFICADO", "evidence must be «capture <METHOD address>» or «download»"
+	return "NO VERIFICADO", "evidence must be «capture <METHOD address>», «check <METHOD address>» or «download»"
 }
 
 // hasCapture says whether a captured request matches spec ("POST /api/quotes"). The caller holds p.mu.
@@ -84,4 +95,16 @@ func (p *Tool) hasCapture(spec string) bool {
 		}
 	}
 	return false
+}
+
+type checkNote struct{ fields, differ, unsure int }
+
+// NoteCheck records what check found for the request spec (fields compared, different, only equivalent), so verify can use it as evidence.
+func (p *Tool) NoteCheck(spec string, fields, differ, unsure int) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if p.checks == nil {
+		p.checks = map[string]checkNote{}
+	}
+	p.checks[strings.ToLower(strings.TrimSpace(spec))] = checkNote{fields, differ, unsure}
 }

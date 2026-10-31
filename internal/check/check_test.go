@@ -275,3 +275,33 @@ func writeDBFor(t *testing.T, c *Tool) *sql.DB {
 	t.Cleanup(func() { conn.Close() })
 	return conn
 }
+
+// noteCaps is a page source that also remembers what check noted about each comparison.
+type noteCaps struct {
+	*fakeCaps
+	spec                   string
+	fields, differ, unsure int
+}
+
+func (n *noteCaps) NoteCheck(spec string, fields, differ, unsure int) {
+	n.spec, n.fields, n.differ, n.unsure = spec, fields, differ, unsure
+}
+
+func TestCheckTellsThePageToolWhatItFoundSoVerifyCanUseItAsEvidence(t *testing.T) {
+	c, p := checkSetup(t)
+	n := &noteCaps{fakeCaps: p}
+	c.Page = n
+	sent(p, "POST", "/api/quotes", `{"sub_type":"AI","office":"MIA","notes":"secret note","code":"007"}`, "")
+	if _, err := run(t, c, args("059", fourFields)); err != nil {
+		t.Fatal(err)
+	}
+	if n.spec != "POST /api/quotes" || n.fields != 4 || n.differ != 0 || n.unsure != 0 {
+		t.Errorf("an equal row must be noted as 4 fields, 0 different: %+v", n)
+	}
+	if _, err := run(t, c, args("060", fourFields)); err != nil {
+		t.Fatal(err)
+	}
+	if n.differ == 0 {
+		t.Errorf("a row that differs must be noted with differences: %+v", n)
+	}
+}
