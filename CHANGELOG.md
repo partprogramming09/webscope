@@ -10,7 +10,7 @@ What was seen that made it necessary: on the real tariffs screen, `options` of `
 
 Now it reads the rows of the last `.v-list` only, which is the one just opened. `fill` is not changed (it reads all the rows; a menu that is leaving could mislead it in the same way, and that was not checked).
 
-How it was checked: the Chrome test of `options` got a step with an older menu earlier in the page (`STALE row`); it failed (`Origen: STALE row`) and passes now. On the real screen the old helper reproduced the mix; the new one was checked on the real screen after this version (see the entry of the docs commit). The 183 tests pass.
+How it was checked: the Chrome test of `options` got a step with an older menu earlier in the page (`STALE row`); it failed (`Origen: STALE row`) and passes now. On the real tariffs screen the old helper mixed the rows; with this version `Tarifario`, then `Proveedor`, then each again with `match "ZZ"` gave only the rows of each field (8 tariffs, 3 suppliers, `ZZ_E2E_TARIFF`, `ZZ_E2E Proveedor 2`). The 183 tests pass. Not checked: `fill` after another menu.
 
 ## 0.5.70 — 2026-10-31
 
@@ -20,7 +20,7 @@ What was seen that made it necessary: `leftovers` took one table and one column 
 
 Now `columns: ["code", "name", …]` (alone or with `column`) answers one `leftovers table.col starting with ZZ_: N rows` line per column, and the warning to clean through the screen comes once, at the end, when some column has rows. With one `column` the answer is the same as before. More than 10 columns, or an invalid name, is refused. Only counts: no value is shown.
 
-How it was checked: a new test failed (`leftovers needs table and column`) and passes now (3 columns: 2, 2 and 0 rows, the warning once, no value, a bad name and 11 columns refused); the earlier leftovers test still passes. The 183 tests pass. Not checked here: against the real database (batched with the other versions).
+How it was checked: a new test failed (`leftovers needs table and column`) and passes now (3 columns: 2, 2 and 0 rows, the warning once, no value, a bad name and 11 columns refused); the earlier leftovers test still passes. The 183 tests pass. Checked on the real MySQL (tenant `demo.localhost`): 4 columns of `tm_proveedores` in one call gave 1 row in `nombre` and 0 in the other 3, the warning once; one `column` gave the same line as before.
 
 ## 0.5.69 — 2026-10-31
 
@@ -30,7 +30,7 @@ What was seen that made it necessary: when `fill` found no option it listed the 
 
 Now `options` gives all the options of a native select, and of a Vuetify menu the rows seen while it scrolls (an autocomplete or combobox is searched with `match`). With `match` only the rows that contain it are kept; `max` (30 by default) stops the list and says how many more there are. A field that does not exist fails naming it; a field that is not a select or menu says so. `fill` and its error are unchanged. `page help` grows by about 300 bytes; `tools/list` is unchanged.
 
-How it was checked: a new Chrome test fails without the action and passes with it, on a native select, a virtual list of 300 rows (with `match` and with `max`) and an autocomplete that answers a search. The 182 tests pass. Not checked here: the real forms (batched with the other versions); a list longer than 400 scroll steps; the menu is closed with a click on the page body, as `fill` does.
+How it was checked: a new Chrome test fails without the action and passes with it, on a native select, a virtual list of 300 rows (with `match` and with `max`) and an autocomplete that answers a search. The 182 tests pass. The first real use (0.5.69) mixed the rows of two menus; see 0.5.71. Checked on the real form (new tariff, 582 cities, nothing saved: only 2 GET requests were captured): `Ciudad de origen` with `match "AAC"` gave `AACHEN`, with `max 5` it gave 5 rows and `5 more`, `País de origen` with `match "ALEM"` gave `ALEMANIA`. Seen: without `match`, a long list gives the rows in the order they were seen, not the first ones alphabetically (the 5 rows were `ZHENGZHOU` … `ZHUHAI`, the menu opened scrolled; the cause was not found). Not checked: a list longer than 400 scroll steps.
 
 ## 0.5.68 — 2026-10-31
 
@@ -40,7 +40,7 @@ What was seen that made it necessary: when the endpoints did not fit in 8000 byt
 
 Now the cut line reads `(… and N more endpoints not shown: offset M for the next page, or narrow the query)`, and `offset M` starts the list at endpoint M. A page after the first leaves out the services and models (the first page gave them), so it fits more endpoints. An `offset` past the end shows no endpoints and no cut line. `code(help)` says it.
 
-How it was checked: a new test (406 endpoints) failed (one page showed 59) and passes now: following the offsets shows every endpoint exactly once, and later pages carry no `model` line. The 181 tests pass. Not checked here: against the real project (batched with the other versions).
+How it was checked: a new test (406 endpoints) failed (one page showed 59) and passes now: following the offsets shows every endpoint exactly once, and later pages carry no `model` line. The 181 tests pass. Checked on the real project: `map_back tariff` showed 3 endpoints and `34 more … offset 3`; `offset 3` showed the other 34, none of the first 3, and no services or models. Not checked: that the endpoints of the second page equal the ones of `flows` one by one. Seen, not changed: the first page shows only 3 endpoints because the services and models take most of the room.
 
 ## 0.5.67 — 2026-10-31
 
@@ -50,7 +50,7 @@ What was seen that made it necessary: `check` with `where {"id": 1341}` failed w
 
 Now a JSON number is read as the digits it was written with (`1341` is `"1341"`, a long number keeps all its digits, a leading zero still needs a text). `null`, `true`, `false`, an object or a list fail with `where "id" must be a text or a number`; the message is Go's, not the `Failed: … Next: …` form, because the arguments are refused before `check` runs.
 
-How it was checked: a new test failed with the exact Go text above and passes now; the 14 tests of the package pass. Not checked here: against the real database (batched with the other versions).
+How it was checked: a new test failed with the exact Go text above and passes now; the 14 tests of the package pass. Checked on the real server: `check` with `where {"id": 1}` and `tenant demo.localhost` no longer fails with the Go text; it reached the next step (`the sent body is not JSON`, the captured request was a GET). Not checked: the comparison itself against a real row (no JSON body was captured without sending a write); the tenant of `check` and `query` is the `fqdn` of the host (`demo.localhost`), not `demo` nor the uuid.
 
 ## 0.5.66 — 2026-10-31
 
@@ -60,7 +60,7 @@ What was seen that made it necessary: after a full reload of the tab without `pa
 
 Now the first line ends with `; last one N s ago` (only when something was captured). From 30 s on it adds `If the page was reloaded since, the helper is gone and nothing new is captured: run page(load) again`. A quiet screen gets the same hint: the server cannot tell a quiet page from a reloaded one, so the text says «if».
 
-How it was checked: a new test with a fake clock fails without the change (it does not build) and passes with it (5 s: age and no hint; 95 s: age and hint); vet and the suite pass.
+How it was checked: a new test with a fake clock fails without the change (it does not build) and passes with it (5 s: age and no hint; 95 s: age and hint); vet and the suite pass. Checked on the real screen (tenant `demo`): with the helper loaded `payloads` said `last one 2 s ago`; after a full reload with no `page(load)` the helper did not exist (`window.__ws` was undefined) and, 45 s later, `payloads` said `last one 45 s ago. If the page was reloaded since… run page(load) again`. A quiet page with the helper (47 s) gets the same hint: the text says «if» for that reason.
 
 ## 0.5.65 — 2026-10-31
 
