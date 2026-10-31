@@ -2,6 +2,16 @@
 
 One entry per version, newest first. Tool names are `query`, `page`, `check` and `code`. Each change says what it is, what was seen that made it necessary, how it was checked and what was not checked. A change in what a tool prints is listed as a change, because a client may read it.
 
+## 0.5.73 — 2026-10-31
+
+**`code map_back` keeps at least 3000 bytes for endpoints on the first page; the services and models give way.**
+
+What was seen that made it necessary: on the real project, `map_back tariff` showed 3 endpoints and `34 more`, because the front routes, the services and 53 models (many of them models of other modules that the services import) took almost all of the 8000 bytes.
+
+Now, on the first page (`offset` 0), if the services and models would leave the endpoints less than 3000 bytes (or less than what they need, when they are fewer), lines of services are dropped from the end first, then lines of models, and the last line says `(… N more services and models not shown: narrow the query)`. Pages after the first are as in 0.5.68. A project whose services and models fit is answered as before.
+
+How it was checked: a new test (a controller that reaches 80 services and 80 models, and 100 more endpoints) failed (1 endpoint on the first page, the answer cut in the middle of the models) and passes now (20 or more endpoints, some tables kept, the cut said, at most 8000 bytes plus the closing line); the earlier test that the tables survive 400 endpoints passes too. The 184 tests pass. Not checked here: on the real project (see the next entry of the docs commit). The dropped models are not reachable by `offset`: only a narrower query shows them.
+
 ## 0.5.72 — 2026-10-31
 
 **`page options` starts at the top of a menu and says «may have more» when it did not see the whole list.**

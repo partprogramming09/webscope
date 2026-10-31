@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"sort"
 	"strings"
 )
@@ -209,6 +210,33 @@ func importsOf(file, folder string) []string {
 	return out
 }
 
+// minEndpointRoom is the share of a map_back answer, in bytes, that the endpoints keep on the first page.
+const minEndpointRoom = 3000
+
+// fitLines drops lines from the end of out, the services before the models, until it fits budget bytes, and says how many went.
+func fitLines(out []string, budget int) []string {
+	size := func(l []string) int { return len(strings.Join(l, "\n")) }
+	if size(out) <= budget {
+		return out
+	}
+	kept, dropped := append([]string(nil), out...), 0
+	for _, prefix := range []string{"service ", "model "} {
+		for size(kept) > budget {
+			i := slices.IndexFunc(kept, func(l string) bool { return strings.HasPrefix(l, prefix) })
+			if i < 0 {
+				break
+			}
+			j := i
+			for j+1 < len(kept) && strings.HasPrefix(kept[j+1], prefix) {
+				j++
+			}
+			kept = slices.Delete(kept, j, j+1) // the last line of that kind
+			dropped++
+		}
+	}
+	return append(kept, fmt.Sprintf("(… %d more services and models not shown: narrow the query)", dropped))
+}
+
 // mapBack is map_back: from the screens of the front to the endpoint, controller (with line), service, model and table.
 func (c *Tool) mapBack(args map[string]any) (string, error) {
 	query := input.Str(args, "query")
@@ -366,6 +394,8 @@ func (c *Tool) mapBack(args map[string]any) (string, error) {
 	}
 	if offset > 0 { // the services and models came with the first page
 		out = nil
+	} else { // the endpoints keep a share of the answer: the services and models give way
+		out = fitLines(out, input.MaxAnswer-len(strings.Join(head, "\n"))-120-min(minEndpointRoom, len(strings.Join(apis, "\n"))))
 	}
 	room := input.MaxAnswer - len(strings.Join(head, "\n")) - len(strings.Join(out, "\n")) - 120
 	var shown []string

@@ -476,3 +476,47 @@ func TestMapBackPagesTheEndpointsWithOffset(t *testing.T) {
 		}
 	}
 }
+
+// TestMapBackKeepsRoomForEndpointsWhenTheServicesAndModelsAreMany: a controller that reaches 80 services and 80 models must not push every endpoint
+// off the first page.
+func TestMapBackKeepsRoomForEndpointsWhenTheServicesAndModelsAreMany(t *testing.T) {
+	c := mapSetup(t)
+	ctrl := filepath.Join(c.Backend, "app/Modules/Crm/Quotes/Controllers/QuoteController.php")
+	raw, err := os.ReadFile(ctrl)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var uses strings.Builder
+	for i := 0; i < 80; i++ {
+		fmt.Fprintf(&uses, "use App\\Modules\\Crm\\Quotes\\Services\\Svc%02d;\n", i)
+		for rel, body := range map[string]string{
+			fmt.Sprintf("Services/Svc%02d.php", i): fmt.Sprintf("<?php\nuse App\\Modules\\Crm\\Quotes\\Models\\Mod%02d;\nclass Svc%02d {}\n", i, i),
+			fmt.Sprintf("Models/Mod%02d.php", i):   fmt.Sprintf("<?php\nclass Mod%02d { protected $table = 'app_table_number_%02d'; }\n", i, i),
+		} {
+			if err := os.WriteFile(filepath.Join(c.Backend, "app/Modules/Crm/Quotes", rel), []byte(body), 0o644); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+	if err := os.WriteFile(ctrl, []byte(strings.Replace(string(raw), "<?php\n", "<?php\n"+uses.String(), 1)), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	var b strings.Builder
+	b.WriteString("<?php\nuse App\\Modules\\Crm\\Quotes\\Controllers\\QuoteController;\n")
+	for i := 0; i < 100; i++ {
+		fmt.Fprintf(&b, "Route::get('quotes/extra-endpoint-number-%03d', [QuoteController::class, 'index']);\n", i)
+	}
+	if err := os.WriteFile(filepath.Join(c.Backend, "app/Modules/Crm/Quotes/Routes/many.php"), []byte(b.String()), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	out, err := code(t, c, "map_back", map[string]any{"query": "quotes"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if n := strings.Count("\n"+out, "\napi "); n < 20 {
+		t.Errorf("only %d endpoints on the first page, the services and models took the room", n)
+	}
+	if len(out) > input.MaxAnswer+200 || !strings.Contains(out, "\nmodel ") || !strings.Contains(out, "more services and models not shown") {
+		t.Errorf("%d bytes: some tables must stay and the cut of services and models must be said:\n...%s", len(out), out[max(0, len(out)-300):])
+	}
+}
