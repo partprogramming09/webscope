@@ -73,6 +73,7 @@ After changing a variable, or after rebuilding, reconnect with `/mcp`: the conne
 - **`page` is local**: a server on `127.0.0.1` with a random port and token, which answers only the origin of your app.
 - **No guessing**: `check` takes the field-to-column map from you, and every answer of `code` that comes from searching text says it is an estimate.
 - With customer data, ask for the schema and for counts, not for rows.
+- **The tool reports, the model decides**: webscope only labels facts it can check and never blocks an action. How to report a test honestly (verified apart from not verified, an interceptor said on the first line, a download counts only if the file is on disk) is in [docs/usage.md](docs/usage.md#reporting-a-test).
 
 ## Things worth taking advantage of
 

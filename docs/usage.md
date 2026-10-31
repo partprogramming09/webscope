@@ -83,6 +83,18 @@ To migrate a module from a legacy system and keep what it did:
 
 [module-testing.md](module-testing.md) is the full procedure for a module; [patterns.md](patterns.md) lists what has been found.
 
+## Reporting a test
+
+webscope tells you what it can check; it does not decide for you and never blocks an action. The report is yours, so keep it honest:
+
+- Split the report into VERIFIED (a real action, its effect observed) and NOT VERIFIED.
+- If you replaced the user's action with a JavaScript interceptor (a patched `fetch`, `XMLHttpRequest` or anchor click), say so on the first line of the report. A result seen through an interceptor shows what the page would do, not what a user's click did.
+- A download counts only if the file is in the downloads folder. An HTTP answer or the bytes of a file you built yourself do not prove it.
+- An HTTP status 0, a 5xx or a network error is a backend failure until shown otherwise: read the backend log before reporting the screen as broken or fine.
+- A feature is not finished until it is tested, and the next one does not start before.
+
+The marks that webscope will add for this (interceptor in use, file seen in the downloads folder, evidence states) are planned in the ROADMAP section «Informes honestos»; until each version exists, the rules above are practice, not something the server checks.
+
 ## Setup
 
 Set the variables once, as in the README: `WEBSCOPE_DB_URL` (required), `WEBSCOPE_APP_URL` (`page`, exact origin of the tab; several origins separated by commas when the old and the new app answer on different addresses), `WEBSCOPE_BACKEND` and `WEBSCOPE_FRONT` (`code`), `WEBSCOPE_LEGACY` (`code legacy`, the folder of the legacy PHP), `WEBSCOPE_TENANT_QUERY` (a tenant lookup other than Hyn Tenancy's). A missing variable fails with `<NAME> is not set` and does not guess; `fields` without `WEBSCOPE_BACKEND` still answers, but without readers and writers.
