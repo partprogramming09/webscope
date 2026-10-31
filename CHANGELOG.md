@@ -2,6 +2,16 @@
 
 One entry per version, newest first. Tool names are `query`, `page`, `check` and `code`. Each change says what it is, what was seen that made it necessary, how it was checked and what was not checked. A change in what a tool prints is listed as a change, because a client may read it.
 
+## 0.5.81 — 2026-10-31
+
+**New `page result`: the helper keeps the whole answer of a snippet when `javascript_tool` would cut it or block it, and returns a short one.**
+
+What was seen that made it necessary: two users reported `state` ending in `[TRUNCATED]` and answers replaced by `[BLOCKED: Cookie/query string data]` (3 and 4 times). Measured on the real app with fixed strings returned by `javascript_tool`: it cuts what it returns at exactly 1000 characters and puts `[TRUNCATED]` (the default cap of `state` and `read` is 3000, so any long screen was cut, with 40 checkboxes or none); it blocks text with chained query values (`a=1&b=2`, `?page=2&token=abc`) but not a single `?page=2`, nor `?page&token`, nor e-mail addresses or plain URLs.
+
+Now the helper loads with the limit (`k`, 900 characters by default; 0 turns it off). When the answer of an action is longer, or has chained query values, the helper posts the whole answer to the local listener (the same token and origin check as the captures) and returns a short one: the first lines, cut at a line, with `(… N more chars: javascript_tool cuts at 1000, page(result) gives all)`; the values of chained query strings are hidden in what it returns (`a&b&c`; the stored answer keeps them) and it says so. `page(result)` gives the stored answer, in parts of about 8000 bytes with `result {offset}` for the next. If the listener cannot be reached, the answer is returned as it was. The steps of a `batch` answer to the batch, which is the answer that is kept. Only the last answer is kept.
+
+How it was checked: a Go test for the route and the action (no token and another origin refused, an answer in parts that add up to the whole, a new one replaces the old) and a Chrome test (a short answer unchanged; a 3200-character one cut under 1000 with the pointer; `?a=1&b=2&c=3` returned as `?a&b&c` with the note and kept as it is). 189 tests pass. Not checked on the real app yet.
+
 ## 0.5.80 — 2026-10-31
 
 **`code map_back` drops services and models in turn when they do not fit, so both stay.**

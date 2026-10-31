@@ -7,6 +7,7 @@
   cfg.base = src.slice(0, src.indexOf('/page.js'));
   cfg.t = new URL(src).searchParams.get('t');
   cfg.o = new URL(src).searchParams.get('o'); // the address WEBSCOPE_APP_URL names: the only origin the listener answers
+  cfg.k = Number(new URL(src).searchParams.get('k')) || 0; // chars that javascript_tool may show of an answer; 0: no limit
   window.__wsVer = new URL(src).searchParams.get('v'); // the bootstrap refuses to run over a helper of another version
   if (window.__ws) return;
   const CAP = 3000;
@@ -319,12 +320,13 @@
   };
 
   // batch runs the steps one after the other and gives their answers numbered; a failed step stops the rest unless keepGoing, and none starts after 38 s (javascript_tool gives about 45 s).
+  let plain; // the actions without the result channel: the steps of a batch answer to the batch, which is the one that is kept
   const batch = async a => {
     const steps = Array.isArray(a.steps) ? a.steps : [];
     if (!steps.length) return fail('batch needs steps: [{action, args?}, …]');
     const start = Date.now(), out = [];
     for (let i = 0; i < steps.length; i++) {
-      const s = steps[i] || {}, f = s.action !== 'batch' && window.__ws[s.action];
+      const s = steps[i] || {}, f = s.action !== 'batch' && plain[s.action];
       if (Date.now() - start > 38000) { out.push('(' + (steps.length - i) + ' steps not run: a snippet has about 45 s; run them in another call)'); break; }
       if (!f) { out.push((i + 1) + '. ' + s.action + ': Failed: not an action to run in a snippet'); break; }
       const r = String(await f(s.args || {}));
@@ -585,5 +587,18 @@
   }, 400);
   const marked = r => { const l = patched(); return l.length ? MARK(l) + '\n' + r : r; };
   const wrap = f => a => { try { const r = f(a || {}); return r && r.then ? r.then(marked, e => fail(e.message)) : marked(r); } catch (e) { return fail(e.message); } };
-  window.__ws = { state: wrap(state), read: wrap(read), fill: wrap(fill), click: wrap(click), press: wrap(press), simulate: wrap(simulate), open: wrap(open), options: wrap(options), batch: wrap(batch), audit: wrap(audit), shape: wrap(shape) };
+  // hideQuery drops the values of query strings that carry several (a=1&b=2 becomes a&b): javascript_tool blocks such text. A single ?name=value is not blocked and stays.
+  const hideQuery = s => s.replace(/([?&][\w.%[\]-]+)=[^&\s#"'<>)]*(?=&[\w.%[\]-]+=)/g, '$1').replace(/&([\w.%[\]-]+)=[^&\s#"'<>)]*/g, '&$1');
+  // sink keeps the whole answer in the listener (page(result) gives it) and returns only what javascript_tool shows: it cuts at 1000 characters and blocks chained query values.
+  const sink = f => async a => {
+    const r = String(await f(a)), lim = cfg.k, hid = hideQuery(r);
+    if (!lim || (r.length <= lim && hid === r)) return r;
+    try { await realFetch(cfg.base + '/result?t=' + cfg.t, { method: 'POST', body: r }); } catch (e) { return r; } // no listener: the answer as it is
+    const note = hid !== r ? ' query values hidden;' : '';
+    if (hid.length <= lim) return hid + '\n(' + note.trim() + ' page(result) gives the answer as it is)';
+    const cut = hid.lastIndexOf('\n', lim - 140), head = hid.slice(0, cut > 0 ? cut : lim - 140);
+    return head + '\n(… ' + (r.length - head.length) + ' more chars:' + note + ' javascript_tool cuts at 1000, page(result) gives all)';
+  };
+  plain = { state: wrap(state), read: wrap(read), fill: wrap(fill), click: wrap(click), press: wrap(press), simulate: wrap(simulate), open: wrap(open), options: wrap(options), batch: wrap(batch), audit: wrap(audit), shape: wrap(shape) };
+  window.__ws = Object.fromEntries(Object.entries(plain).map(([k, f]) => [k, sink(f)]));
 })();

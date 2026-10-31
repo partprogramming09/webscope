@@ -77,6 +77,7 @@ state|read|fill|click|press|simulate|open|options|audit|shape|batch: return a sn
   audit {selector?}: what the page shows about itself, no reference screen: unrendered text ({{x}}, undefined, null, NaN, [object Object]), controls covered by another element, fields with no label, repeated labels, buttons with no name. A hint to look at, not a verdict; selector limits it to a part of the screen.
   shape {name, selector?}: saves what the screen, or only the part a CSS selector names, offers under a name (field labels and kinds, buttons, table columns, tabs, headings; no values) for parity.
   simulate {match, status, times?, method?}: the next requests whose URL contains match answer HTTP status 400-599 without reaching the app; {clear:true} cancels.
+result {offset?}: javascript_tool shows only 1000 characters of what a snippet returns and blocks text with chained query values (a=1&b=2). When an answer is longer, or has them, the snippet returns a short one that ends «page(result) gives all» (query values hidden) and the helper keeps the whole answer: result gives it, in parts (answered here, no snippet).
 payloads {limit?}: the requests the page sent and their answers (answered here, no snippet).
 parity {a, b, kinds?}: compares two saved shapes (say the old and the new screen) and shows only what one has and the other lacks (a repeated name once, with ×N), and fields whose kind changed (answered here, no snippet); kinds "field,column" limits it, e.g. to leave out the step buttons of a wizard. parity {req_a, req_b, map?} compares instead the latest captured request that matches each ("POST save.php": the method, then a part of the address): status and the field names sent and received, never values; map {name in a: name in b} renames a's names first.
 download {arm:true} before a real click, then {wait:true, seconds?} after it, and {report:true} lists the files the session saw appear so the user can delete them (answered here, no snippet): waits for a new file in the downloads folder (WEBSCOPE_DOWNLOADS, else ~/Downloads) and gives its name, size, type by its first bytes and time, and for an xlsx its header names and row count, never a value. No file in time is a failure: an export counts as downloaded only if this finds the file.
@@ -121,12 +122,15 @@ type Tool struct {
 	dlLast  string   // the name of the file the last download wait reported, empty if none
 
 	refused bool // a request that held the token came from another origin than the app's
+
+	SinkChars int    // chars of an answer that javascript_tool may show (it cuts at 1000); a longer one is kept in result and cut. 0 turns it off
+	kept      string // the whole answer the helper last kept
 }
 
 func New(appURL string) *Tool {
 	b := make([]byte, 16)
 	rand.Read(b)
-	return &Tool{appURL: appURL, token: hex.EncodeToString(b), Life: context.Background(), now: time.Now}
+	return &Tool{appURL: appURL, token: hex.EncodeToString(b), Life: context.Background(), now: time.Now, SinkChars: 900}
 }
 
 // origins are the scheme://host of each address in WEBSCOPE_APP_URL (several are separated by commas): the only origins the listener answers.
@@ -160,7 +164,7 @@ func originOf(appURL string) string {
 // snippet is the JavaScript for action. The arguments enter as JSON (json.Marshal escapes <, > and line separators), never as text.
 func snippet(action string, args map[string]any) (string, error) {
 	if !slices.Contains(snippetActions, action) {
-		return "", fmt.Errorf("unknown action %q (load, state, read, fill, click, press, payloads, simulate, audit, shape, open, options, batch, parity, download, verify or help)", action)
+		return "", fmt.Errorf("unknown action %q (load, state, read, fill, click, press, payloads, result, simulate, audit, shape, open, options, batch, parity, download, verify or help)", action)
 	}
 	if args == nil {
 		args = map[string]any{}
@@ -200,9 +204,53 @@ func (p *Tool) answer(in input.Args) (string, error) {
 		p.mu.Lock()
 		p.tamperedEver = false
 		p.mu.Unlock()
-		return fmt.Sprintf(`(()=>{if(window.__ws&&window.__wsVer!==%q)return "Failed: an older helper is in this page: reload the page, then page(load)";var s=document.createElement("script");s.src=%q;document.head.appendChild(s);return "loading the webscope helper; next: page(state)"})()`, pageVer, base+"/page.js?t="+p.token+"&v="+pageVer+"&o="+url.QueryEscape(strings.Join(p.origins(), ","))), nil
+		return fmt.Sprintf(`(()=>{if(window.__ws&&window.__wsVer!==%q)return "Failed: an older helper is in this page: reload the page, then page(load)";var s=document.createElement("script");s.src=%q;document.head.appendChild(s);return "loading the webscope helper; next: page(state)"})()`, pageVer, base+"/page.js?t="+p.token+"&v="+pageVer+"&o="+url.QueryEscape(strings.Join(p.origins(), ","))+"&k="+strconv.Itoa(p.SinkChars)), nil
+	case "result":
+		return p.result(in.Args), nil
 	}
 	return snippet(in.Action, in.Args)
+}
+
+// result gives the answer that the helper kept because javascript_tool would have cut it or blocked it, in parts of about MaxAnswer bytes (offset says where to go on).
+func (p *Tool) result(args map[string]any) string {
+	p.mu.Lock()
+	s := p.kept
+	p.mu.Unlock()
+	if s == "" {
+		return "no answer is kept: the helper keeps one when an answer of a snippet is longer than what javascript_tool shows (1000 characters) or has query values. Run the action again."
+	}
+	off := 0
+	if f, ok := args["offset"].(float64); ok && f > 0 {
+		off = min(int(f), len(s))
+	}
+	if off >= len(s) {
+		return fmt.Sprintf("offset %d is past the end of the answer (%d bytes)", off, len(s))
+	}
+	end := min(off+input.MaxAnswer-80, len(s))
+	for end < len(s) && !utf8.RuneStart(s[end]) {
+		end--
+	}
+	if end >= len(s) {
+		return s[off:]
+	}
+	return s[off:end] + fmt.Sprintf("\n(… %d more bytes: result {offset: %d})", len(s)-end, end)
+}
+
+// keep stores the whole answer that the helper posts, for result.
+func (p *Tool) keep(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "POST only", http.StatusMethodNotAllowed)
+		return
+	}
+	body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, maxCaptureBody))
+	if err != nil {
+		http.Error(w, "too large", http.StatusRequestEntityTooLarge)
+		return
+	}
+	p.mu.Lock()
+	p.kept = string(body)
+	p.mu.Unlock()
+	w.WriteHeader(http.StatusNoContent)
 }
 
 // Handle answers a page call: text on success, and on failure a text that starts with "Failed:" and names the next step, marked as an error.
@@ -269,6 +317,7 @@ func (p *Tool) handler() http.Handler {
 		io.WriteString(w, pageJS)
 	}))
 	mux.HandleFunc("/capture", p.guard(p.capture))
+	mux.HandleFunc("/result", p.guard(p.keep))
 	mux.HandleFunc("/shape", p.guard(p.shape))
 	mux.HandleFunc("/tamper", p.guard(p.tamper))
 	mux.HandleFunc("/log", p.guard(p.logRoute))

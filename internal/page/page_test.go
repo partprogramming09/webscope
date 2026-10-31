@@ -28,6 +28,7 @@ func testPage(t *testing.T, appURL string) *Tool {
 	t.Cleanup(cancel)
 	p := New(appURL)
 	p.Life = ctx
+	p.SinkChars = 0 // the tests read whole answers; the ones about the result channel turn it on
 	return p
 }
 
@@ -347,6 +348,7 @@ const fixturePage = `<!doctype html><meta charset=utf-8><title>Pedido</title><h1
 <div role=dialog><label for=dn>Nota</label><input id=dn></div>
 <div class=v-overlay-container id=oc></div>
 <button type=button id=go>Guardar</button><button type=button id=up>Actualizar</button><button type=button id=big>Grande</button><button type=button id=ping>Ping</button><button type=button id=nop>Inerte</button><button type=button id=tx>Texto</button><button type=button id=boom>Boom</button><button type=button id=dead>Muerto</button><button type=button id=dis disabled>Bloqueado</button><nav class=v-pagination><button type=button>Siguiente página</button></nav><button type=button>Cancelar</button></form><a href="#x" id=lk>Ir</a><p id=tx2></p>
+<p id=short>texto corto</p><p id=long></p><p id=qs>ver /x?a=1&amp;b=2&amp;c=3 fin</p>
 <p id=cl></p><p id=ct></p><p id=nn></p><p role=alert id=al></p><p id=mirror></p><p id=picked></p><pre id=out></pre>
 <script type=application/json id=steps>{{STEPS}}</script>
 <script>
