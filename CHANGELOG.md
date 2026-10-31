@@ -4,7 +4,7 @@ One entry per version, newest first. Tool names are `query`, `page`, `check` and
 
 ## 0.6.0 — 2026-10-31
 
-**0.6.0 gathers 0.5.65 to 0.5.86: the model no longer types addresses by hand, long answers do not get lost, and the data tools tell what to ask next.** The four tools stay (`query`, `page`, `check`, `code`) and `tools/list` does not change (1541 bytes at 0.5.65); every change below is an optional action or argument, so a call that worked before gives the same answer, except where an entry says that what a tool prints changes.
+**0.6.0 gathers 0.5.65 to 0.5.86: the model no longer types addresses by hand, long answers do not get lost, and the data tools tell what to ask next.** The four tools stay (`query`, `page`, `check`, `code`) and `tools/list` does not grow (1541 bytes at 0.5.65, 1540 at 0.6.0, measured; the budget is 1800); every change below is an optional action or argument, so a call that worked before gives the same answer, except where an entry says that what a tool prints changes.
 
 What was seen that made it a minor version: two users ran the e2e of a module with 0.5.64 and reported what cost them calls, time and wrong results. Each friction was measured before it was changed, on the real app, the real database or a real Chrome, and each change has a test that failed before it. The result:
 
