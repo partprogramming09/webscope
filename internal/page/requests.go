@@ -3,8 +3,10 @@ package page
 import (
 	"encoding/json"
 	"fmt"
+	"maps"
 	"net/url"
 	"regexp"
+	"slices"
 	"sort"
 	"strings"
 )
@@ -136,6 +138,7 @@ func (p *Tool) parityRequests(args map[string]any) (string, error) {
 		out = append(out, fmt.Sprintf("status: %d → %d", caps[0].S, caps[1].S))
 	}
 	same := true
+	inA, inB := map[string]bool{}, map[string]bool{} // the names each side has, in what was sent and in what was got
 	for _, part := range []struct{ label, a, b string }{{"sent", caps[0].Req, caps[1].Req}, {"got", caps[0].Res, caps[1].Res}} {
 		na, ea := names(part.a)
 		nb, eb := names(part.b)
@@ -151,6 +154,12 @@ func (p *Tool) parityRequests(args map[string]any) (string, error) {
 				}
 			}
 		}
+		for k := range na {
+			inA[k] = true
+		}
+		for k := range nb {
+			inB[k] = true
+		}
 		if ea != "" || eb != "" {
 			out = append(out, fmt.Sprintf("%s: not compared (a: %s, b: %s)", part.label, firstNonEmpty(ea, "ok"), firstNonEmpty(eb, "ok")))
 			same = false
@@ -164,6 +173,22 @@ func (p *Tool) parityRequests(args map[string]any) (string, error) {
 			out = append(out, part.label+" only in b: "+strings.Join(ob, ", "))
 		}
 		same = same && len(oa)+len(ob) == 0
+	}
+	if len(rename) > 0 { // a rename that found no name does nothing, and the answer would not show it
+		var bad []string
+		matched := 0
+		for _, k := range slices.Sorted(maps.Keys(rename)) {
+			switch {
+			case !inA[k]:
+				bad = append(bad, "«"+clip(oneLine(k), 40)+"»: not in a")
+			case !inB[rename[k]]:
+				bad = append(bad, "«"+clip(oneLine(k), 40)+"» → «"+clip(oneLine(rename[k]), 40)+"»: not in b")
+			default:
+				matched++
+			}
+		}
+		out = append(out, fmt.Sprintf("map: %d of %d names matched", matched, len(rename)))
+		out = append(out, bad...)
 	}
 	if same && caps[0].S == caps[1].S {
 		out = append(out, "same status and same field names sent and received")

@@ -2,6 +2,16 @@
 
 One entry per version, newest first. Tool names are `query`, `page`, `check` and `code`. Each change says what it is, what was seen that made it necessary, how it was checked and what was not checked. A change in what a tool prints is listed as a change, because a client may read it.
 
+## 0.5.84 — 2026-10-31
+
+**`page parity {req_a, req_b, map}` says how many entries of the map found their name, and names the ones that did not.**
+
+What was seen that made it necessary: a `map` renames the names of a before they are compared, and an entry with a wrong name changed nothing and showed nothing: the wrong name just appeared as «only in a» with no hint that the rename had not applied.
+
+Now, when there is a `map`, the answer has `map: X of N names matched`, and one line for each entry that did not: `«name»: not in a` (a has no such name, in what it sent or got) or `«name» → «other»: not in b` (a has it, b has no name `other`). Names only, never a value. Without a `map` there is no such line.
+
+How it was checked: a new test (3 entries, 1 matched; 2 of 2; no map) failed before (no `map:` line; `valor_mal` showed only as «sent only in a») and passes; the earlier parity tests pass. 192 tests pass. Not checked on the real app yet.
+
 ## 0.5.83 — 2026-10-31
 
 **`code leftovers` takes `deleted {column: value}` and tells the rows that carry the mark of a soft delete from the live ones.**
