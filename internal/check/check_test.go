@@ -3,6 +3,7 @@ package check
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"github.com/partprogramming09/webscope/internal/db"
 	"github.com/partprogramming09/webscope/internal/page"
 	"path/filepath"
@@ -303,5 +304,22 @@ func TestCheckTellsThePageToolWhatItFoundSoVerifyCanUseItAsEvidence(t *testing.T
 	}
 	if n.differ == 0 {
 		t.Errorf("a row that differs must be noted with differences: %+v", n)
+	}
+}
+
+// TestWhereTakesANumberAsItsText: the value of a where entry may be a JSON number, which is read as the digits it was written with.
+func TestWhereTakesANumberAsItsText(t *testing.T) {
+	var a checkArgs
+	if err := json.Unmarshal([]byte(`{"where":{"id":1341,"sub":"AI","big":12345678901234567890}}`), &a); err != nil {
+		t.Fatal(err)
+	}
+	if a.Where["id"] != "1341" || a.Where["sub"] != "AI" || a.Where["big"] != "12345678901234567890" {
+		t.Errorf("where = %v", a.Where)
+	}
+	for _, bad := range []string{`{"where":{"id":{"a":1}}}`, `{"where":{"id":[1]}}`, `{"where":{"id":null}}`, `{"where":{"id":true}}`} {
+		err := json.Unmarshal([]byte(bad), &a)
+		if err == nil || !strings.Contains(err.Error(), `where "id" must be a text or a number`) {
+			t.Errorf("%s: err = %v", bad, err)
+		}
 	}
 }

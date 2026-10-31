@@ -2,6 +2,16 @@
 
 One entry per version, newest first. Tool names are `query`, `page`, `check` and `code`. Each change says what it is, what was seen that made it necessary, how it was checked and what was not checked. A change in what a tool prints is listed as a change, because a client may read it.
 
+## 0.5.67 — 2026-10-31
+
+**`check` accepts a number as the value of a `where` entry.**
+
+What was seen that made it necessary: `check` with `where {"id": 1341}` failed with the Go text `json: cannot unmarshal number into Go struct field checkArgs.where.id of type string`; only `{"id": "1341"}` worked.
+
+Now a JSON number is read as the digits it was written with (`1341` is `"1341"`, a long number keeps all its digits, a leading zero still needs a text). `null`, `true`, `false`, an object or a list fail with `where "id" must be a text or a number`; the message is Go's, not the `Failed: … Next: …` form, because the arguments are refused before `check` runs.
+
+How it was checked: a new test failed with the exact Go text above and passes now; the 14 tests of the package pass. Not checked here: against the real database (batched with the other versions).
+
 ## 0.5.66 — 2026-10-31
 
 **`page payloads` says how long ago the last request was captured, and after 30 s adds how to bring the helper back.**

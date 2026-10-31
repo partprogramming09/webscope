@@ -45,10 +45,36 @@ var Schema = map[string]any{
 	},
 }
 
+// textMap is {column: value} where a value written as a JSON number is kept as the digits it was written with.
+type textMap map[string]string
+
+// UnmarshalJSON reads a text or a number for each entry and refuses anything else, naming the entry.
+func (m *textMap) UnmarshalJSON(b []byte) error {
+	var raw map[string]json.RawMessage
+	if err := json.Unmarshal(b, &raw); err != nil {
+		return err
+	}
+	out := make(textMap, len(raw))
+	for k, v := range raw {
+		var s string
+		var n json.Number
+		switch {
+		case json.Unmarshal(v, &s) == nil && v[0] == '"':
+			out[k] = s
+		case json.Unmarshal(v, &n) == nil && v[0] != '"' && v[0] != 'n' && v[0] != 't' && v[0] != 'f':
+			out[k] = n.String()
+		default:
+			return fmt.Errorf("where %q must be a text or a number", k)
+		}
+	}
+	*m = out
+	return nil
+}
+
 type checkArgs struct {
 	Sent   string            `json:"sent"`
 	Table  string            `json:"table"`
-	Where  map[string]string `json:"where"`
+	Where  textMap           `json:"where"`
 	Map    map[string]string `json:"map"`
 	After  string            `json:"after,omitempty"`
 	At     string            `json:"at,omitempty"`
