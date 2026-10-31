@@ -2,6 +2,16 @@
 
 One entry per version, newest first. Tool names are `query`, `page`, `check` and `code`. Each change says what it is, what was seen that made it necessary, how it was checked and what was not checked. A change in what a tool prints is listed as a change, because a client may read it.
 
+## 0.5.80 — 2026-10-31
+
+**`code map_back` drops services and models in turn when they do not fit, so both stay.**
+
+What was seen that made it necessary: in 0.5.73 the first page of `map_back tariff` gave room to the endpoints by dropping the services first: all 17 services went before a single model (`29 more services and models not shown`), and the answer had no service line at all.
+
+Now lines are dropped from the end, one at a time, always from the kind (service or model) that has more lines left, so the two stay in proportion. The closing line is the same (`(… N more services and models not shown: narrow the query)`).
+
+How it was checked: the test of 0.5.73 (80 services, 80 models, 100 endpoints) got a new assertion that failed (`0 services, 58 models`) and passes now (services are at least a third of the models). 187 tests pass. Not checked on the real project yet.
+
 ## 0.5.79 — 2026-10-31
 
 **`check` without `map` lists the fields that were sent and the columns of the table, instead of failing.**

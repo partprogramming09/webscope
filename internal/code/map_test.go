@@ -516,6 +516,9 @@ func TestMapBackKeepsRoomForEndpointsWhenTheServicesAndModelsAreMany(t *testing.
 	if n := strings.Count("\n"+out, "\napi "); n < 20 {
 		t.Errorf("only %d endpoints on the first page, the services and models took the room", n)
 	}
+	if !strings.Contains(out, "\nservice ") || strings.Count(out, "\nservice ") < strings.Count(out, "\nmodel ")/3 {
+		t.Errorf("services must not all go before a single model: %d services, %d models", strings.Count(out, "\nservice "), strings.Count(out, "\nmodel "))
+	}
 	if len(out) > input.MaxAnswer+200 || !strings.Contains(out, "\nmodel ") || !strings.Contains(out, "more services and models not shown") {
 		t.Errorf("%d bytes: some tables must stay and the cut of services and models must be said:\n...%s", len(out), out[max(0, len(out)-300):])
 	}

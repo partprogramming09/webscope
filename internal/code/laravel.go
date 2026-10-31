@@ -213,26 +213,31 @@ func importsOf(file, folder string) []string {
 // minEndpointRoom is the share of a map_back answer, in bytes, that the endpoints keep on the first page.
 const minEndpointRoom = 3000
 
-// fitLines drops lines from the end of out, the services before the models, until it fits budget bytes, and says how many went.
+// fitLines drops lines from the end of out until it fits budget bytes, always from the kind (service or model) that has more lines left, so both kinds
+// stay, and says how many went.
 func fitLines(out []string, budget int) []string {
 	size := func(l []string) int { return len(strings.Join(l, "\n")) }
 	if size(out) <= budget {
 		return out
 	}
+	count := func(l []string, prefix string) int {
+		return len(slices.DeleteFunc(slices.Clone(l), func(s string) bool { return !strings.HasPrefix(s, prefix) }))
+	}
 	kept, dropped := append([]string(nil), out...), 0
-	for _, prefix := range []string{"service ", "model "} {
-		for size(kept) > budget {
-			i := slices.IndexFunc(kept, func(l string) bool { return strings.HasPrefix(l, prefix) })
-			if i < 0 {
-				break
-			}
-			j := i
-			for j+1 < len(kept) && strings.HasPrefix(kept[j+1], prefix) {
-				j++
-			}
-			kept = slices.Delete(kept, j, j+1) // the last line of that kind
-			dropped++
+	for size(kept) > budget {
+		prefix := "model "
+		if count(kept, "service ") > count(kept, "model ") {
+			prefix = "service "
 		}
+		i := slices.IndexFunc(kept, func(l string) bool { return strings.HasPrefix(l, prefix) })
+		if i < 0 {
+			break
+		}
+		for i+1 < len(kept) && strings.HasPrefix(kept[i+1], prefix) {
+			i++
+		}
+		kept = slices.Delete(kept, i, i+1) // the last line of that kind
+		dropped++
 	}
 	return append(kept, fmt.Sprintf("(… %d more services and models not shown: narrow the query)", dropped))
 }
