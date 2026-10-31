@@ -34,6 +34,7 @@ Run `page(help)` first. The order of a session:
 3. `payloads` for the requests and their answers; `simulate` to force an HTTP error on the next requests to a URL.
 4. To compare an old screen and a new one: `shape {name, selector?}` on each (`selector` limits it to a part of the screen), then `parity {a, b}` for what only one side has. To compare what an action sends and receives: do the same action on both and `parity {req_a, req_b, map?}` (field names only, a GET's query names included, never values). `WEBSCOPE_APP_URL` may hold both origins, separated by commas.
 5. `fill` warns when a name fits several fields (a list filter and a form field with the same label); name one by its id.
+6. To prove a download: `download {arm:true}`, the real click in the page, then `download {wait:true}`. It gives the file's name, size, type by bytes and, for an xlsx, header names and row count (no values); no file in time is a failure. An export counts as downloaded only if this finds the file.
 
 Not covered: `v-combobox`, date pickers, menus of other libraries, file uploads, pages whose Content-Security-Policy blocks the helper. If the screen shows the login, stop and ask the user for the session; never type credentials. Use one Chrome agent at a time.
 

@@ -56,6 +56,7 @@ state|read|fill|click|press|simulate|audit|shape: return a snippet; run it with 
   simulate {match, status, times?, method?}: the next requests whose URL contains match answer HTTP status 400-599 without reaching the app; {clear:true} cancels.
 payloads {limit?}: the requests the page sent and their answers (answered here, no snippet).
 parity {a, b, kinds?}: compares two saved shapes (say the old and the new screen) and shows only what one has and the other lacks (a repeated name once, with ×N), and fields whose kind changed (answered here, no snippet); kinds "field,column" limits it, e.g. to leave out the step buttons of a wizard. parity {req_a, req_b, map?} compares instead the latest captured request that matches each ("POST save.php": the method, then a part of the address): status and the field names sent and received, never values; map {name in a: name in b} renames a's names first.
+download {arm:true} before a real click, then {wait:true, seconds?} after it (answered here, no snippet): waits for a new file in the downloads folder (WEBSCOPE_DOWNLOADS, else ~/Downloads) and gives its name, size, type by its first bytes and time, and for an xlsx its header names and row count, never a value. No file in time is a failure: an export counts as downloaded only if this finds the file.
 Writes only with the user's approval, and rows prefixed ZZ_.`
 
 // Capture is one request the page sent, as reported by page.js.
@@ -79,6 +80,10 @@ type Tool struct {
 	shapes map[string]Shape
 
 	tampered []string // page functions replaced after the helper loaded, as the helper last said
+
+	DownloadDir string              // where Chrome saves files; empty means WEBSCOPE_DOWNLOADS, then ~/Downloads
+	dlSeen      map[string]fileMark // the files of that folder when download was armed; nil if not armed
+	dlLast      string              // the name of the file the last download wait reported, empty if none
 
 	refused bool // a request that held the token came from another origin than the app's
 }
@@ -120,7 +125,7 @@ func originOf(appURL string) string {
 // snippet is the JavaScript for action. The arguments enter as JSON (json.Marshal escapes <, > and line separators), never as text.
 func snippet(action string, args map[string]any) (string, error) {
 	if !slices.Contains(snippetActions, action) {
-		return "", fmt.Errorf("unknown action %q (load, state, read, fill, click, press, payloads, simulate, audit, shape, parity or help)", action)
+		return "", fmt.Errorf("unknown action %q (load, state, read, fill, click, press, payloads, simulate, audit, shape, parity, download or help)", action)
 	}
 	if args == nil {
 		args = map[string]any{}
@@ -138,6 +143,8 @@ func (p *Tool) answer(in input.Args) (string, error) {
 		return helpText, nil
 	case "payloads":
 		return p.payloads(in.Args), nil
+	case "download":
+		return p.download(in.Args)
 	case "parity":
 		return p.parity(in.Args)
 	case "load":

@@ -2,6 +2,18 @@
 
 One entry per version, newest first. Tool names are `query`, `page`, `check` and `code`. Each change says what it is, what was seen that made it necessary, how it was checked and what was not checked. A change in what a tool prints is listed as a change, because a client may read it.
 
+## 0.5.54 — 2026-10-31
+
+**`page download`: `{arm:true}` before a real click and `{wait:true}` after it, to prove that a file was downloaded.**
+
+What was seen that made it necessary: the same session as 0.5.53. An export was reported as downloaded after checking only the HTTP answer and the bytes of a file built by the agent; no file had reached the downloads folder.
+
+Now `download {arm:true}` notes the files already in the downloads folder (`WEBSCOPE_DOWNLOADS`, else `~/Downloads`) and `download {wait:true, seconds?}` (10 s by default, at most 60) waits for a new or changed file that stops growing, ignoring `.crdownload`, `.tmp`, `.part` and hidden files. It answers the name, the size, the type by the first bytes (`PK` plus `xl/workbook.xml` is xlsx, `word/document.xml` is docx, `%PDF` is pdf, plain text, or unknown) and the time; for an xlsx also the header names (first row, at most 30, 40 characters each) and the row count. No value of any cell is shown. With no file in time the answer is `Failed: no file appeared in <folder> within N s, so nothing was downloaded…`, marked as an error. It is answered by the server (no snippet) and it is optional: nothing else changes. `page(help)` lists it; `tools/list` is unchanged.
+
+How it was checked: 4 tests that failed before (they did not compile without the action) and pass after, with an xlsx built in the test: the new file with headers and rows and without the cell value, a file that was there before `arm` is not reported, the type comes from the bytes and not from the name, a `.crdownload` alone fails after waiting the limit, and `wait` without `arm` fails. `go vet` and the whole suite with `-race` pass.
+
+Not checked: a download through the real Chrome (the folder Chrome saves to may not be `~/Downloads`: set `WEBSCOPE_DOWNLOADS`); a file that Chrome renames after it ends (`file (1).xlsx` is a new file and is reported as such); xlsx whose first sheet is not `sheet1` by name sorting; `.xls` and `.csv` get only the type.
+
 ## 0.5.53 — 2026-10-31
 
 **`page` marks a result as seen through an interceptor when `fetch`, `XMLHttpRequest.send` or the anchor `click` were replaced after the helper loaded.**
