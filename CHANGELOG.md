@@ -10,7 +10,7 @@ What was seen that made it necessary: the model typed the address of a screen ta
 
 Now `open` resolves the path with the router of the page. A known path is opened (the app adds its base) and the answer says where it ended, with `redirected from … : session or permission?` when it is not the path asked. A path that only the catch-all route matches fails with up to 8 similar paths. Without a Vue Router in the page it says so. `help` lists it (about 300 bytes more); `tools/list` is unchanged.
 
-Checked: a new Chrome test (a fake router) fails without the action and passes with it; vet and the 178 tests pass. Not checked: the real app (the server must be reconnected with `/mcp` to serve the new helper), and a router that is not Vue Router.
+Checked: a new Chrome test (a fake router) fails without the action and passes with it; vet and the 178 tests pass. Checked on the real screen (tenant `demo`, session started by the user): `open /pricing/sales-tariffs` and `/pricing/purchase-tariffs` ended at `/demo/pricing/…`; `/pricing/sales-tariffs/999999` was opened (the router owns the pattern, the record is not looked up); `/pricing/sales-tariff` and `/crm/tariffs` (the folder of the module, not a route) were refused with the similar paths; before login, `/pricing/sales-tariffs` was refused (no route without a tenant). Sizes seen on that screen: `state` 1096 bytes, `read` 382, `audit` 166. Not checked: the `redirected from` text in the real app, and a router that is not Vue Router.
 
 ## 0.5.64 — 2026-10-31
 
