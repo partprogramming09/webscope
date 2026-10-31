@@ -95,7 +95,13 @@ func slicesCompact(s []string) []string {
 func (c *Tool) run(ctx context.Context, in input.Args) (string, error) {
 	out, err := c.do(ctx, in)
 	if err != nil {
-		return "", errors.New(db.Redact(err.Error(), db.Password(c.Src.URL)))
+		msg := err.Error()
+		if strings.Contains(msg, "pass tenant to read the one of the app") { // withTenantHint said it: add the host names that the central database knows
+			if names := c.Src.TenantNames(ctx); len(names) > 0 {
+				msg += " (host names: " + strings.Join(names, ", ") + ")"
+			}
+		}
+		return "", errors.New(db.Redact(msg, db.Password(c.Src.URL)))
 	}
 	return out, nil
 }

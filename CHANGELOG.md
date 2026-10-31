@@ -2,6 +2,16 @@
 
 One entry per version, newest first. Tool names are `query`, `page`, `check` and `code`. Each change says what it is, what was seen that made it necessary, how it was checked and what was not checked. A change in what a tool prints is listed as a change, because a client may read it.
 
+## 0.6.1 — 2026-10-31
+
+**A missing table in a call with no `tenant` now says to pass the tenant and names the host names that the central database knows, in `query`, `code` and `check`.**
+
+What was seen that made it necessary: `code rows {table: app_tarifario_prov, a: 1, b: 2}` failed with `Table 'acme.app_tarifario_prov' doesn't exist` (the tables of the app are in the tenant's database, and the call read the central one). On the real server `code` already said `pass tenant to read the one of the app`, but `query` and `check` said only `Table … doesn't exist`, and none said which value to pass: the host name (`demo.localhost`, not `demo` and not the uuid) had to be found in `hostnames` by hand.
+
+Now, when the error is a missing table (`Error 1146` or `no such table`), the call named no tenant and the server uses the default tenant lookup of Hyn Tenancy, the error ends with `; the call named no tenant, so it read the central database: pass tenant to read the one of the app (host names: demo.localhost)` (up to 4 names, read with `SELECT fqdn FROM hostnames WHERE deleted_at IS NULL`). With a tenant, with another error or with a `WEBSCOPE_TENANT_QUERY` of its own (the layout is not known) the hint does not come or has no names. The tenant is not guessed: the call still fails and the model decides.
+
+How it was checked: a new test in `db` (no tenant, a table that is not in the central database: the hint and the first host names; with a tenant, a missing column and a tenant query of its own: none) failed before and passes; a test in `check` for the wiring; 196 tests pass. On the real server: `code rows` already had the shorter hint (seen before this change); the version with host names was not run there yet.
+
 ## 0.6.0 — 2026-10-31
 
 **0.6.0 gathers 0.5.65 to 0.5.86: the model no longer types addresses by hand, long answers do not get lost, and the data tools tell what to ask next.** The four tools stay (`query`, `page`, `check`, `code`) and `tools/list` does not grow (1541 bytes at 0.5.65, 1540 at 0.6.0, measured; the budget is 1800); every change below is an optional action or argument, so a call that worked before gives the same answer, except where an entry says that what a tool prints changes.

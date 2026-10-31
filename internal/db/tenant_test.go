@@ -111,3 +111,25 @@ func TestAMalformedTenantLookupFailsWithAnErrorAndFindsNothing(t *testing.T) {
 		}
 	}
 }
+
+// TestAMissingTableWithNoTenantNamesTheHostNamesOfTheCentralDatabase: a call with no tenant reads the central database; when a table is not there, the error
+// says that the app's tables are in the tenant's database and names some host names to pass, and says nothing of the kind with a tenant or for another error.
+func TestAMissingTableWithNoTenantNamesTheHostNamesOfTheCentralDatabase(t *testing.T) {
+	s, _ := tenants(t)
+	_, err := askTenant(t, s, "", "SELECT * FROM only_in_tenant")
+	if err == nil || !strings.Contains(err.Error(), "pass tenant") || !strings.Contains(err.Error(), "host names: one.test, two.test") {
+		t.Errorf("no tenant, a table that is not in the central database: %v", err)
+	}
+	_, err = askTenant(t, s, "one.test", "SELECT * FROM only_in_tenant")
+	if err == nil || strings.Contains(err.Error(), "pass tenant") {
+		t.Errorf("with a tenant the hint must not come: %v", err)
+	}
+	_, err = askTenant(t, s, "", "SELECT nope FROM items")
+	if err == nil || strings.Contains(err.Error(), "pass tenant") {
+		t.Errorf("a missing column is not a missing table: %v", err)
+	}
+	s.TenantQuery = "SELECT 1 WHERE 0 = ?"
+	if _, err := askTenant(t, s, "", "SELECT * FROM only_in_tenant"); err == nil || strings.Contains(err.Error(), "host names") {
+		t.Errorf("with a tenant query of its own the host names are not read: %v", err)
+	}
+}

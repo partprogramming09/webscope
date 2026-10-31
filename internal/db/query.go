@@ -76,6 +76,46 @@ func (s *Source) Open(ctx context.Context, tenant string) (*sql.DB, string, erro
 	return s.conn(name)
 }
 
+// TenantNames are up to 4 host names of the tenants in the central database (Hyn Tenancy), or none when it cannot tell: with a TenantQuery of its own the
+// layout is not known.
+func (s *Source) TenantNames(ctx context.Context) []string {
+	if s.TenantQuery != "" && s.TenantQuery != HynTenantQuery {
+		return nil
+	}
+	db, _, err := s.conn("")
+	if err != nil {
+		return nil
+	}
+	ctx, cancel := context.WithTimeout(ctx, QueryTimeout)
+	defer cancel()
+	rows, err := db.QueryContext(ctx, "SELECT fqdn FROM hostnames WHERE deleted_at IS NULL ORDER BY id LIMIT 4")
+	if err != nil {
+		return nil
+	}
+	defer rows.Close()
+	var names []string
+	for rows.Next() {
+		var n string
+		if rows.Scan(&n) == nil {
+			names = append(names, n)
+		}
+	}
+	return names
+}
+
+// TenantHint is what to add to the error of a call with no tenant when a table is missing: the tables of the app are in the tenant's database, with the host
+// names of the central one. It is "" with a tenant and for any other error.
+func (s *Source) TenantHint(ctx context.Context, msg, tenant string) string {
+	if tenant != "" || !(strings.Contains(msg, "Error 1146") || strings.Contains(msg, "no such table")) {
+		return ""
+	}
+	hint := "; the call named no tenant, so it read the central database: pass tenant to read the one of the app"
+	if names := s.TenantNames(ctx); len(names) > 0 {
+		hint += " (host names: " + strings.Join(names, ", ") + ")"
+	}
+	return hint
+}
+
 // Answer checks the statement, runs it and returns the text for the agent; no error text carries the password of the URL.
 func (s *Source) Answer(ctx context.Context, in QueryArgs) (string, error) {
 	pw := Password(s.URL)
@@ -90,7 +130,7 @@ func (s *Source) Answer(ctx context.Context, in QueryArgs) (string, error) {
 	}
 	out, err := runQuery(ctx, db, driver, stmt, rowLimit(in.Limit))
 	if err != nil {
-		return fail(errors.New(err.Error() + columnHint(ctx, db, driver, stmt, err.Error())))
+		return fail(errors.New(err.Error() + columnHint(ctx, db, driver, stmt, err.Error()) + s.TenantHint(ctx, err.Error(), in.Tenant)))
 	}
 	return out, nil
 }

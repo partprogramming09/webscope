@@ -229,7 +229,7 @@ func (c *Tool) run(ctx context.Context, in checkArgs) (string, error) {
 	pw := db.Password(c.Src.URL)
 	out, err := c.compare(ctx, in)
 	if err != nil {
-		return "", errors.New(db.Redact(err.Error(), pw))
+		return "", errors.New(db.Redact(err.Error()+c.Src.TenantHint(ctx, err.Error(), in.Tenant), pw))
 	}
 	return out, nil
 }

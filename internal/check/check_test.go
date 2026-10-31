@@ -339,6 +339,20 @@ func TestCheckWithoutAMapListsTheSentFieldsAndTheColumnsInsteadOfFailing(t *test
 	}
 }
 
+// TestCheckOfATableThatIsNotInTheCentralDatabaseSaysToPassATenant: with no tenant the table is looked for in the central database.
+func TestCheckOfATableThatIsNotInTheCentralDatabaseSaysToPassATenant(t *testing.T) {
+	c, p := checkSetup(t)
+	sent(p, "POST", "/api/quotes", `{"notes":"x"}`, "")
+	_, err := run(t, c, checkArgs{Sent: "POST /api/quotes", Table: "only_in_tenant", Where: textMap{"id": "1"}, Map: map[string]string{"notes": "notes"}})
+	if err == nil || !strings.Contains(err.Error(), "pass tenant") {
+		t.Errorf("no tenant, a missing table: %v", err)
+	}
+	_, err = run(t, c, checkArgs{Sent: "POST /api/quotes", Table: "only_in_tenant", Tenant: "x.test", Where: textMap{"id": "1"}, Map: map[string]string{"notes": "notes"}})
+	if err != nil && strings.Contains(err.Error(), "pass tenant") {
+		t.Errorf("with a tenant the hint must not come: %v", err)
+	}
+}
+
 // TestWhereTakesANumberAsItsText: the value of a where entry may be a JSON number, which is read as the digits it was written with.
 func TestWhereTakesANumberAsItsText(t *testing.T) {
 	var a checkArgs
