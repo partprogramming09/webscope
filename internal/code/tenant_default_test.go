@@ -43,6 +43,12 @@ func TestACallWithNoTenantUsesTheOnlyTenantOfTheCentralDatabase(t *testing.T) {
 	if _, err := code(t, c, "rows", args); err == nil || !strings.Contains(err.Error(), "no such table") {
 		t.Errorf("two tenants: the call is not guessed and fails: %v", err)
 	}
+	write("central.db", "DELETE FROM hostnames WHERE id = 2")
+	c.Src = &db.Source{URL: "sqlite://" + filepath.Join(dir, "central.db"), TenantQuery: "SELECT uuid FROM websites WHERE id = 1 AND ? <> ''"}
+	if _, err := code(t, c, "rows", args); err == nil || !strings.Contains(err.Error(), "no such table") {
+		t.Errorf("a tenant query of the user's own: the layout is not known, nothing is guessed: %v", err)
+	}
+	c.Src = &db.Source{URL: "sqlite://" + filepath.Join(dir, "central.db"), TenantQuery: db.HynTenantQuery}
 	args["tenant"] = "one.test"
 	if out, err := code(t, c, "rows", args); err != nil || strings.Contains(out, "the only one") {
 		t.Errorf("a tenant that is named is used as it is: %v\n%s", err, out)
