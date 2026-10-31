@@ -597,15 +597,18 @@
   // hideQuery drops the values of query strings that carry several (a=1&b=2 becomes a&b): javascript_tool blocks such text. A single ?name=value is not blocked and stays.
   const hideQuery = s => s.replace(/([?&][\w.%[\]-]+)=[^&\s#"'<>)]*(?=&[\w.%[\]-]+=)/g, '$1').replace(/&([\w.%[\]-]+)=[^&\s#"'<>)]*/g, '&$1');
   // sink keeps the whole answer in the listener (page(result) gives it) and returns only what javascript_tool shows: it cuts at 1000 characters and blocks chained query values.
-  const sink = f => async a => {
+  const sink = (f, brief) => async a => {
     const r = String(await f(a)), lim = cfg.k, hid = hideQuery(r);
     if (!lim || (r.length <= lim && hid === r)) return r;
     try { await realFetch(cfg.base + '/result?t=' + cfg.t, { method: 'POST', body: r }); } catch (e) { return r; } // no listener: the answer as it is
     const note = hid !== r ? ' query values hidden;' : '';
     if (hid.length <= lim) return hid + '\n(' + note.trim() + ' page(result) gives the answer as it is)';
+    const b = brief && brief(hid); // a batch: the first line of each step, so the last steps are not lost behind the first
+    if (b && b.length <= lim - 140) return b + '\n(first line of each step;' + note + ' javascript_tool cuts at 1000, page(result) gives all)';
     const cut = hid.lastIndexOf('\n', lim - 140), head = hid.slice(0, cut > 0 ? cut : lim - 140);
     return head + '\n(… ' + (r.length - head.length) + ' more chars:' + note + ' javascript_tool cuts at 1000, page(result) gives all)';
   };
   plain = { state: wrap(state), read: wrap(read), fill: wrap(fill), click: wrap(click), press: wrap(press), simulate: wrap(simulate), open: wrap(open), options: wrap(options), batch: wrap(batch), audit: wrap(audit), shape: wrap(shape) };
-  window.__ws = Object.fromEntries(Object.entries(plain).map(([k, f]) => [k, sink(f)]));
+  const stepLines = s => (s.match(/^\d+\. \w+: .*$/gm) || []).map(l => clip(l, 110)).join('\n');
+  window.__ws = Object.fromEntries(Object.entries(plain).map(([k, f]) => [k, sink(f, k === 'batch' ? stepLines : null)]));
 })();

@@ -96,6 +96,7 @@ func TestAnAnswerTooLongForJavascriptToolIsKeptAndShortened(t *testing.T) {
 	}{
 		{"read", map[string]any{"selector": "#short"}},
 		{"read", map[string]any{"selector": "#long", "max": float64(4000)}},
+		{"batch", map[string]any{"steps": []any{map[string]any{"action": "read", "args": map[string]any{"selector": "#long", "max": float64(4000)}}, map[string]any{"action": "read", "args": map[string]any{"selector": "#short"}}, map[string]any{"action": "shape", "args": map[string]any{"name": "zz"}}}}},
 		{"read", map[string]any{"selector": "#qs"}},
 	} {
 		s, err := snippet(a.action, a.args)
@@ -133,8 +134,11 @@ func TestAnAnswerTooLongForJavascriptToolIsKeptAndShortened(t *testing.T) {
 	if len([]rune(out[2])) > 1000 || !strings.Contains(out[2], "page(result)") || !strings.Contains(out[2], "more chars") {
 		t.Errorf("a long answer is cut under 1000 characters and says where the rest is: %d chars: %q", len([]rune(out[2])), out[2][max(0, len(out[2])-200):])
 	}
-	if strings.Contains(out[3], "a=1") || !strings.Contains(out[3], "/x?a&b&c") || !strings.Contains(out[3], "query values hidden") {
-		t.Errorf("chained query values are hidden in what javascript_tool sees: %q", out[3])
+	if len([]rune(out[3])) > 1000 || !strings.Contains(out[3], "1. read: palabra") || !strings.Contains(out[3], "2. read: texto corto") || !strings.Contains(out[3], "3. shape: shape «zz» saved") || !strings.Contains(out[3], "page(result)") {
+		t.Errorf("a long batch shows the first line of each of its steps, so the last ones are not lost: %q", out[3])
+	}
+	if strings.Contains(out[4], "a=1") || !strings.Contains(out[4], "/x?a&b&c") || !strings.Contains(out[4], "query values hidden") {
+		t.Errorf("chained query values are hidden in what javascript_tool sees: %q", out[4])
 	}
 	full, err := askPage(t, p, "result", nil)
 	if err != nil || !strings.Contains(full, "/x?a=1&b=2&c=3") {

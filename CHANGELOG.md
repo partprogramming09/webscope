@@ -2,6 +2,16 @@
 
 One entry per version, newest first. Tool names are `query`, `page`, `check` and `code`. Each change says what it is, what was seen that made it necessary, how it was checked and what was not checked. A change in what a tool prints is listed as a change, because a client may read it.
 
+## 0.6.2 — 2026-10-31
+
+**A long `batch` shows the first line of each of its steps to `javascript_tool`, not only the start of the first one.**
+
+What was seen that made it necessary: a `batch` of `state`, `shape` and `audit` on a screen with 40 checkboxes came back with the first 23 checkboxes of `state` and `(… 1500 more chars …)`: the `shape` answer (`saved: 40 fields…`) and the `audit` were not visible until `page(result)` was called, and a user read that as the later steps being lost (they were run; the whole text was in `page(result)`).
+
+Now, when the answer of a `batch` is longer than what `javascript_tool` shows, the short answer is the first line of each step (`1. state: URL: …`, `2. shape: shape «zz-roles» saved: 40 fields, …`, `3. audit: no label (40): …`, each cut at 110 characters) followed by `(first line of each step; javascript_tool cuts at 1000, page(result) gives all)`. If those lines do not fit either, it falls back to the start of the answer, as in 0.5.81. The stored answer is the whole one, as before.
+
+How it was checked: the Chrome test of the result channel got a batch of a long `read`, a short `read` and a `shape`; the short answer failed before (it showed only the long read) and now has the three lines and the pointer, under 1000 characters; it ran 2 of 2 times; 196 tests pass. On the real app the batch of `state`, `shape` and `audit` before this change showed only `1. state` (seen); the new answer was not run there yet.
+
 ## 0.6.1 — 2026-10-31
 
 **A missing table in a call with no `tenant` now says to pass the tenant and names the host names that the central database knows, in `query`, `code` and `check`.**
