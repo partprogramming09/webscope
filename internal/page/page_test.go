@@ -374,9 +374,10 @@ ci.oninput=()=>setTimeout(()=>{oc.innerHTML='<div class=v-overlay--active><div c
 const rrender=()=>{oc.dataset.owner='ri';oc.innerHTML='<div class=v-overlay--active><div class=v-list></div></div>';for(const t of ['Aachen','Aarhus','Bogota']){if(t.toLowerCase().includes(ri.value.toLowerCase())){const d=document.createElement('div');d.className='v-list-item';d.textContent=t;oc.querySelector('.v-list').appendChild(d)}}}
 // a long virtual list: 2000 rows of 20 px, the 40 around the scroll position rendered, in a box of 120 px
 gf.onmousedown=()=>{oc.innerHTML='<div class=v-overlay--active><div class=v-list style="height:120px;overflow:auto;position:relative"><div style="height:40000px"></div></div></div>'
- const l=oc.querySelector('.v-list');const draw=()=>{const k=Math.floor(l.scrollTop/20);[...l.querySelectorAll('.v-list-item')].forEach(e=>e.remove())
-  for(let i=Math.max(0,k-15);i<k+25&&i<2000;i++){const d=document.createElement('div');d.className='v-list-item';d.style.cssText='position:absolute;height:20px;top:'+i*20+'px';d.textContent='R'+i;l.appendChild(d)}}
- draw();const id=setInterval(()=>{if(l.isConnected)draw();else clearInterval(id)},20)}
+ const l=oc.querySelector('.v-list');let lastS=0;l.addEventListener('scroll',()=>{lastS=Date.now()})
+ const draw=()=>{const k=Math.floor(l.scrollTop/20);[...l.querySelectorAll('.v-list-item')].forEach(e=>e.remove())
+  for(let i=Math.max(0,k-10);i<k+30&&i<2000;i++){const d=document.createElement('div');d.className='v-list-item';d.style.cssText='position:absolute;height:20px;top:'+i*20+'px';d.textContent='R'+i;l.appendChild(d)}}
+ draw();const id=setInterval(()=>{if(!l.isConnected)clearInterval(id);else if(Date.now()-lastS>300)draw()},20)} // the rows are drawn once the list has been still for 300 ms, as a busy page does
 const rclose=()=>{oc.innerHTML='';delete oc.dataset.owner}
 rif.onmousedown=()=>{if(oc.dataset.owner==='ri'&&oc.querySelector('.v-list'))rclose();else rrender()}
 ri.oninput=()=>{if(ri.value===ri.dataset.last)return;ri.dataset.last=ri.value;if(oc.dataset.owner==='ri'&&oc.querySelector('.v-list'))setTimeout(rrender,200)}
@@ -1638,6 +1639,7 @@ func TestOptionsListsTheChoicesOfASelectAndOfAMenu(t *testing.T) {
 		{"field": "Ciudad", "match": "Aa"},
 		{"field": "Ciudad", "match": "Aa"},
 		{"field": "Region", "match": "R1999"},
+		{"field": "Region", "match": "R19", "max": float64(200)},
 	} {
 		if a["scrolled"] == true { // a menu that opens already scrolled down
 			steps = append(steps, "(window.__startScrolled=true,'scrolled')")
@@ -1706,6 +1708,9 @@ func TestOptionsListsTheChoicesOfASelectAndOfAMenu(t *testing.T) {
 	}
 	if out[14] != "Region: R1999" {
 		t.Errorf("a list of 2000 rows must be read to its end in less than 400 steps: %q", out[14])
+	}
+	if got := strings.Count(out[15], " | ") + 1; !strings.HasPrefix(out[15], "Region: R19 | R190") || got != 111 {
+		t.Errorf("rows drawn late must not be skipped: %d of the 111 rows with R19: %.120q", got, out[15])
 	}
 	for _, i := range []int{12, 13} {
 		if !strings.HasPrefix(out[i], "Ciudad: Aachen | Aarhus") {

@@ -273,8 +273,9 @@
       type(String(match));
     }
     const seen = new Set();
-    let end = 0, topped = null, whole = false;
-    for (let i = 0; i < 400 && keep([...seen]).length < max; i++) { // shortcut: 400 steps of 70 ms at most, as fill
+    let end = 0, topped = null, whole = false, factor = 0.6;
+    const drawn = l => [...l.querySelectorAll('.v-list-item')].filter(vis).map(r => norm(r.innerText.split('\n')[0]));
+    for (let i = 0; i < 400 && keep([...seen]).length < max; i++) { // shortcut: 400 steps at most, as fill
       await sleep(70);
       const list = [...document.querySelectorAll('.v-overlay-container .v-list')].pop(); // the newest menu: an older one may still be leaving
       if (list && topped !== list) { topped = list; list.scrollTop = 0; seen.clear(); await sleep(120); continue; } // a menu may open scrolled: the rows come from its top
@@ -284,7 +285,12 @@
       if (list.scrollTop + list.clientHeight >= list.scrollHeight - 2) { if (++end > 2) { whole = true; break; } }
       else {
         const r = [...list.querySelectorAll('.v-list-item')].filter(vis), span = r.length > 1 ? r[r.length - 1].getBoundingClientRect().bottom - r[0].getBoundingClientRect().top : 0;
-        list.scrollTop += Math.max(list.clientHeight * 0.8, span * 0.6); // the rows already drawn reach beyond the box: a step of 60% of them leaves none out
+        const before = drawn(list), step = Math.max(list.clientHeight * 0.8, span * factor); // the rows already drawn reach beyond the box
+        list.scrollTop += step;
+        for (let w = 0; w < 30 && drawn(list)[0] === before[0]; w++) await sleep(16); // the page draws the new rows a moment after the scroll
+        const now = drawn(list);
+        now.forEach(s => seen.add(s));
+        if (now.length && before.length && !now.some(s => before.includes(s))) { list.scrollTop -= step / 2; factor = Math.max(factor / 2, 0.1); } // no row in common: some may have been missed, go back half and take smaller steps
       }
     }
     await closeMenu();

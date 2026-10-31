@@ -2,6 +2,16 @@
 
 One entry per version, newest first. Tool names are `query`, `page`, `check` and `code`. Each change says what it is, what was seen that made it necessary, how it was checked and what was not checked. A change in what a tool prints is listed as a change, because a client may read it.
 
+## 0.5.76 — 2026-10-31
+
+**`page options` waits for the page to draw the rows after each scroll and goes back when a step left a gap, so it does not skip rows.**
+
+What was seen that made it necessary: on the real form the list of cities has 856 rows (read with slow steps of 40% of the box and 140 ms: 856). With the step of 0.5.75 (60% of the rows drawn, a fixed 70 ms) `options` read 846 and with a step of 90% it read 856, so the same call could miss rows depending on how late the page drew them. The same risk was in 0.5.72 to 0.5.75 (an 80% step with a fixed wait). The time per call was 9 to 13 s on that list.
+
+Now, after each scroll, it waits (up to about 480 ms) until the first row drawn changes, reads the rows and, if none of them was in the window before the step, goes back half the step and halves the step size (down to 10% of the rows drawn). The limit of 400 steps stays.
+
+How it was checked: the Chrome test list of 2000 rows draws its rows only after the list has been still for 300 ms; the question `R19` (111 rows) must give all 111. With the loop of 0.5.75 it failed in some runs (59, 101, 103 of 111; the reproduction depends on the timing of Chrome) and passed in others; with this loop it passed in 6 of 6 runs. The 184 tests pass. Not checked on the real form yet.
+
 ## 0.5.75 — 2026-10-31
 
 **`page options` scrolls a menu by the rows already drawn, so a long list is read in far fewer steps.**
