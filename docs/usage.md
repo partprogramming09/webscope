@@ -93,7 +93,7 @@ webscope tells you what it can check; it does not decide for you and never block
 - An HTTP status 0, a 5xx or a network error is a backend failure until shown otherwise: read the backend log before reporting the screen as broken or fine.
 - A feature is not finished until it is tested, and the next one does not start before.
 
-The marks that webscope will add for this (interceptor in use, file seen in the downloads folder, evidence states) are planned in the ROADMAP section «Informes honestos»; until each version exists, the rules above are practice, not something the server checks.
+What webscope already marks: when `fetch`, `XMLHttpRequest.send` or the anchor `click` are replaced after `page(load)`, the answers of `page` start with `Interceptor: …` (it is a label; nothing is refused). The rest (file seen in the downloads folder, evidence states) is planned in the ROADMAP section «Informes honestos»; until each version exists, those rules are practice, not something the server checks.
 
 ## Setup
 

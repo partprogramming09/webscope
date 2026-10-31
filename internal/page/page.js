@@ -445,6 +445,19 @@
     return 'shape «' + clip(name, 40) + '» saved: ' + s.fields.length + ' fields, ' + s.buttons.length + ' buttons, ' + s.columns.length + ' columns, ' + s.tabs.length + ' tabs, ' + s.headings.length + ' headings. Next: open the other screen, page(shape) with another name, then page(parity, {a, b}).';
   };
 
-  const wrap = f => a => { try { const r = f(a || {}); return r && r.then ? r.catch(e => fail(e.message)) : r; } catch (e) { return fail(e.message); } };
+  // ---- interceptors: the functions below, as they are once the helper is in place; a page script or the agent that replaces one is reported
+  const mine = { fetch: window.fetch, send: xhrProto.send, 'anchor click': HTMLAnchorElement.prototype.click };
+  const current = () => ({ fetch: window.fetch, send: xhrProto.send, 'anchor click': HTMLAnchorElement.prototype.click });
+  const patched = () => { const c = current(); return Object.keys(mine).filter(k => c[k] !== mine[k]); };
+  const MARK = l => 'Interceptor: ' + l.join(', ') + ' replaced after the helper loaded. What follows is what the page did with that patch, not what a real click did: do not report it as a check of the real flow.';
+  let told = '';
+  setInterval(() => {
+    const now = patched().join(',');
+    if (now === told) return;
+    told = now;
+    realFetch(cfg.base + '/tamper?t=' + cfg.t + '&n=' + encodeURIComponent(now), { method: 'POST', keepalive: true }).catch(() => {});
+  }, 400);
+  const marked = r => { const l = patched(); return l.length ? MARK(l) + '\n' + r : r; };
+  const wrap = f => a => { try { const r = f(a || {}); return r && r.then ? r.then(marked, e => fail(e.message)) : marked(r); } catch (e) { return fail(e.message); } };
   window.__ws = { state: wrap(state), read: wrap(read), fill: wrap(fill), click: wrap(click), press: wrap(press), simulate: wrap(simulate), audit: wrap(audit), shape: wrap(shape) };
 })();

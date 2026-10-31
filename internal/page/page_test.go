@@ -1428,3 +1428,61 @@ func TestFillSaysWhenANameMatchesMoreThanOneField(t *testing.T) {
 		t.Errorf("a name that matches one field gets no warning: %q", out[3])
 	}
 }
+
+// TestAnInterceptorPutOnTheFetchIsMarkedInStateAndPayloads runs in a real Chrome: after the helper loads, the page replaces fetch the way an agent
+// does to fake a download; state and payloads must say so on the first line, and say nothing before the replacement.
+func TestAnInterceptorPutOnTheFetchIsMarkedInStateAndPayloads(t *testing.T) {
+	var mu sync.Mutex
+	var html_ string
+	app := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		defer mu.Unlock()
+		io.WriteString(w, html_)
+	}))
+	app.Start()
+	defer app.Close()
+	p := testPage(t, app.URL)
+	load, err := askPage(t, p, "load", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	steps := []string{
+		load,
+		"window.__ws.state({})",
+		"(()=>{window.fetch=async()=>new Response('{}');return 'patched'})()",
+		"window.__ws.state({})",
+		"new Promise(r=>setTimeout(()=>r('waited'),1200))",
+	}
+	raw, _ := json.Marshal(steps)
+	mu.Lock()
+	html_ = strings.Replace(xhrPage, "{{STEPS}}", string(raw), 1)
+	mu.Unlock()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+	flags := []string{"--headless=new", "--disable-gpu", "--no-first-run", "--no-default-browser-check", "--user-data-dir=" + t.TempDir(), "--virtual-time-budget=60000", "--dump-dom"}
+	if os.Getenv("CI") != "" {
+		flags = append(flags, "--no-sandbox")
+	}
+	dom, err := exec.CommandContext(ctx, chromePath(t), append(flags, app.URL+"/")...).Output()
+	if err != nil {
+		t.Fatalf("chrome: %v", err)
+	}
+	m := regexp.MustCompile(`(?s)<pre id="out">(.*?)</pre>`).FindSubmatch(dom)
+	if m == nil {
+		t.Fatalf("the page did not finish its steps; DOM tail: %.600s", dom[max(0, len(dom)-600):])
+	}
+	var out []string
+	if err := json.Unmarshal([]byte(html.UnescapeString(string(m[1]))), &out); err != nil || len(out) != len(steps) {
+		t.Fatalf("results %q: %v", m[1], err)
+	}
+	if strings.Contains(out[1], "Interceptor:") {
+		t.Errorf("state marked an interceptor before any replacement: %q", out[1])
+	}
+	if !strings.HasPrefix(out[3], "Interceptor: fetch") {
+		t.Errorf("state after the replacement does not start with the mark: %q", out[3])
+	}
+	if seen, _ := askPage(t, p, "payloads", nil); !strings.HasPrefix(seen, "Interceptor: fetch") {
+		t.Errorf("payloads after the replacement does not start with the mark: %s", seen)
+	}
+}

@@ -2,6 +2,18 @@
 
 One entry per version, newest first. Tool names are `query`, `page`, `check` and `code`. Each change says what it is, what was seen that made it necessary, how it was checked and what was not checked. A change in what a tool prints is listed as a change, because a client may read it.
 
+## 0.5.53 — 2026-10-31
+
+**`page` marks a result as seen through an interceptor when `fetch`, `XMLHttpRequest.send` or the anchor `click` were replaced after the helper loaded.**
+
+What was seen that made it necessary: in one session an agent reported «the export downloads the Excel» when no file had been downloaded. It had swapped the real click for a JavaScript interceptor and checked only the HTTP answer and the content of the file; nothing in the answers of `page` said that the flow was not the real one.
+
+Now the helper keeps the three functions as they are once it is in place and compares them on every action and every 400 ms. When any differs, the answers of every action that goes through the page (`state`, `click`, `fill`, …) start with «Interceptor: <names> replaced after the helper loaded. What follows is what the page did with that patch, not what a real click did: do not report it as a check of the real flow.», and `payloads` starts with the same kind of line (the helper tells the listener by a new route, `/tamper`). It is a label, not a block: nothing is refused, and with no replacement nothing is added. If the patch is undone the label goes away.
+
+How it was checked: a test in a real Chrome (`TestAnInterceptorPutOnTheFetchIsMarkedInStateAndPayloads`) replaces `fetch` after `load`; it failed before the change (no mark in `state` or `payloads`) and passes after, and `state` before the replacement has no mark. `go vet`, the whole suite with `-race` and `tools/list` (1431 bytes) were run.
+
+Not checked: a page that replaces `fetch` before the helper loads (it is taken as the page's own, not marked); `XMLHttpRequest.open` and the constructor, which legacy pages replace themselves; a patch that is put and undone between two ticks of 400 ms; a real agent session. The state of evidence (`verify`) and the download action are still planned (ROADMAP, «Informes honestos»).
+
 ## 0.5.52 — 2026-10-30
 
 **`code snap` takes a key of several columns, and `page load` says when the page still holds the helper of an older build.**

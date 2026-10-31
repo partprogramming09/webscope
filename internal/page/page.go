@@ -78,6 +78,8 @@ type Tool struct {
 	caps   []Capture
 	shapes map[string]Shape
 
+	tampered []string // page functions replaced after the helper loaded, as the helper last said
+
 	refused bool // a request that held the token came from another origin than the app's
 }
 
@@ -216,6 +218,7 @@ func (p *Tool) handler() http.Handler {
 	}))
 	mux.HandleFunc("/capture", p.guard(p.capture))
 	mux.HandleFunc("/shape", p.guard(p.shape))
+	mux.HandleFunc("/tamper", p.guard(p.tamper))
 	mux.HandleFunc("/sim", p.guard(func(w http.ResponseWriter, r *http.Request) {
 		status, err := strconv.Atoi(r.URL.Query().Get("status"))
 		if err != nil || status < 400 || status > 599 {
@@ -255,6 +258,20 @@ func (p *Tool) capture(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
+// tamper records which page functions the helper saw replaced after it loaded; only the three names it watches are kept.
+func (p *Tool) tamper(w http.ResponseWriter, r *http.Request) {
+	var l []string
+	for _, n := range strings.Split(r.URL.Query().Get("n"), ",") {
+		if n == "fetch" || n == "send" || n == "anchor click" {
+			l = append(l, n)
+		}
+	}
+	p.mu.Lock()
+	p.tampered = l
+	p.mu.Unlock()
+	w.WriteHeader(http.StatusNoContent)
+}
+
 func (p *Tool) payloads(args map[string]any) string {
 	p.mu.Lock()
 	defer p.mu.Unlock()
@@ -264,6 +281,9 @@ func (p *Tool) payloads(args map[string]any) string {
 	}
 	list := p.caps[max(0, len(p.caps)-n):]
 	var b strings.Builder
+	if len(p.tampered) > 0 {
+		fmt.Fprintf(&b, "Interceptor: %s replaced after the helper loaded. These requests are what the page did with that patch, not what a real click did: do not report them as a check of the real flow.\n", strings.Join(p.tampered, ", "))
+	}
 	fmt.Fprintf(&b, "%d requests captured (showing last %d)\n", len(p.caps), len(list))
 	if p.refused { // the origin itself is not repeated: it comes from the browser, and the agent can read the tab's address with state
 		fmt.Fprintf(&b, "(requests from another origin were refused: the tab's address must be one of those in WEBSCOPE_APP_URL, %s; restart the server after changing it)\n", strings.Join(p.origins(), ", "))
