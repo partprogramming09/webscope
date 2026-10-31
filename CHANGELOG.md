@@ -10,7 +10,7 @@ What was seen that made it necessary: on the real app a `batch` of `open /config
 
 Now, after the route changes, `open` waits until the requests the page sent have answered (about 5 s at most) and the text of the page has stayed the same for two looks of 200 ms; it takes about half a second on a screen that is already still. The answer is the same (`opened /path`, or `redirected from …`). A screen that draws without sending a request, after a timer, is not waited for.
 
-How it was checked: the Chrome test of `open` got a screen that draws `ready` when a `fetch` that takes 900 ms ends and a `batch` of `open` and `read`; it failed before (`2. read: ` empty) and passes now, 3 of 3 times; 197 tests pass. Not checked on the real app yet.
+How it was checked: the Chrome test of `open` got a screen that draws `ready` when a `fetch` that takes 900 ms ends and a `batch` of `open` and `read`; it failed before (`2. read: ` empty) and passes now, 3 of 3 times; 197 tests pass. Checked on the real app: the same `batch` (`open /configs/roles`, `shape`, `open /configs/roles/1`, `shape`) saved the list with 11 buttons (1 before) and the detail with 40 fields (0 before), and took 1926 ms for the four steps; `page parity {a, b, kinds: "field,column"}` then gave `field switch-# ×40` and the columns `Pantalla` and `Estado` only in the detail. Not checked: a screen that needs more than 5 s of requests.
 
 ## 0.6.4 — 2026-10-31
 
