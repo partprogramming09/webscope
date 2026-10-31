@@ -2,6 +2,16 @@
 
 One entry per version, newest first. Tool names are `query`, `page`, `check` and `code`. Each change says what it is, what was seen that made it necessary, how it was checked and what was not checked. A change in what a tool prints is listed as a change, because a client may read it.
 
+## 0.5.82 — 2026-10-31
+
+**`fill` and `options` take `name#2`, `name#3` to pick one of several fields with the same name.**
+
+What was seen that made it necessary: `fill` warned that two fields answered to `Subtipo`, `Servicio` or `Estado` and the only way to reach the second one was to find its id (the legacy inputs of a service have none).
+
+Now a name that answers to nothing as written is read as `name#N`: the Nth field that answers to `name`, in the order `fill` already uses (a dialog's fields first, then the page's). A name that answers to something is not changed, so a label that really ends in `#2` still works; the warning of a name that fits several fields now says `or write the name with #2 for the second`. `options` takes the same names.
+
+How it was checked: a Chrome test on the fixture, which has a «Nota» in a dialog and another in the page: `Nota` warns and fills the dialog's; `Nota#2` fills the page's (the page's field tells «outside») with no warning; `Nota#3` is not found. It failed before (`Nota#2: not found`) and the page tests pass (28 s). Not checked on the real app yet; the inputs of the legacy service without id are not checked at all (they need the legacy page).
+
 ## 0.5.81 — 2026-10-31
 
 **New `page result`: the helper keeps the whole answer of a snippet when `javascript_tool` would cut it or block it, and returns a short one.**

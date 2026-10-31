@@ -215,6 +215,13 @@
     const n = lower(name), f = fields().sort((a, b) => !!b.closest('[role=dialog],.v-dialog') - !!a.closest('[role=dialog],.v-dialog'));
     return [f.filter(e => lower(labelOf(e)) === n), f.filter(e => [e.name, e.id, e.placeholder].some(x => x && lower(x) === n)), f.filter(e => lower(labelOf(e)).includes(n))].find(l => l.length) || [];
   };
+  // pickField is the field a name asks for: the first that answers to it, or with «name#2» the second (a name that answers to nothing as written is read as name and number).
+  const pickField = name => {
+    const found = findFields(name);
+    if (found.length) return { e: found[0], found };
+    const m = /^(.*)#(\d+)$/.exec(name);
+    return { e: m ? findFields(m[1])[Number(m[2]) - 1] : undefined, found: [] };
+  };
   const idOf = e => e.id ? '#' + e.id : e.name ? '[name=' + e.name + ']' : '"' + labelOf(e) + '"';
   // Vuetify menus: v-select/v-autocomplete show the option text, keep a code in the input and render only the rows in view.
   const MENU = '.v-select,.v-autocomplete,.v-combobox';
@@ -308,7 +315,7 @@
   };
   const options = async a => {
     if (!a.field) return fail('options needs field, the label, name or id of a select or menu, e.g. options {"field":"Ciudad","match":"AAC"}');
-    const e = findFields(String(a.field))[0];
+    const e = pickField(String(a.field)).e;
     if (!e) return fail('no field «' + a.field + '». Next: page(state) lists the fields');
     const max = Number(a.max) > 0 ? Number(a.max) : 30;
     let got;
@@ -371,8 +378,8 @@
     let miss = false;
     const out = [], notes = [];
     for (const [k, v] of Object.entries(fields)) {
-      const found = findFields(k), e = found[0];
-      notes.push(found.length > 1 ? ' (warning: ' + found.length + ' fields answer to this name; filled ' + idOf(e) + ', the others are ' + found.slice(1, 4).map(idOf).join(', ') + '. Name one by its id to be sure)' : '');
+      const { e, found } = pickField(k);
+      notes.push(found.length > 1 ? ' (warning: ' + found.length + ' fields answer to this name; filled ' + idOf(e) + ', the others are ' + found.slice(1, 4).map(idOf).join(', ') + '. Name one by its id, or write the name with #2 for the second, to be sure)' : '');
       if (!e) { miss = true; out.push(k + ': not found'); continue; }
       try {
         const clicked = await setValue(e, v);
