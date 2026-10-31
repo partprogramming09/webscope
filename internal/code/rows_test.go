@@ -154,3 +154,43 @@ func TestLeftoversCountsSeveralColumnsOneLineEach(t *testing.T) {
 		t.Error("more than 10 columns must be refused")
 	}
 }
+
+// TestLeftoversSeparatesTheRowsMarkedAsDeleted: with deleted {column: value} each count says how many of those rows carry the mark of a soft delete, and the
+// warning to clean through the screen only comes when some are still live.
+func TestLeftoversSeparatesTheRowsMarkedAsDeleted(t *testing.T) {
+	c := codeSetup(t)
+	conn := writeDB(t, c)
+	for _, q := range []string{
+		"CREATE TABLE lo3 (code TEXT, estado TEXT)",
+		"INSERT INTO lo3 VALUES ('ZZ_A', 'BORRADO'), ('ZZ_B', 'ACTIVO'), ('ZZ_C', 'BORRADO'), ('real', 'BORRADO')",
+		"CREATE TABLE lo4 (code TEXT, estado TEXT)",
+		"INSERT INTO lo4 VALUES ('ZZ_A', 'BORRADO'), ('ZZ_B', 'BORRADO'), ('real', 'ACTIVO')",
+	} {
+		if _, err := conn.Exec(q); err != nil {
+			t.Fatal(err)
+		}
+	}
+	out, err := code(t, c, "leftovers", map[string]any{"table": "lo3", "column": "code", "deleted": map[string]any{"estado": "BORRADO"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out, "lo3.code starting with ZZ_: 3 rows (2 marked estado=BORRADO, 1 live)") || !strings.Contains(out, "clean them through the screen") {
+		t.Errorf("3 rows, 2 marked, 1 live, and the warning: %q", out)
+	}
+	out, err = code(t, c, "leftovers", map[string]any{"table": "lo4", "column": "code", "deleted": map[string]any{"estado": "BORRADO"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out, "2 rows (2 marked estado=BORRADO, 0 live)") || strings.Contains(out, "clean them through the screen") || !strings.Contains(out, "nothing is left to clean") {
+		t.Errorf("all marked: no warning, and it says nothing is left: %q", out)
+	}
+	out, _ = code(t, c, "leftovers", map[string]any{"table": "lo3", "column": "code"})
+	if strings.Contains(out, "marked") || !strings.Contains(out, ": 3 rows.") {
+		t.Errorf("without deleted the answer is the one it always was: %q", out)
+	}
+	for name, d := range map[string]any{"two entries": map[string]any{"estado": "A", "x": "B"}, "bad column": map[string]any{"es;tado": "BORRADO"}, "bad value": map[string]any{"estado": "a'b"}, "not a map": "estado"} {
+		if _, err := code(t, c, "leftovers", map[string]any{"table": "lo3", "column": "code", "deleted": d}); err == nil {
+			t.Errorf("%s must be refused", name)
+		}
+	}
+}

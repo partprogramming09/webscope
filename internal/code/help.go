@@ -23,7 +23,7 @@ cases {module}: the test cases of a module as a list; it runs nothing.
 legacy {path, module?}: endpoints, callers and tables of a legacy PHP folder, against the new module's.
 rows {table, a, b, children?, tenant?}: how two rows differ, no values, and the rows that point at each.
 snap {name, sql, key?, tenant?} then snap_diff {name}: what an action changed; key is a column, or several separated by commas.
-leftovers {table, column or columns[≤10], prefix?, tenant?}: how many rows of a table have a column that starts with the test prefix (ZZ_ by default): what a test left behind; a count, no values.
+leftovers {table, column or columns[≤10], prefix?, deleted? {column: value}, tenant?}: how many rows of a table have a column that starts with the test prefix (ZZ_ by default): what a test left behind; a count, no values.
 help {topic?}: this list. Topics: migration.
 Migrating a module, parity with a legacy system, user stories or test cases: code(help, {topic: "migration"}) gives the steps and the tool for each.`
 

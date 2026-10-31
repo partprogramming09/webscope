@@ -2,6 +2,16 @@
 
 One entry per version, newest first. Tool names are `query`, `page`, `check` and `code`. Each change says what it is, what was seen that made it necessary, how it was checked and what was not checked. A change in what a tool prints is listed as a change, because a client may read it.
 
+## 0.5.83 — 2026-10-31
+
+**`code leftovers` takes `deleted {column: value}` and tells the rows that carry the mark of a soft delete from the live ones.**
+
+What was seen that made it necessary: `leftovers` counted every row whose column starts with `ZZ_`, also the ones the screen had already deleted (the app marks them `estado = BORRADO` and keeps them), so a clean test still ended with «they are test rows: clean them through the screen».
+
+Now `deleted: {estado: "BORRADO"}` adds to each count how many of those rows carry that mark: `… : 3 rows (2 marked estado=BORRADO, 1 live)`. The warning to clean through the screen comes only when some are live; when all are marked it says `Every one of them is marked estado=BORRADO: nothing is left to clean.` Without `deleted` the answer is the one it always was. One entry only; the column a plain name, the value 1 to 40 letters, digits, `_` or `-`; anything else is refused.
+
+How it was checked: a new test (3 rows with 2 marked; 2 rows all marked; no `deleted`; four refused forms) failed before and passes; 190 tests pass. On the real database no `ZZ_` row of `tm_proveedores` is `BORRADO` (the one there is `ACTIVO`), so the real case was not run; only that the real counts have not changed is known. Not checked on the real database with a marked row.
+
 ## 0.5.82 — 2026-10-31
 
 **`fill` and `options` take `name#2`, `name#3` to pick one of several fields with the same name.**

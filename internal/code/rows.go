@@ -275,10 +275,12 @@ func (c *Tool) leftovers(ctx context.Context, args map[string]any) (string, erro
 		return "", fmt.Errorf("the prefix must be 1 to 20 letters, digits, _ or -")
 	}
 	like := strings.NewReplacer("_", "!_", "%", "!%").Replace(prefix) + "%"
-	var lines []string
-	left := false
-	for _, col := range cols {
-		stmt, err := db.CheckSQL(fmt.Sprintf("SELECT COUNT(*) FROM %s WHERE %s LIKE '%s' ESCAPE '!'", table, col, like))
+	markCol, markVal, err := deletedMark(args)
+	if err != nil {
+		return "", err
+	}
+	count := func(where string) (string, error) {
+		stmt, err := db.CheckSQL(fmt.Sprintf("SELECT COUNT(*) FROM %s WHERE %s", table, where))
 		if err != nil {
 			return "", err
 		}
@@ -289,12 +291,64 @@ func (c *Tool) leftovers(ctx context.Context, args map[string]any) (string, erro
 		if len(rows) != 1 || len(rows[0]) != 1 {
 			return "", errors.New("the count did not come back")
 		}
-		lines = append(lines, fmt.Sprintf("leftovers %s.%s starting with %s: %s rows", table, col, prefix, rows[0][0]))
-		left = left || rows[0][0] != "0"
+		return rows[0][0], nil
+	}
+	var lines []string
+	live := false
+	for _, col := range cols {
+		match := fmt.Sprintf("%s LIKE '%s' ESCAPE '!'", col, like)
+		n, err := count(match)
+		if err != nil {
+			return "", err
+		}
+		line := fmt.Sprintf("leftovers %s.%s starting with %s: %s rows", table, col, prefix, n)
+		if markCol == "" {
+			live = live || n != "0"
+		} else {
+			m, err := count(fmt.Sprintf("%s AND %s = '%s'", match, markCol, markVal))
+			if err != nil {
+				return "", err
+			}
+			nn, mm := atoiOr0(n), atoiOr0(m)
+			line += fmt.Sprintf(" (%s marked %s=%s, %d live)", m, markCol, markVal, nn-mm)
+			live = live || nn-mm > 0
+		}
+		lines = append(lines, line)
 	}
 	out := strings.Join(lines, "\n")
-	if left {
+	switch {
+	case live:
 		out += ". They are test rows: clean them through the screen, not through the database, and say in the report that they were left."
+	case markCol != "":
+		out += ". Every one of them is marked " + markCol + "=" + markVal + ": nothing is left to clean."
 	}
 	return out, nil
+}
+
+var deletedValue = regexp.MustCompile(`^[A-Za-z0-9_-]{1,40}$`)
+
+// deletedMark is the one {column: value} of deleted, the mark of a soft delete, or two empty texts when there is none.
+func deletedMark(args map[string]any) (col, val string, err error) {
+	raw, ok := args["deleted"]
+	if !ok {
+		return "", "", nil
+	}
+	m, ok := raw.(map[string]any)
+	if !ok || len(m) != 1 {
+		return "", "", errors.New("deleted is {column: value}, one entry: the mark of a soft delete, such as {estado: BORRADO}")
+	}
+	for col, v := range m {
+		val = fmt.Sprint(v)
+		if !db.ValidName.MatchString(col) || !deletedValue.MatchString(val) {
+			return "", "", errors.New("deleted: the column must be a plain name and the value 1 to 40 letters, digits, _ or -")
+		}
+		return col, val, nil
+	}
+	return "", "", nil
+}
+
+// atoiOr0 is the number in s, or 0.
+func atoiOr0(s string) int {
+	n, _ := strconv.Atoi(s)
+	return n
 }
