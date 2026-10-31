@@ -2,6 +2,18 @@
 
 One entry per version, newest first. Tool names are `query`, `page`, `check` and `code`. Each change says what it is, what was seen that made it necessary, how it was checked and what was not checked. A change in what a tool prints is listed as a change, because a client may read it.
 
+## 0.7.3 — 2026-10-31
+
+**`simulate` takes a body, `fill` takes a CSS selector, and `code` calls with no tenant use the only tenant there is.**
+
+What was seen that made it necessary: the colleague's list still had three open items. `simulate` could set only a status, so an error screen that shows the server's validation text could not be tested. `fill` had no way to name a field with no label, name or id (legacy inputs such as `data-variacion`). `code rows` with no tenant failed on the real project with `Table '…' doesn't exist; the call named no tenant`, although the central database holds one tenant.
+
+What changed. `simulate {match, status, body?}`: `body` is a text or an object (sent as JSON), 2000 characters at most, for a simulated `fetch` and a simulated XMLHttpRequest; without it the short default message stays. `fill {"css:<selector>": value}` fills the first visible field that the selector matches (`not found` when none does, or the selector is not valid). When a `code` call names no tenant, fails because a table is missing (MySQL 1146 or SQLite `no such table`) and the central database (Hyn Tenancy) has exactly one tenant, the call runs again with that tenant and the answer starts with `(tenant X: the only one in the central database, used because the call named none)`; with two tenants or more nothing is guessed and the error is the same as before. A tenant that is named is always used as given. The new arguments are optional.
+
+How it was checked: three new tests that fail without the change (the Chrome test of `simulate` bodies, with fetch, XMLHttpRequest, the default and a body over the limit; the `css:` cases added to the Chrome test of `find`; the one-tenant and two-tenant tests of `rows`); 204 tests pass with `-race`, `go vet` and `gofmt`. On the real app (`demo.localhost`): `code rows {table: app_tipo_tarifario, a: 1, b: 2}` with no tenant answered with the tenant line and the comparison; `fill {"css:#input-56": "ZZ_css"}` put the text in the search field and the next list request carried `search=ZZ_css`; `simulate` of `/api/sales-tariffs` with status 422 and a body made the screen show that body's message in its alert, and `payloads` showed `422 … {"message":"Prueba webscope cuerpo",…}`.
+
+What was not checked: `css:` on the legacy; `simulate` with a body over a request that the app sends through something other than `fetch` or XMLHttpRequest; the tenant default with a central database that uses its own `WEBSCOPE_TENANT_QUERY`.
+
 ## 0.7.2 — 2026-10-31
 
 **`page click` tells a repeated confirmation apart from a click that did nothing, and says when the button it pressed is disabled.**

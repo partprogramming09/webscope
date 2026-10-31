@@ -75,11 +75,11 @@ state|find|read|fill|click|press|simulate|open|options|audit|shape|batch: return
   state {max?}: URL, title, console, headings, fields, buttons (dialog first, side menu last, disabled ones marked), alerts, errors, dialog, tables.
   find {text|regex, max?}: only the fields, buttons and texts that match, each with a ref (f3 a field, b5 a button, by place on the screen as it is now) and the card or dialog it is in. fill takes a ref as the name ({f3:"x"}) and click as {ref:"b5"}: for fields that share a name and have no id.
   read {selector?, max?}: text of the first match, or of the page.
-  fill {fields:{label:value}} or {label:value}: by label, name, placeholder or id (a name that fits several fields fills the first, a dialog's before the page's, and the answer warns and lists the others: use an id, or the name with #2 for the second, #3…); true/false for checkboxes; select by option text; Vuetify menus too (long lists are scrolled); a rich-text editor (contenteditable) by its aria-label or id, or as "editor" when it has neither.
+  fill {fields:{label:value}} or {label:value}: by label, name, placeholder or id (a name that fits several fields fills the first, a dialog's before the page's, and the answer warns and lists the others: use an id, or the name with #2 for the second, #3…; a ref from find such as f3; or "css:" and a selector, such as "css:[data-variacion=3]", for fields with no label or id); true/false for checkboxes; select by option text; Vuetify menus too (long lists are scrolled); a rich-text editor (contenteditable) by its aria-label or id, or as "editor" when it has neither.
   click {text}, {selector} or {ref} (a text that belongs to no button is found as a plain element); press {key, selector?}: both then say what happened (requests with status, new alerts, errors and console errors, URL change, or "No effect seen"; with WEBSCOPE_LOG set, a status 0 or 5xx adds the last error lines of the backend log).
   audit {selector?}: what the page shows about itself, no reference screen: unrendered text ({{x}}, undefined, null, NaN, [object Object]), controls covered by another element, fields with no label, repeated labels, buttons with no name. A hint to look at, not a verdict; selector limits it to a part of the screen.
   shape {name, selector?}: saves what the screen, or only the part a CSS selector names, offers under a name (field labels and kinds, buttons, table columns, tabs, headings; no values) for parity.
-  simulate {match, status, times?, method?}: the next requests whose URL contains match answer HTTP status 400-599 without reaching the app; {clear:true} cancels.
+  simulate {match, status, times?, method?, body?}: the next requests whose URL contains match answer HTTP status 400-599 without reaching the app, with body (a text or an object, 2000 characters at most) or a short default message; {clear:true} cancels.
 result {offset?}: javascript_tool shows only 1000 characters of what a snippet returns and blocks a text that has an = together with a ; or an & (a=1&b=2, a=1;b=2, id=a1 y; z). When an answer is longer, or has them, the snippet returns a short one that ends «page(result) gives all» (query values hidden, ; and & changed) and the helper keeps the whole answer: result gives it, in parts (answered here, no snippet).
 payloads {limit?, match?, body?, index?}: the requests the page sent and their answers, each numbered #N with the milliseconds it took (answered here, no snippet); match is a regex over "METHOD address", body a regex over what was sent and got, and both together keep the requests that fit (limit applies to those); index N gives that one request with its sent and got up to 8000 bytes.
 parity {a, b, kinds?}: compares two saved shapes (say the old and the new screen) and shows only what one has and the other lacks (a repeated name once, with ×N), and fields whose kind changed (answered here, no snippet); kinds "field,column" limits it, e.g. to leave out the step buttons of a wizard. parity {req_a, req_b, map?} compares instead the latest captured request that matches each ("POST save.php": the method, then a part of the address): status and the field names sent and received, never values; map {name in a: name in b} renames a's names first.
@@ -334,6 +334,10 @@ func (p *Tool) handler() http.Handler {
 		}
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(status)
+		if b := r.URL.Query().Get("body"); b != "" && len(b) <= 2000 {
+			io.WriteString(w, b)
+			return
+		}
 		io.WriteString(w, `{"message":"simulated by webscope"}`)
 	}))
 	return mux

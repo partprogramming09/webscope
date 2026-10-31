@@ -21,7 +21,7 @@ map_back {query, offset?}: from a screen (its module, or a part of its route pat
 flows {module}: screens, endpoints and tables together, as evidence for user stories.
 cases {module}: the test cases of a module as a list; it runs nothing.
 legacy {path, module?, rejects?}: endpoints, callers and tables of a legacy PHP folder, against the new module's; rejects:true adds the lines of each file that stop a request (throw, die, exit, a 4xx/5xx status).
-rows {table, a, b, key?, children?, tenant?}: how two rows differ, no values. a and b are {column: value} or an id (column key, id by default). children {table: column} counts the rows that point at each and, when the counts are equal, names the columns whose values differ.
+rows {table, a, b, key?, children?, tenant?}: how two rows differ, no values. With no tenant, a table missing from the central database and exactly one tenant there: that tenant is used and the answer says so. a and b are {column: value} or an id (column key, id by default). children {table: column} counts the rows that point at each and, when the counts are equal, names the columns whose values differ.
 snap {name, sql, key?, tenant?} then snap_diff {name}: what an action changed; key is a column, or several separated by commas.
 leftovers {table, column or columns[≤10], prefix?, deleted? {column: value}, ids?, tenant?}: how many rows of a table have a column that starts with the test prefix (ZZ_ by default): what a test left behind; a count, no values. ids is the key column: it lists the live rows' keys (50 at most) and a DELETE for the user to run by hand in a demo tenant; webscope never runs it.
 help {topic?}: this list. Topics: migration.

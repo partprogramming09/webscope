@@ -94,6 +94,18 @@ func slicesCompact(s []string) []string {
 
 func (c *Tool) run(ctx context.Context, in input.Args) (string, error) {
 	out, err := c.do(ctx, in)
+	if err != nil && input.Str(in.Args, "tenant") == "" && (strings.Contains(err.Error(), "Error 1146") || strings.Contains(err.Error(), "no such table")) {
+		if only := c.Src.OnlyTenant(ctx); only != "" { // one tenant in the central database: it is the one the call meant
+			retry := map[string]any{"tenant": only}
+			for k, v := range in.Args {
+				retry[k] = v
+			}
+			retry["tenant"] = only
+			if out2, err2 := c.do(ctx, input.Args{Action: in.Action, Args: retry}); err2 == nil {
+				return "(tenant " + only + ": the only one in the central database, used because the call named none)\n" + out2, nil
+			}
+		}
+	}
 	if err != nil {
 		msg := err.Error()
 		if strings.Contains(msg, "pass tenant to read the one of the app") { // withTenantHint said it: add the host names that the central database knows

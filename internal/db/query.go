@@ -103,6 +103,35 @@ func (s *Source) TenantNames(ctx context.Context) []string {
 	return names
 }
 
+// OnlyTenant is the host name of the tenant when the central database (Hyn Tenancy) has exactly one, or "" when it has none, several, or cannot tell.
+func (s *Source) OnlyTenant(ctx context.Context) string {
+	if s.TenantQuery != "" && s.TenantQuery != HynTenantQuery {
+		return ""
+	}
+	db, _, err := s.conn("")
+	if err != nil {
+		return ""
+	}
+	ctx, cancel := context.WithTimeout(ctx, QueryTimeout)
+	defer cancel()
+	rows, err := db.QueryContext(ctx, "SELECT fqdn FROM hostnames WHERE deleted_at IS NULL ORDER BY id LIMIT 2")
+	if err != nil {
+		return ""
+	}
+	defer rows.Close()
+	var names []string
+	for rows.Next() {
+		var n string
+		if rows.Scan(&n) == nil {
+			names = append(names, n)
+		}
+	}
+	if len(names) != 1 {
+		return ""
+	}
+	return names[0]
+}
+
 // TenantHint is what to add to the error of a call with no tenant when a table is missing: the tables of the app are in the tenant's database, with the host
 // names of the central one. It is "" with a tenant and for any other error.
 func (s *Source) TenantHint(ctx context.Context, msg, tenant string) string {

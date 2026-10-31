@@ -60,8 +60,8 @@
     const req = typeof b === 'string' ? b : b == null ? '' : kind(b);
     const sim = takeSim(m, u);
     if (sim) {
-      report({ m, u, s: sim.status, req, res: SIM_BODY });
-      return new Response(SIM_BODY, { status: sim.status, headers: { 'Content-Type': 'application/json' } });
+      report({ m, u, s: sim.status, req, res: sim.body || SIM_BODY });
+      return new Response(sim.body || SIM_BODY, { status: sim.status, headers: { 'Content-Type': 'application/json' } });
     }
     let res;
     const t0 = performance.now();
@@ -88,7 +88,7 @@
       c.req = typeof body === 'string' ? body : body == null ? '' : kind(body);
       const sim = takeSim(c.m, c.u);
       if (sim) {
-        reopen(c.m, cfg.base + '/sim?t=' + cfg.t + '&status=' + sim.status);
+        reopen(c.m, cfg.base + '/sim?t=' + cfg.t + '&status=' + sim.status + (sim.body ? '&body=' + encodeURIComponent(sim.body) : ''));
         x.withCredentials = false;
       }
       const t0 = performance.now();
@@ -247,6 +247,12 @@
   };
   // pickField is the field a name asks for: the first that answers to it, or with «name#2» the second (a name that answers to nothing as written is read as name and number).
   const pickField = name => {
+    const css = /^css:(.+)$/.exec(name);
+    if (css) { // a CSS selector (an attribute such as [data-variacion="3"]): the fields it matches, first one filled
+      let hit = [];
+      try { hit = all(css[1]).filter(x => x.matches(FIELDS)); } catch (x) { /* a bad selector matches nothing */ }
+      return { e: hit[0], found: hit };
+    }
     const found = findFields(name);
     if (found.length) return { e: found[0], found };
     const r = /^f(\d+)$/.exec(name);
@@ -548,8 +554,10 @@
     const status = Number(a.status);
     if (!a.match || !(status >= 400 && status <= 599)) return fail('simulate needs match (part of the URL) and status 400-599');
     const times = Number(a.times) || 1;
-    sims.push({ match: String(a.match), status, times, method: a.method ? String(a.method).toUpperCase() : '' });
-    return 'the next ' + times + ' request(s) with "' + a.match + '" answer ' + status;
+    const body = a.body == null ? '' : typeof a.body === 'string' ? a.body : JSON.stringify(a.body);
+    if (body.length > 2000) return fail('simulate body is ' + body.length + ' characters, 2000 at most');
+    sims.push({ match: String(a.match), status, times, method: a.method ? String(a.method).toUpperCase() : '', body });
+    return 'the next ' + times + ' request(s) with "' + a.match + '" answer ' + status + (body ? ' with the body given' : '');
   };
 
   // ---- facts the page itself shows about its own screen, with no reference screen to compare to

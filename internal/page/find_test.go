@@ -29,6 +29,9 @@ func TestFindListsOnlyWhatMatchesAndRefsPickElements(t *testing.T) {
 		{"click", map[string]any{"ref": "b999"}},
 		{"fill", map[string]any{"fields": map[string]any{"Origen": "PAIS 250"}}},
 		{"find", map[string]any{"text": "pais 250"}},
+		{"fill", map[string]any{"fields": map[string]any{"css:[name=c]": "por css"}}},
+		{"find", map[string]any{"text": "por css"}},
+		{"fill", map[string]any{"fields": map[string]any{"css:[name=nada]": "x", "css:((": "y"}}},
 	} {
 		sn, err := snippet(s.action, s.args)
 		if err != nil {
@@ -60,5 +63,11 @@ func TestFindListsOnlyWhatMatchesAndRefsPickElements(t *testing.T) {
 	}
 	if !strings.Contains(out[10], `Origen #mi = "C250" shows "PAIS 250"`) {
 		t.Errorf("a menu field is found by the option text it draws, not only by its code: %q", out[10])
+	}
+	if !strings.Contains(out[11], "css:[name=c]: ok") || !strings.Contains(out[12], `Código #c = "por css"`) {
+		t.Errorf("fill takes a CSS selector for a field with no label to name: %q, %q", out[11], out[12])
+	}
+	if !strings.Contains(out[13], "css:[name=nada]: not found") || !strings.Contains(out[13], "css:((: not found") {
+		t.Errorf("a selector that matches no field, or is not one, is not found: %q", out[13])
 	}
 }
