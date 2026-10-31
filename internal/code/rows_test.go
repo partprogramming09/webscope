@@ -194,3 +194,50 @@ func TestLeftoversSeparatesTheRowsMarkedAsDeleted(t *testing.T) {
 		}
 	}
 }
+
+// TestRowsTakesIdsAndComparesTheChildRows: a and b may be ids (the column is key, id by default), a child column that does not exist lists the real ones,
+// and children of equal count also name the columns whose values differ, never a value.
+func TestRowsTakesIdsAndComparesTheChildRows(t *testing.T) {
+	c := codeSetup(t)
+	conn := writeDB(t, c)
+	for _, q := range []string{
+		"CREATE TABLE par (id TEXT, name TEXT, note TEXT)",
+		"INSERT INTO par VALUES ('1', 'uno', 'x'), ('2', 'dos', 'x'), ('3', 'tres', 'x')",
+		"CREATE TABLE kid (id TEXT, par_id TEXT, qty TEXT, label TEXT)",
+		"INSERT INTO kid VALUES ('k1', '1', '10', 'a'), ('k2', '1', '20', 'b'), ('k3', '2', '10', 'a'), ('k4', '2', '30', 'b'), ('k5', '3', '10', 'a')",
+	} {
+		if _, err := conn.Exec(q); err != nil {
+			t.Fatal(err)
+		}
+	}
+	out, err := code(t, c, "rows", map[string]any{"table": "par", "a": "1", "b": float64(2), "children": map[string]any{"kid": "par_id"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{"a (id=1) vs b (id=2)", "kid: a 2, b 2; values differ in: qty"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("lacks %q: %q", want, out)
+		}
+	}
+	if strings.Contains(out, "label") && strings.Contains(out, "values differ in: label") || strings.Contains(out, "30") {
+		t.Errorf("label is the same on both sides and no value is shown: %q", out)
+	}
+	out, err = code(t, c, "rows", map[string]any{"table": "par", "a": "uno", "b": "dos", "key": "name"})
+	if err != nil || !strings.Contains(out, "a (name=uno) vs b (name=dos)") {
+		t.Errorf("key names the column that the ids are in: %q, %v", out, err)
+	}
+	out, _ = code(t, c, "rows", map[string]any{"table": "par", "a": "1", "b": "3", "children": map[string]any{"kid": "par_id"}})
+	if !strings.Contains(out, "kid: a 2, b 1 ≠") || strings.Contains(out, "values differ") {
+		t.Errorf("different counts are shown as before, with no comparison: %q", out)
+	}
+	if _, err := code(t, c, "rows", map[string]any{"table": "par", "a": "1", "b": "2", "children": map[string]any{"kid": "no_such"}}); err == nil || !strings.Contains(err.Error(), "columns of kid: id, par_id, qty, label") {
+		t.Errorf("a child column that does not exist lists the columns: %v", err)
+	}
+	if _, err := code(t, c, "rows", map[string]any{"table": "par", "a": "1", "b": "2", "key": "na;me"}); err == nil {
+		t.Error("an invalid key must be refused")
+	}
+	out, err = code(t, c, "rows", map[string]any{"table": "par", "a": map[string]any{"id": "1"}, "b": map[string]any{"id": "2"}})
+	if err != nil || !strings.Contains(out, "a (id=1) vs b (id=2)") {
+		t.Errorf("the maps still work: %q, %v", out, err)
+	}
+}

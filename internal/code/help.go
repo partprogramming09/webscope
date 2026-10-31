@@ -21,7 +21,7 @@ map_back {query, offset?}: from a screen or API address to endpoint, controller,
 flows {module}: screens, endpoints and tables together, as evidence for user stories.
 cases {module}: the test cases of a module as a list; it runs nothing.
 legacy {path, module?}: endpoints, callers and tables of a legacy PHP folder, against the new module's.
-rows {table, a, b, children?, tenant?}: how two rows differ, no values, and the rows that point at each.
+rows {table, a, b, key?, children?, tenant?}: how two rows differ, no values. a and b are {column: value} or an id (column key, id by default). children {table: column} counts the rows that point at each and, when the counts are equal, names the columns whose values differ.
 snap {name, sql, key?, tenant?} then snap_diff {name}: what an action changed; key is a column, or several separated by commas.
 leftovers {table, column or columns[≤10], prefix?, deleted? {column: value}, tenant?}: how many rows of a table have a column that starts with the test prefix (ZZ_ by default): what a test left behind; a count, no values.
 help {topic?}: this list. Topics: migration.

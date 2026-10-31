@@ -22,7 +22,18 @@ var identifier = regexp.MustCompile(`^[A-Za-z0-9_]{1,64}$`)
 func whereOf(args map[string]any, name string) (cols []string, vals []any, err error) {
 	m, _ := args[name].(map[string]any)
 	if len(m) == 0 {
-		return nil, nil, fmt.Errorf("rows needs %s: {column: value} that picks one row", name)
+		switch v := args[name].(type) { // an id: the row whose key column (id by default) has it
+		case string, float64:
+			key := input.Str(args, "key")
+			if key == "" {
+				key = "id"
+			}
+			if !identifier.MatchString(key) {
+				return nil, nil, fmt.Errorf("key: %q is not a column name (letters, digits and _)", echo(key))
+			}
+			return []string{key}, []any{fmt.Sprint(v)}, nil
+		}
+		return nil, nil, fmt.Errorf("rows needs %s: {column: value} that picks one row, or an id (the column is key, id by default)", name)
 	}
 	for k := range m {
 		if !identifier.MatchString(k) {
@@ -213,22 +224,98 @@ func (c *Tool) rows(ctx context.Context, args map[string]any) (string, error) {
 		sort.Strings(tables)
 		for _, t := range tables {
 			col := fmt.Sprint(children[t])
-			na, err := c.countRows(ctx, tenant, t, col, aVals[0])
+			ka, names, err := c.childValues(ctx, tenant, t, col, aVals[0])
 			if err != nil {
 				return "", fmt.Errorf("children %s: %w", echo(t), err)
 			}
-			nb, err := c.countRows(ctx, tenant, t, col, bVals[0])
+			kb, _, err := c.childValues(ctx, tenant, t, col, bVals[0])
 			if err != nil {
 				return "", fmt.Errorf("children %s: %w", echo(t), err)
 			}
-			l := fmt.Sprintf("%s: a %d, b %d", t, na, nb)
-			if na != nb {
+			l := fmt.Sprintf("%s: a %d, b %d", t, ka.n, kb.n)
+			if ka.n != kb.n {
 				l += " ≠"
+			} else if ka.n > 0 && ka.n <= maxChildRows {
+				var differ []string
+				for i, name := range names {
+					if i > 0 && name != col && !slices.Equal(ka.cols[i], kb.cols[i]) { // the first column is the id of each child row: it always differs
+						differ = append(differ, name)
+					}
+				}
+				if len(differ) > 0 {
+					l += "; values differ in: " + strings.Join(differ, ", ")
+				} else {
+					l += "; the same values in every column"
+				}
 			}
 			out = append(out, l)
 		}
 	}
 	return capOut(strings.Join(out, "\n")), nil
+}
+
+// maxChildRows is how many child rows of each side rows reads to compare their columns.
+const maxChildRows = 200
+
+// childSet is the number of rows of a child table that point at one row and, if there are few, the values of each column, sorted (never shown).
+type childSet struct {
+	n    int
+	cols [][]string
+}
+
+// childValues reads the rows of table whose col is val: how many, and the sorted values of each column when there are at most maxChildRows. A column that
+// does not exist is refused with the columns the table has.
+func (c *Tool) childValues(ctx context.Context, tenant, table, col string, val any) (childSet, []string, error) {
+	var set childSet
+	var names []string
+	err := c.readTx(ctx, tenant, "SELECT * FROM `"+table+"` WHERE `"+col+"` = ? LIMIT "+strconv.Itoa(maxChildRows+1), []any{val}, func(rows *sql.Rows) error {
+		var err error
+		if names, err = rows.Columns(); err != nil {
+			return err
+		}
+		set.cols = make([][]string, len(names))
+		for rows.Next() {
+			cells := make([]sql.NullString, len(names))
+			ptrs := make([]any, len(names))
+			for i := range cells {
+				ptrs[i] = &cells[i]
+			}
+			if err := rows.Scan(ptrs...); err != nil {
+				return err
+			}
+			set.n++
+			for i, cell := range cells {
+				v := "\x00NULL"
+				if cell.Valid {
+					v = cell.String
+				}
+				set.cols[i] = append(set.cols[i], v)
+			}
+		}
+		return rows.Err()
+	})
+	if err != nil {
+		if cols, e2 := c.columnNames(ctx, tenant, table); e2 == nil && !slices.Contains(cols, col) {
+			return set, nil, fmt.Errorf("%q is not a column; columns of %s: %s", echo(col), table, strings.Join(cols, ", "))
+		}
+		return set, nil, err
+	}
+	if set.n > maxChildRows {
+		set.n = maxChildRows + 1
+	}
+	for i := range set.cols {
+		slices.Sort(set.cols[i])
+	}
+	return set, names, nil
+}
+
+// columnNames are the columns of a table, read with a SELECT that returns no row.
+func (c *Tool) columnNames(ctx context.Context, tenant, table string) (cols []string, err error) {
+	err = c.readTx(ctx, tenant, "SELECT * FROM `"+table+"` LIMIT 0", nil, func(rows *sql.Rows) (e error) {
+		cols, e = rows.Columns()
+		return e
+	})
+	return cols, err
 }
 
 var leftoverPrefix = regexp.MustCompile(`^[A-Za-z0-9_-]{1,20}$`)

@@ -2,6 +2,16 @@
 
 One entry per version, newest first. Tool names are `query`, `page`, `check` and `code`. Each change says what it is, what was seen that made it necessary, how it was checked and what was not checked. A change in what a tool prints is listed as a change, because a client may read it.
 
+## 0.5.85 — 2026-10-31
+
+**`code rows` takes ids for `a` and `b`, names the columns of the child rows that differ, and lists the real columns when a child column is wrong.**
+
+What was seen that made it necessary: `rows` refused `a: 1, b: 2` (it needed `{id: 1}`), `children` only counted the rows that point at each (`a 0, b 5`), and a child column that did not exist answered with the database's `Unknown column 'id_tarifario'`, with no list of the real ones.
+
+Now `a` and `b` may be an id (text or number); the column is `key`, `id` by default (`rows {table, a: 1, b: 2}`, or `key: "name"`). The `{column: value}` maps work as before. For each table of `children`, when both sides have the same number of rows (at most 200), the line adds `; values differ in: qty` (the columns whose sorted values differ, the first column of the child table, its id, left out) or `; the same values in every column`; with different counts it is `a 2, b 1 ≠` as before. A child column that does not exist is refused with `"no_such" is not a column; columns of kid: id, par_id, qty, label`. No value is printed.
+
+How it was checked: a new test (two parents with two children each, one column of values different, one equal; ids as text and as a number; `key`; different counts; a wrong child column; an invalid key; the maps) failed before (`rows needs a: {column: value} that picks one row`) and passes; the first version compared the id column of the child rows too and was fixed before this commit. 192 tests pass. Checked on the real database: `rows` of `app_tarifario` 1 and 2 with `children {app_tarifario_servicios: id_row_tarifario}` gave `a 0, b 5 ≠` with the old code; the new code was not run there yet.
+
 ## 0.5.84 — 2026-10-31
 
 **`page parity {req_a, req_b, map}` says how many entries of the map found their name, and names the ones that did not.**
