@@ -2,6 +2,16 @@
 
 One entry per version, newest first. Tool names are `query`, `page`, `check` and `code`. Each change says what it is, what was seen that made it necessary, how it was checked and what was not checked. A change in what a tool prints is listed as a change, because a client may read it.
 
+## 0.5.86 — 2026-10-31
+
+**`page download` gives the headers and the row count of a text sheet (an HTML table or lines with tabs, semicolons or commas), also in Latin-1.**
+
+What was seen that made it necessary: a user's legacy `.xls` was answered with only `type text` and no headers, so an export could not be checked against the new one. A first test showed that the same file written in Latin-1 (what a legacy export writes) was not even called text: `type unknown`.
+
+Now a file with no NUL byte and under 2% control characters is text (UTF-8 or Latin-1). For it, `download wait` reads up to 512 KB and, if it has a `<table`, gives the cells of the first row as `headers:` and the number of rows (`<tr`); if not, it takes the first line and splits it by tab, else by `;`, else by `,`. The answer adds `headers: Cotización, Cliente` and `rows: 3 (header included)`; each header is cut at 40 characters, 30 at most; no value is printed. A text with no table and no separator (one line of prose) gets no headers.
+
+How it was checked: a new test with an HTML `.xls` in Latin-1, tab text, `;` text and plain text failed before (no headers; `type unknown`) and passes: the headers and the count come back, a cell value never shows, and the plain text is given no headers. The download tests pass (13 s); 194 tests pass. Not checked on the real legacy `.xls`. Known limit: a text of prose with commas in its first line is read as a CSV and its words as headers.
+
 ## 0.5.85 — 2026-10-31
 
 **`code rows` takes ids for `a` and `b`, names the columns of the child rows that differ, and lists the real columns when a child column is wrong.**

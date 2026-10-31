@@ -120,3 +120,42 @@ func TestDownloadReportListsTheFilesTheSessionSawAppearSoTheUserCanDeleteThem(t 
 		t.Errorf("a cell value shows: %q", out)
 	}
 }
+
+// TestDownloadReadsTheHeadersOfATextSheet: a legacy .xls is often an HTML table or a text with tabs or semicolons, in Latin-1: its header names and row count
+// come back, never a value.
+func TestDownloadReadsTheHeadersOfATextSheet(t *testing.T) {
+	latin1 := func(s string) []byte {
+		var b []byte
+		for _, r := range s {
+			b = append(b, byte(r))
+		}
+		return b
+	}
+	for name, c := range map[string]struct {
+		body  []byte
+		heads string
+		rows  string
+	}{
+		"html.xls":  {latin1("<html><table><tr><th>Cotización</th><th>Cliente</th></tr><tr><td>secret-value</td><td>otro</td></tr><tr><td>x</td><td>y</td></tr></table></html>"), "headers: Cotización, Cliente", "rows: 3 (header included)"},
+		"tabs.xls":  {[]byte("Fecha\tTotal\nsecret-value\t5\n"), "headers: Fecha, Total", "rows: 2 (header included)"},
+		"semi.csv":  {[]byte("Código;Nombre;Valor\nsecret-value;a;1\nz;b;2\n"), "headers: Código, Nombre, Valor", "rows: 3 (header included)"},
+		"plain.txt": {[]byte("una sola línea sin separadores"), "", ""},
+	} {
+		p, dir := dlTool(t)
+		askPage(t, p, "download", map[string]any{"arm": true})
+		os.WriteFile(filepath.Join(dir, name), c.body, 0o600)
+		out, err := askPage(t, p, "download", map[string]any{"wait": true, "seconds": 3})
+		if err != nil || !strings.Contains(out, "type text") {
+			t.Fatalf("%s: %q %v", name, out, err)
+		}
+		if strings.Contains(out, "secret-value") {
+			t.Errorf("%s: a cell value shows: %q", name, out)
+		}
+		if c.heads != "" && (!strings.Contains(out, c.heads) || !strings.Contains(out, c.rows)) {
+			t.Errorf("%s lacks %q and %q: %q", name, c.heads, c.rows, out)
+		}
+		if c.heads == "" && strings.Contains(out, "headers:") {
+			t.Errorf("%s has no table: it must not invent headers: %q", name, out)
+		}
+	}
+}

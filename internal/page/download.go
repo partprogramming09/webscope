@@ -5,9 +5,11 @@ import (
 	"bytes"
 	"encoding/xml"
 	"fmt"
+	htmlpkg "html"
 	"io"
 	"os"
 	"path/filepath"
+	"regexp"
 	"slices"
 	"sort"
 	"strings"
@@ -128,6 +130,83 @@ func (p *Tool) download(args map[string]any) (string, error) {
 	return "", fmt.Errorf("no file appeared in %s within %d s, so nothing was downloaded: do not report the export as downloaded. Next: check that the real click ran and that WEBSCOPE_DOWNLOADS is the folder Chrome saves to", dir, secs)
 }
 
+// isText is true for bytes that are text in UTF-8 or in Latin-1 (no NUL, and almost no control characters).
+func isText(head []byte) bool {
+	if bytes.Contains(head, []byte{0}) {
+		return false
+	}
+	if utf8.Valid(head) {
+		return true
+	}
+	ctl := 0
+	for _, b := range head {
+		if b < 0x20 && b != '\t' && b != '\n' && b != '\r' {
+			ctl++
+		}
+	}
+	return ctl*50 < len(head)+1 // under 2% control characters: Latin-1 text, as a legacy export writes it
+}
+
+var (
+	htmlRow  = regexp.MustCompile(`(?is)<tr[\s>].*?(?:</tr>|$)`)
+	htmlCell = regexp.MustCompile(`(?is)<t[hd][\s>].*?(?:</t[hd]>|$)`)
+	htmlTag  = regexp.MustCompile(`(?s)<[^>]*>`)
+)
+
+// textSheet gives the header names and the row count of a text that is a table: an HTML table (what a legacy .xls often is) or lines with tabs, semicolons or
+// commas. It is "" for any other text, and never holds a value.
+func textSheet(path string) string {
+	raw, err := os.ReadFile(path)
+	if err != nil || len(raw) == 0 {
+		return ""
+	}
+	if len(raw) > 512<<10 {
+		raw = raw[:512<<10]
+	}
+	text := string(raw)
+	if !utf8.Valid(raw) { // Latin-1: each byte is a character
+		r := make([]rune, len(raw))
+		for i, b := range raw {
+			r[i] = rune(b)
+		}
+		text = string(r)
+	}
+	var heads []string
+	rows := 0
+	if strings.Contains(strings.ToLower(text), "<table") {
+		all := htmlRow.FindAllString(text, -1)
+		rows = len(all)
+		if rows > 0 {
+			for _, c := range htmlCell.FindAllString(all[0], -1) {
+				heads = append(heads, strings.TrimSpace(htmlpkg.UnescapeString(htmlTag.ReplaceAllString(c, ""))))
+			}
+		}
+	} else {
+		lines := strings.FieldsFunc(text, func(r rune) bool { return r == '\n' || r == '\r' })
+		rows = len(lines)
+		if rows > 0 {
+			for _, sep := range []string{"\t", ";", ","} {
+				if strings.Contains(lines[0], sep) {
+					for _, h := range strings.Split(lines[0], sep) {
+						heads = append(heads, strings.Trim(strings.TrimSpace(h), `"`))
+					}
+					break
+				}
+			}
+		}
+	}
+	if len(heads) == 0 {
+		return ""
+	}
+	if len(heads) > maxHeaders {
+		heads = heads[:maxHeaders]
+	}
+	for i := range heads {
+		heads[i] = clip(heads[i], 40)
+	}
+	return fmt.Sprintf("\nheaders: %s\nrows: %d (header included)", strings.Join(heads, ", "), rows)
+}
+
 // describeFile reports name, size, type by its first bytes and time, and for an xlsx the header names and the row count, never a value.
 func (p *Tool) describeFile(path string, m fileMark) (string, error) {
 	head := make([]byte, 512)
@@ -148,8 +227,8 @@ func (p *Tool) describeFile(path string, m fileMark) (string, error) {
 		}
 	case bytes.HasPrefix(head, []byte("%PDF")):
 		kind = "pdf"
-	case utf8.Valid(head) && !bytes.Contains(head, []byte{0}):
-		kind = "text"
+	case isText(head):
+		kind, extra = "text", textSheet(path)
 	}
 	p.mu.Lock()
 	p.dlLast = filepath.Base(path)
