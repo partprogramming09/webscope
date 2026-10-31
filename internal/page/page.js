@@ -437,9 +437,11 @@
   // Runs `f` (a click or a key) and appends what it caused: the requests with their status, the new alerts and field errors, a URL change, or that nothing changed.
   const withEffect = async f => {
     const url = () => location.pathname + location.search + location.hash;
-    const before = { seq, cseq, alerts: new Set(texts(ALERTS)), errors: new Set(texts(ERRORS)), url: url(), text: norm(document.body.innerText) };
+    const titleOf = d => (d ? norm(d.innerText.split('\n')[0]) : ''); // the first line of a dialog: its question
+    const before = { dlg: titleOf(all('[role=dialog],dialog[open]')[0]), seq, cseq, alerts: new Set(texts(ALERTS)), errors: new Set(texts(ERRORS)), url: url(), text: norm(document.body.innerText) };
     let mark = '';
     try { const m = await realFetch(cfg.base + '/logmark?t=' + cfg.t); mark = m.ok ? await m.text() : ''; } catch (e) { /* no listener: no log lines */ }
+    lastClick = { el: document.body, inDialog: false };
     const r = f();
     if (/^Failed:/.test(r)) return r;
     await sleep(400);
@@ -458,11 +460,14 @@
     const nc = clog.filter(e => e.i >= before.cseq).map(e => e.t);
     if (nc.length) out.push('New console errors: ' + nc.join(' | '));
     if (url() !== before.url) out.push('URL: ' + showAddress(new URL(before.url, location.origin)) + ' → ' + showAddress(location));
-    if (out.length === 1) out.push(norm(document.body.innerText) === before.text ? 'No effect seen: no request, no new alert, the screen text is the same.' : 'The screen text changed; no request, alert or URL change.');
+    const dialog1 = all('[role=dialog],dialog[open]')[0];
+    if (!reqs.length && before.dlg && dialog1 && lastClick.inDialog && !lastClick.el.isConnected && titleOf(dialog1) === before.dlg) out.push('The dialog closed and one with the same question is open again: the click went through and the app asks a second time (a repeated confirmation); it did not fail. Next: click the same button again.');
+    else if (out.length === 1) out.push(norm(document.body.innerText) === before.text ? 'No effect seen: no request, no new alert, the screen text is the same.' : 'The screen text changed; no request, alert or URL change.');
     if (wrongOrigin()) out.push('Warning: ' + wrongOrigin());
     return out.join('\n');
   };
 
+  let lastClick = { el: document.body, inDialog: false }; // the element clickOnce pressed last and whether it sat in a dialog
   const clickOnce = a => {
     let els;
     if (a.ref) {
@@ -479,8 +484,9 @@
       if (els.length > 1) return fail(els.length + ' elements match "' + a.text + '": ' + els.slice(0, 6).map(describe).join(', ') + '. Next: click with a selector.');
     } else return fail('click needs text, selector or ref');
     if (!els.length) return fail('nothing to click for "' + (a.selector || a.text) + '". Buttons here: ' + [...new Set(all(CLICKABLE).filter(textOf).map((e, i) => ({ t: textOf(e), i, r: rank(e) })).sort((x, y) => x.r - y.r || x.i - y.i).map(x => x.t))].slice(0, 12).join(' | '));
+    lastClick = { el: els[0], inDialog: !!els[0].closest('[role=dialog],dialog[open]') };
     els[0].click();
-    return 'clicked ' + describe(els[0]);
+    return 'clicked ' + describe(els[0]) + (disabled(els[0]) ? ' (it is disabled: the app ignores a click on it)' : '');
   };
 
   const pressOnce = a => {

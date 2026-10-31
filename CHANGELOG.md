@@ -2,6 +2,18 @@
 
 One entry per version, newest first. Tool names are `query`, `page`, `check` and `code`. Each change says what it is, what was seen that made it necessary, how it was checked and what was not checked. A change in what a tool prints is listed as a change, because a client may read it.
 
+## 0.7.2 — 2026-10-31
+
+**`page click` tells a repeated confirmation apart from a click that did nothing, and says when the button it pressed is disabled.**
+
+What was seen that made it necessary: the colleague's report that the first click on «Si, Eliminar» did not delete. Reproduced on the real app 6 of 6 times (tariff configurations, rows `ZZ_` created and deleted through the screen): the first click sends no request, the second sends `DELETE`. Cause, read in the front (`TariffConfigurationList.vue`): the data table opens its own delete modal and, on confirm, emits `deleteItem`, whose handler opens a second `ConfirmationModal` with the same question; a `MutationObserver` showed the first dialog closing and another opening. It is not a failure of the click, the delay between calls, or the events sent (a full pointer sequence behaved the same). `click` answered «The screen text changed; no request, alert or URL change», which reads as a click that did not work.
+
+Now, when the button pressed sat in a dialog, is gone from the page after the click, no request was sent and a dialog with the same first line (its question) is open, the answer says: the dialog closed and one with the same question is open again, a repeated confirmation, it did not fail. Two first versions of this check failed on the real app and were corrected: one needed the answer to hold nothing else (an unrelated console error broke it) and one compared the whole text (the two modals differ: the first has an extra message). A click on a disabled button now ends with «(it is disabled: the app ignores a click on it)».
+
+How it was checked: the Chrome test of a dialog that is replaced by another with the same question (the first has an extra paragraph and an unrelated rejected promise happens during the click) fails without the change and passes; a click on a disabled button and one that changes nothing keep their answers; 202 tests pass with `-race`. On the real app: the first «Si, Eliminar» printed the repeated-confirmation text (with an `M_ID` console error in the same answer), the second sent `DELETE …/608`. `check POST /api/configs/tariff-types` against the created row (id 598) gave 4 of 4 fields equal; all rows created for these checks are `BORRADO`.
+
+What was not checked: other screens with a repeated confirmation; a dialog that reopens after a timer; the legacy (its session was at the login).
+
 ## 0.7.1 — 2026-10-31
 
 **`page find` also searches the option text that a menu field draws.**
