@@ -10,7 +10,7 @@ What was seen that made it necessary: in 0.5.73 the first page of `map_back tari
 
 Now lines are dropped from the end, one at a time, always from the kind (service or model) that has more lines left, so the two stay in proportion. The closing line is the same (`(… N more services and models not shown: narrow the query)`).
 
-How it was checked: the test of 0.5.73 (80 services, 80 models, 100 endpoints) got a new assertion that failed (`0 services, 58 models`) and passes now (services are at least a third of the models). 187 tests pass. Not checked on the real project yet.
+How it was checked: the test of 0.5.73 (80 services, 80 models, 100 endpoints) got a new assertion that failed (`0 services, 58 models`) and passes now (services are at least a third of the models). 187 tests pass. Checked on the real project: `map_back tariff` showed 13 endpoints, all 17 services and 22 models, and `27 more services and models not shown` (0.5.73 showed 0 services and 29 models dropped).
 
 ## 0.5.79 — 2026-10-31
 
@@ -20,7 +20,7 @@ What was seen that made it necessary: to use `check` the names of the sent field
 
 Now a call with `sent` and `table` but no `map` answers `no map given. Sent fields: …. Columns of <table>: …. Same name on both sides: …. Next: check {sent, table, where, map {sent field: column}}; where {column: value} picks the row.` (the names of the top-level fields of the body that was captured, the columns read with a read-only `SELECT … LIMIT 0`, and the names they share; no value). A call with a `map` and no `where` still fails as before; so do a missing `sent`, an invalid table name and a body that is not JSON or was cut.
 
-How it was checked: a new test fails before (`where and map need at least one entry each`) and passes: with and without `where`, the three lists, no value shown, and the refusals that stay. The test that expected the error for «no map» now expects the list. 187 tests pass. Not checked on the real database yet.
+How it was checked: a new test fails before (`where and map need at least one entry each`) and passes: with and without `where`, the three lists, no value shown, and the refusals that stay. The test that expected the error for «no map» now expects the list. 187 tests pass. Checked on the real MySQL (tenant `demo.localhost`, table `app_tarifario`): with a captured `POST` of four fields it answered the four sent names, the 11 columns and the two that are the same (`ciudad_origen`, `estado`), with no value. The request was one answered by `simulate` with a 503, which the listing does not mind (the comparison does).
 
 ## 0.5.78 — 2026-10-31
 
@@ -30,7 +30,7 @@ What was seen that made it necessary: every `page` action costs two calls (the s
 
 Now `batch` takes `steps: [{action, args}, …]` (the actions that return a snippet: `state`, `read`, `fill`, `click`, `press`, `simulate`, `open`, `options`, `audit`, `shape`) and returns ONE snippet that runs them in order. The answer lists them numbered (`1. fill: Nombre: ok`, `2. read: Ana`). A step that fails (an answer that starts with `Failed:`) stops the rest and says how many were not run, unless `keepGoing: true`. No step starts after 38 s; the answer then says how many are left to run in another call. `payloads`, `parity`, `download` and `verify` are answered by the server and are refused as steps, with the ones that are allowed. A batch inside a batch is refused. `page help` grows by about 450 bytes; `tools/list` does not change.
 
-How it was checked: a Go test for the refusals and for the arguments travelling as JSON (a `</script>` in a value), and a Chrome test (fill and read in one batch; a failed click that stops the next step; the same with `keepGoing`); both failed before and pass now; 186 tests pass. Not checked on the real app yet. The 38 s limit was not run against a real long step.
+How it was checked: a Go test for the refusals and for the arguments travelling as JSON (a `</script>` in a value), and a Chrome test (fill and read in one batch; a failed click that stops the next step; the same with `keepGoing`); both failed before and pass now; 186 tests pass. Checked on the real app: one `javascript_tool` run did `fill` of `Tarifario`, `click` of `Nueva Tarifa`, `options` of `Proveedor` (3 suppliers) and an `options` of a field that does not exist, whose failure stopped the last step (`state`) with `(1 steps not run after the failure; keepGoing:true runs them anyway)`. Not checked: the 38 s limit against a real long step; `keepGoing` on the real app.
 
 ## 0.5.77 — 2026-10-31
 
@@ -40,7 +40,7 @@ What was seen that made it necessary: on the real form every call to `options` t
 
 Now a list that was seen to its end is kept for 2 minutes, by field, and the next question on that field (any `match`, any `max`) is answered from it without opening the menu; the answer ends with `(read N s ago: fresh:true reads it again)`, and `fresh: true` reads the menu again. Only an unfiltered list is kept (a search typed into an autocomplete filters its list: that one is not). The scroll loop no longer waits a fixed 70 ms once it is scrolling (it already waits for the page to draw) and makes its step longer, up to 90% of the rows drawn, when half of the rows read were already known; a step with no row in common still goes back and shrinks.
 
-How it was checked: in the Chrome test, a second question on the 2000-row list gives the 111 rows of `R19`, says how old the list is and leaves the menu opened once (a counter of presses on the field); with `fresh: true` it opens it a second time and gives the same rows. The earlier steps of that test that need the menu use `fresh: true`. The test ran 3 of 3 times; 184 tests pass. Not checked on the real form yet.
+How it was checked: in the Chrome test, a second question on the 2000-row list gives the 111 rows of `R19`, says how old the list is and leaves the menu opened once (a counter of presses on the field); with `fresh: true` it opens it a second time and gives the same rows. The earlier steps of that test that need the menu use `fresh: true`. The test ran 3 of 3 times; 184 tests pass. Checked on the real form (856 cities): the first read, `match "AAC"`, took 8.0 s (15.7 s in 0.5.76) and answered `AACHEN`; then `match "ZHENG"` and `max 2000` answered in 1 ms from memory (`ZHENGJIANG | ZHENGZHOU`; 856 rows, `read 5 s ago`); `fresh: true` read the 856 rows again in 4.4 s. Not checked: a list longer than 400 steps; a list that changes inside the 2 minutes without `fresh`.
 
 ## 0.5.76 — 2026-10-31
 
