@@ -36,7 +36,7 @@ Now, if any request counted by the helper has not answered when `click` or `pres
 
 How it was checked: 2 tests that failed before: in a real Chrome, a click whose request answers in time does not say pending, and with a request left counted by the helper a click with no effect says `Still pending` and not `No effect seen`; and the summary counts 4xx, 5xx and status 0 over all the captures and is absent without failures. The suite with `-race` passes.
 
-Not checked: a really slow request on a screen (the test Chrome waits for the network, so it was simulated with a request that never ends); the 2.5 s is the helper's, not configurable.
+Checked later on the real screen of acme (2026-10-31): a button added in memory called a local server that answers after 8 s; `click` answered `Still pending: 1 request(s)…` and not `No effect seen`. The request ended as status 0 (a `no-cors` fetch has an opaque answer, whose status is 0), so `payloads` counted it as «no answer»: a `no-cors` request is shown as a failure. Not checked: a slow request of the app itself; the 2.5 s is the helper's, not configurable.
 
 ## 0.5.59 — 2026-10-31
 
