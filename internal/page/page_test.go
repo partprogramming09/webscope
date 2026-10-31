@@ -363,7 +363,7 @@ const OPTS=Array.from({length:300},(_,i)=>'PAIS '+String(i).padStart(3,'0'))
 mf.onmousedown=()=>{oc.innerHTML='<div class=v-overlay--active><div class=v-list style="height:120px;overflow:auto;position:relative"><div style="height:6000px"></div></div></div>'
  const l=oc.querySelector('.v-list');const draw=()=>{const k=Math.floor(l.scrollTop/20);[...l.querySelectorAll('.v-list-item')].forEach(e=>e.remove())
   for(let i=k;i<k+6&&i<300;i++){const d=document.createElement('div');d.className='v-list-item';d.style.cssText='position:absolute;height:20px;top:'+i*20+'px';d.textContent=OPTS[i];d.onclick=()=>{msel.textContent=OPTS[i];mi.value='C'+i};l.appendChild(d)}}
- draw();setInterval(()=>{if(l.isConnected)draw()},20)} // the list stays after a choice, like a menu on its way out
+ if(window.__startScrolled)l.scrollTop=2400;draw();setInterval(()=>{if(l.isConnected)draw()},20)} // the list stays after a choice, like a menu on its way out
 // an autocomplete answers a search after a delay and shows two lines per row
 ai.oninput=()=>setTimeout(()=>{oc.innerHTML='<div class=v-overlay--active><div class=v-list></div></div>';for(const t of ['Demo','Otro']){const q=ai.value.toLowerCase();if(!q.includes(t.toLowerCase())&&!t.toLowerCase().includes(q))continue;const d=document.createElement('div');d.className='v-list-item';d.innerHTML=t+' <small>+57300</small>';d.onclick=()=>{ai.value=t;oc.innerHTML='';cl.textContent='cliente '+t;const f=ai.closest('.v-field');f.querySelectorAll('.v-autocomplete__selection').forEach(x=>x.remove());f.insertAdjacentHTML('beforeend','<div class=v-autocomplete__selection><span class=v-autocomplete__selection-text>'+t+'</span></div>')};oc.querySelector('.v-list').appendChild(d)}},1500)
 // a strict autocomplete: the server answers only when the search is part of the name, so the whole text of an option finds nothing
@@ -1620,7 +1620,12 @@ func TestOptionsListsTheChoicesOfASelectAndOfAMenu(t *testing.T) {
 		{"field": "Nada"},
 		{},
 		{"field": "Origen", "match": "STALE"},
+		{"field": "Origen", "max": float64(5), "scrolled": true},
+		{"field": "Tipo", "max": float64(1)},
 	} {
+		if a["scrolled"] == true { // a menu that opens already scrolled down
+			steps = append(steps, "(window.__startScrolled=true,'scrolled')")
+		}
 		if a["match"] == "STALE" { // a menu of another field that is still leaving, earlier in the page than the new one
 			steps = append(steps, `(document.body.insertAdjacentHTML('afterbegin','<div class=v-overlay-container><div class=v-list><div class=v-list-item>STALE row</div></div></div>'),'stale')`)
 		}
@@ -1673,5 +1678,14 @@ func TestOptionsListsTheChoicesOfASelectAndOfAMenu(t *testing.T) {
 	}
 	if out[8] != "Origen: (none)" {
 		t.Errorf("rows of a menu that is leaving must not be listed as the options of the new one: %q", out[8])
+	}
+	if !strings.HasPrefix(out[10], "Origen: PAIS 000 | PAIS 001 | PAIS 002 | PAIS 003 | PAIS 004") {
+		t.Errorf("a menu that opens scrolled down must still give its first rows: %q", out[10])
+	}
+	if regexp.MustCompile(`… \d+ more`).MatchString(out[10]) || !strings.Contains(out[10], "may have more") {
+		t.Errorf("a list that was not seen to its end must not claim a count of the rows left: %q", out[10])
+	}
+	if out[11] != "Tipo: uno (… 1 more: narrow with match, or raise max)" {
+		t.Errorf("a native select knows how many options are left: %q", out[11])
 	}
 }

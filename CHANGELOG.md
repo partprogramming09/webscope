@@ -2,6 +2,16 @@
 
 One entry per version, newest first. Tool names are `query`, `page`, `check` and `code`. Each change says what it is, what was seen that made it necessary, how it was checked and what was not checked. A change in what a tool prints is listed as a change, because a client may read it.
 
+## 0.5.72 — 2026-10-31
+
+**`page options` starts at the top of a menu and says «may have more» when it did not see the whole list.**
+
+What was seen that made it necessary: on the real form (582 cities) `options` with `max 5` and no `match` answered `ZHENGZHOU … ZHUHAI` (the menu opened scrolled down) and, with `max 1` on a short list, the count of `more` was only the rows seen so far, so on a long list it would understate the total.
+
+Now `options` scrolls the newest menu to its top before it reads, and the `(… N more …)` count is given only when the list was seen to its end (a native select, or a menu scrolled to the bottom). When it stopped because it had `max` rows and had not seen the end, the answer says `(… may have more: narrow with match, or raise max)`. `fill` is not changed.
+
+How it was checked: the Chrome test of `options` got a menu that opens scrolled to row 120 and a native select with `max 1`; against the old `page.js` it failed with `PAIS 120 … (… 1 more …)` and with the new one it passes (`PAIS 000 … 004`, `may have more`; `Tipo: uno (… 1 more …)`). The 183 tests pass. Checked on the real screen: `fill` of `Proveedor` with a tariff name right after `fill` and after `options` of `Tarifario` answered `no option … among 3 seen` both times: the rows of the other menu did not mix into `fill` there, so it was left as it is. Not checked: a list that needs more than 400 scroll steps (it stops there; the answer then says `may have more`).
+
 ## 0.5.71 — 2026-10-31
 
 **`page options` lists only the rows of the newest menu.**
