@@ -12,7 +12,7 @@ Now a capture whose answer type is `opaque` or `opaqueredirect` is shown as `opa
 
 How it was checked: a test in a real Chrome that failed before (a `fetch` with `redirect: 'manual'` to a path that answers 302 was shown as `no answer`) and passes after; `go vet` and the suite with `-race` pass (exit code checked); `node --check page.js` is clean.
 
-Not checked: on the real screen of acme.
+Checked on the real screen of acme (2026-10-31, with the reconnected MCP server): a `fetch` with `redirect: 'manual'` to a local server that answers 302 showed `GET /go opaque (no-cors: its status cannot be read)` in `click` and in `payloads`, with no `Problems:` line.
 
 ## 0.5.63 — 2026-10-31
 
