@@ -234,8 +234,56 @@ func (c *Tool) run(ctx context.Context, in checkArgs) (string, error) {
 	return out, nil
 }
 
+// listNames answers a call that has a request and a table but no map: the names of the fields that were sent and of the columns of the table, and the
+// names they share, never a value.
+func (c *Tool) listNames(ctx context.Context, in checkArgs) (string, error) {
+	if !db.ValidName.MatchString(in.Table) {
+		return "", fmt.Errorf("the name %q is not valid: letters, digits and _ only", in.Table)
+	}
+	req, _, err := c.find(c.Page.Captures(), in.Sent, 0)
+	if err != nil {
+		return "", err
+	}
+	body, err := object(req.Req, "", "sent body")
+	if err != nil {
+		return "", err
+	}
+	conn, driver, err := c.Src.Open(ctx, in.Tenant)
+	if err != nil {
+		return "", err
+	}
+	ctx, cancel := context.WithTimeout(ctx, db.QueryTimeout)
+	defer cancel()
+	tx, err := conn.BeginTx(ctx, &sql.TxOptions{ReadOnly: driver == "mysql"})
+	if err != nil {
+		return "", err
+	}
+	defer tx.Rollback()
+	rows, err := tx.QueryContext(ctx, "SELECT * FROM `"+in.Table+"` LIMIT 0")
+	if err != nil {
+		return "", err
+	}
+	defer rows.Close()
+	cols, err := rows.Columns()
+	if err != nil {
+		return "", err
+	}
+	fields := slices.Sorted(maps.Keys(body))
+	var same []string
+	for _, f := range fields {
+		if slices.Contains(cols, f) {
+			same = append(same, f)
+		}
+	}
+	return fmt.Sprintf("no map given. Sent fields: %s. Columns of %s: %s. Same name on both sides: %s. Next: check {sent, table, where, map {sent field: column}}; where {column: value} picks the row.",
+		strings.Join(fields, ", "), in.Table, strings.Join(cols, ", "), strings.Join(same, ", ")), nil
+}
+
 // compare answers: a line, the counts, and a row only for each field that differs, each value cut at 40 characters. A row of the table is never shown whole.
 func (c *Tool) compare(ctx context.Context, in checkArgs) (string, error) {
+	if len(in.Map) == 0 && in.Sent != "" && in.Table != "" {
+		return c.listNames(ctx, in)
+	}
 	names := []string{in.Table}
 	for k := range in.Where {
 		names = append(names, k)

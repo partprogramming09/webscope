@@ -210,8 +210,11 @@ func TestCheckRefusesNamesThatAreNotColumns(t *testing.T) {
 	if _, err := run(t, c, bad); err == nil || !strings.Contains(err.Error(), "not valid") {
 		t.Errorf("column in where: %v", err)
 	}
-	if out, err := run(t, c, checkArgs{Sent: "POST /api/quotes", Table: "quotes", Where: map[string]string{"id": "059"}}); err == nil {
-		t.Errorf("without a map there is nothing to compare: %q", out)
+	if out, err := run(t, c, checkArgs{Sent: "POST /api/quotes", Table: "quotes", Where: map[string]string{"id": "059"}}); err != nil || !strings.HasPrefix(out, "no map given") {
+		t.Errorf("without a map nothing is compared: it lists the names: %q, %v", out, err)
+	}
+	if out, err := run(t, c, checkArgs{Sent: "POST /api/quotes", Table: "quotes", Map: map[string]string{"notes": "notes"}}); err == nil {
+		t.Errorf("with a map and no where there is no row to compare: %q", out)
 	}
 }
 
@@ -304,6 +307,35 @@ func TestCheckTellsThePageToolWhatItFoundSoVerifyCanUseItAsEvidence(t *testing.T
 	}
 	if n.differ == 0 {
 		t.Errorf("a row that differs must be noted with differences: %+v", n)
+	}
+}
+
+// TestCheckWithoutAMapListsTheSentFieldsAndTheColumnsInsteadOfFailing: the names on both sides and the ones they share, never a value.
+func TestCheckWithoutAMapListsTheSentFieldsAndTheColumnsInsteadOfFailing(t *testing.T) {
+	c, p := checkSetup(t)
+	sent(p, "POST", "/api/quotes", `{"sub_type":"AI","office":"MIA","notes":"secret note","code":"007","nested":{"a":1}}`, "")
+	for name, a := range map[string]checkArgs{
+		"with where":    {Sent: "POST /api/quotes", Table: "quotes", Where: textMap{"id": "059"}},
+		"without where": {Sent: "POST /api/quotes", Table: "quotes"},
+	} {
+		out, err := run(t, c, a)
+		if err != nil {
+			t.Fatalf("%s: %v", name, err)
+		}
+		for _, want := range []string{"no map", "Sent fields: code, nested, notes, office, sub_type", "Columns of quotes: id, sub, office, notes, code, note2", "Same name on both sides: code, notes, office", "map {sent field: column}"} {
+			if !strings.Contains(out, want) {
+				t.Errorf("%s lacks %q: %q", name, want, out)
+			}
+		}
+		if strings.Contains(out, "secret note") || strings.Contains(out, "007") {
+			t.Errorf("%s shows a value: %q", name, out)
+		}
+	}
+	if _, err := run(t, c, checkArgs{Table: "quotes"}); err == nil {
+		t.Error("without sent there is nothing to list: it must still fail")
+	}
+	if _, err := run(t, c, checkArgs{Sent: "POST /api/quotes", Table: "no;table"}); err == nil {
+		t.Error("an invalid table name must still be refused")
 	}
 }
 

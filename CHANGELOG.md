@@ -2,6 +2,16 @@
 
 One entry per version, newest first. Tool names are `query`, `page`, `check` and `code`. Each change says what it is, what was seen that made it necessary, how it was checked and what was not checked. A change in what a tool prints is listed as a change, because a client may read it.
 
+## 0.5.79 — 2026-10-31
+
+**`check` without `map` lists the fields that were sent and the columns of the table, instead of failing.**
+
+What was seen that made it necessary: to use `check` the names of the sent fields and of the columns had to be known first, and a call without `map` answered `where and map need at least one entry each`, which cost a call to `payloads` and another to `code fields` before the real one.
+
+Now a call with `sent` and `table` but no `map` answers `no map given. Sent fields: …. Columns of <table>: …. Same name on both sides: …. Next: check {sent, table, where, map {sent field: column}}; where {column: value} picks the row.` (the names of the top-level fields of the body that was captured, the columns read with a read-only `SELECT … LIMIT 0`, and the names they share; no value). A call with a `map` and no `where` still fails as before; so do a missing `sent`, an invalid table name and a body that is not JSON or was cut.
+
+How it was checked: a new test fails before (`where and map need at least one entry each`) and passes: with and without `where`, the three lists, no value shown, and the refusals that stay. The test that expected the error for «no map» now expects the list. 187 tests pass. Not checked on the real database yet.
+
 ## 0.5.78 — 2026-10-31
 
 **New `page batch {steps, keepGoing?}`: several snippet actions in one snippet, so one `javascript_tool` call replaces two calls per action.**
