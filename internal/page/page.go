@@ -42,12 +42,32 @@ const (
 )
 
 // snippetActions are the actions answered with a JavaScript snippet for javascript_tool. Anything else is answered here.
-var snippetActions = []string{"state", "read", "fill", "click", "press", "simulate", "open", "options", "audit", "shape"}
+var snippetActions = []string{"state", "read", "fill", "click", "press", "simulate", "open", "options", "audit", "shape", "batch"}
+
+// stepActions are the snippet actions that a batch can run, one after the other, in the same snippet.
+var stepActions = slices.DeleteFunc(slices.Clone(snippetActions), func(a string) bool { return a == "batch" })
+
+// checkBatch refuses the steps of a batch that no snippet can run: none, a step that is not an object, an action the server answers by itself, or a nested batch.
+func checkBatch(args map[string]any) error {
+	steps, _ := args["steps"].([]any)
+	if len(steps) == 0 {
+		return errors.New("batch needs steps: [{action, args?}, …]")
+	}
+	for i, s := range steps {
+		step, _ := s.(map[string]any)
+		name, _ := step["action"].(string)
+		if !slices.Contains(stepActions, name) {
+			return fmt.Errorf("batch step %d: %q cannot run in a snippet (%s)", i+1, name, strings.Join(stepActions, ", "))
+		}
+	}
+	return nil
+}
 
 const helpText = `page(action, args?) tests a screen in the user's Chrome through Claude in Chrome.
 Needs a tab of the app (WEBSCOPE_APP_URL) with the session already started: open one with tabs_create_mcp and navigate to a screen; if it shows the login, stop and ask the user for the session (never type credentials).
 load: one line of JavaScript; run it with javascript_tool again after every navigation, reload or /mcp: the helper is lost and the port changes (needs WEBSCOPE_APP_URL).
-state|read|fill|click|press|simulate|open|options|audit|shape: return a snippet; run it with javascript_tool, its value is the answer.
+state|read|fill|click|press|simulate|open|options|audit|shape|batch: return a snippet; run it with javascript_tool, its value is the answer.
+  batch {steps:[{action, args?}, …], keepGoing?}: several of those actions in ONE snippet (one call instead of two per action); the answers come back numbered, a failed step stops the rest unless keepGoing, and no step starts after 38 s (javascript_tool gives about 45 s). payloads, parity, download and verify are answered by the server: call them apart.
   options {field, match?, max?, fresh?}: the choices of a select or Vuetify menu, without choosing one: all of a native select, and of a menu the rows seen while it scrolls (an autocomplete is searched with match); only those that contain match, up to max (30). A menu read to its end is remembered 2 minutes (the answer says how old it is): fresh:true reads it again.
   open {path}: goes to a router path from code map (/pricing/sales-tariffs) through the app's own router, which adds the tenant prefix; a path that no route owns is refused with the similar ones, and a redirect (login) is told. Never type the URL of a screen by hand.
   state {max?}: URL, title, console, headings, fields, buttons (dialog first, side menu last, disabled ones marked), alerts, errors, dialog, tables.
@@ -140,10 +160,15 @@ func originOf(appURL string) string {
 // snippet is the JavaScript for action. The arguments enter as JSON (json.Marshal escapes <, > and line separators), never as text.
 func snippet(action string, args map[string]any) (string, error) {
 	if !slices.Contains(snippetActions, action) {
-		return "", fmt.Errorf("unknown action %q (load, state, read, fill, click, press, payloads, simulate, audit, shape, open, options, parity, download, verify or help)", action)
+		return "", fmt.Errorf("unknown action %q (load, state, read, fill, click, press, payloads, simulate, audit, shape, open, options, batch, parity, download, verify or help)", action)
 	}
 	if args == nil {
 		args = map[string]any{}
+	}
+	if action == "batch" {
+		if err := checkBatch(args); err != nil {
+			return "", err
+		}
 	}
 	raw, err := json.Marshal(args)
 	if err != nil {

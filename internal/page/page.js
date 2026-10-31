@@ -318,6 +318,22 @@
     return a.field + ': ' + (list.slice(0, max).join(' | ') || '(none)') + tail + old;
   };
 
+  // batch runs the steps one after the other and gives their answers numbered; a failed step stops the rest unless keepGoing, and none starts after 38 s (javascript_tool gives about 45 s).
+  const batch = async a => {
+    const steps = Array.isArray(a.steps) ? a.steps : [];
+    if (!steps.length) return fail('batch needs steps: [{action, args?}, …]');
+    const start = Date.now(), out = [];
+    for (let i = 0; i < steps.length; i++) {
+      const s = steps[i] || {}, f = s.action !== 'batch' && window.__ws[s.action];
+      if (Date.now() - start > 38000) { out.push('(' + (steps.length - i) + ' steps not run: a snippet has about 45 s; run them in another call)'); break; }
+      if (!f) { out.push((i + 1) + '. ' + s.action + ': Failed: not an action to run in a snippet'); break; }
+      const r = String(await f(s.args || {}));
+      out.push((i + 1) + '. ' + s.action + ': ' + r);
+      if (/^Failed:/.test(r) && a.keepGoing !== true && i + 1 < steps.length) { out.push('(' + (steps.length - i - 1) + ' steps not run after the failure; keepGoing:true runs them anyway)'); break; }
+    }
+    return out.join('\n');
+  };
+
   const setValue = async (e, v) => {
     e.focus();
     if (e.closest(MENU)) return choose(e, v);
@@ -569,5 +585,5 @@
   }, 400);
   const marked = r => { const l = patched(); return l.length ? MARK(l) + '\n' + r : r; };
   const wrap = f => a => { try { const r = f(a || {}); return r && r.then ? r.then(marked, e => fail(e.message)) : marked(r); } catch (e) { return fail(e.message); } };
-  window.__ws = { state: wrap(state), read: wrap(read), fill: wrap(fill), click: wrap(click), press: wrap(press), simulate: wrap(simulate), open: wrap(open), options: wrap(options), audit: wrap(audit), shape: wrap(shape) };
+  window.__ws = { state: wrap(state), read: wrap(read), fill: wrap(fill), click: wrap(click), press: wrap(press), simulate: wrap(simulate), open: wrap(open), options: wrap(options), batch: wrap(batch), audit: wrap(audit), shape: wrap(shape) };
 })();

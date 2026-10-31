@@ -2,6 +2,16 @@
 
 One entry per version, newest first. Tool names are `query`, `page`, `check` and `code`. Each change says what it is, what was seen that made it necessary, how it was checked and what was not checked. A change in what a tool prints is listed as a change, because a client may read it.
 
+## 0.5.78 — 2026-10-31
+
+**New `page batch {steps, keepGoing?}`: several snippet actions in one snippet, so one `javascript_tool` call replaces two calls per action.**
+
+What was seen that made it necessary: every `page` action costs two calls (the server gives a snippet, `javascript_tool` runs it), and a run of `javascript_tool` is cut at about 45 s (it expired when six `options` calls were chained by hand).
+
+Now `batch` takes `steps: [{action, args}, …]` (the actions that return a snippet: `state`, `read`, `fill`, `click`, `press`, `simulate`, `open`, `options`, `audit`, `shape`) and returns ONE snippet that runs them in order. The answer lists them numbered (`1. fill: Nombre: ok`, `2. read: Ana`). A step that fails (an answer that starts with `Failed:`) stops the rest and says how many were not run, unless `keepGoing: true`. No step starts after 38 s; the answer then says how many are left to run in another call. `payloads`, `parity`, `download` and `verify` are answered by the server and are refused as steps, with the ones that are allowed. A batch inside a batch is refused. `page help` grows by about 450 bytes; `tools/list` does not change.
+
+How it was checked: a Go test for the refusals and for the arguments travelling as JSON (a `</script>` in a value), and a Chrome test (fill and read in one batch; a failed click that stops the next step; the same with `keepGoing`); both failed before and pass now; 186 tests pass. Not checked on the real app yet. The 38 s limit was not run against a real long step.
+
 ## 0.5.77 — 2026-10-31
 
 **`page options` remembers a menu that was read to its end for 2 minutes, and scrolls faster.**
