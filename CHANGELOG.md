@@ -2,6 +2,18 @@
 
 One entry per version, newest first. Tool names are `query`, `page`, `check` and `code`. Each change says what it is, what was seen that made it necessary, how it was checked and what was not checked. A change in what a tool prints is listed as a change, because a client may read it.
 
+## 0.5.56 — 2026-10-31
+
+**`page state`: the URL line carries the names of the query parameters, never their values; a 404 screen is said on the first line; over the limit it drops whole lines instead of cutting one.**
+
+What was seen that made it necessary: in the session of 0.5.53, the answer of `state` reached the agent as `URL…(+1043 chars)`: the output of the Chrome tool was cut at the line that began with the URL. A URL with a query string can hold a token, and it is what output filters cut. And with a limit, `state` could stop in the middle of a string (`Title: A title that is long enough to be cut in the m…(+81 chars)`).
+
+Now the line is `URL: /path ?name1,name2 #hash` (the hash is kept without its own query), a title or a heading (`h1` to `h3`) that says 404 or not found puts `Looks like a 404 page of the app … Next: open the right address.` first, and when the answer goes over `max` (3000 characters by default) the lines that do not fit are dropped and the last line says how many (`(… N more lines not shown: raise max)`). A line longer than `max` that is alone is still cut. The format stays text, one fact per line: the plan said JSON with fixed fields, but the text is shorter in tokens and the agents' flows already read it; what cut the answers was the URL and the limit, and both are fixed here.
+
+How it was checked: 2 tests in a real Chrome that failed before (the URL line showed `token=SECRET9`, a 404 title was not said, and the limit cut the title in the middle) and pass after, with a normal screen not called a 404; the rest of the suite with `-race` still passes.
+
+Not checked: that the Chrome tool no longer cuts the answer (the cause was inferred from where it cut; it needs one run on the real screen); `payloads` still shows the whole address of each request, with its query, because the agent needs it to tell requests apart; a hash that holds a router query (`#/p?id=3`) loses it; a legitimate screen that says «not found» in a heading is called a 404.
+
 ## 0.5.55 — 2026-10-31
 
 **`page verify {claim, evidence}`: a table of the claims of a report, with a state that the server decides.**

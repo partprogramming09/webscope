@@ -161,8 +161,19 @@
 
   const wrongOrigin = () => cfg.o && !cfg.o.split(',').includes(location.origin) ? 'This tab is ' + location.origin + ' but WEBSCOPE_APP_URL is ' + cfg.o.split(',').join(', ') + ': captures and simulate are refused. Open the app at that address.' : '';
 
+  const NOT_FOUND = /(^|\D)404(\D|$)|not found|no (se )?encontrad[ao]|p[aá]gina no (existe|encontrada)/i;
+  // lines keeps whole lines up to max characters and says how many it left out, instead of cutting one in the middle.
+  const lines = (l, max) => {
+    let n = 0, i = 0;
+    while (i < l.length && n + l[i].length + 1 <= max) n += l[i++].length + 1;
+    if (i === 0) return clip(l[0], max);
+    return i === l.length ? l.join('\n') : l.slice(0, i).join('\n') + '\n(… ' + (l.length - i) + ' more lines not shown: raise max)';
+  };
+
   const state = a => {
-    const out = ['URL: ' + location.pathname + location.search + location.hash, 'Title: ' + norm(document.title)];
+    const names = [...new Set([...new URLSearchParams(location.search).keys()])].join(',');
+    const out = ['URL: ' + location.pathname + (names ? ' ?' + names : '') + (location.hash ? ' ' + location.hash.split('?')[0] : ''), 'Title: ' + norm(document.title)]; // parameter names only: a value can be a token, and a URL with a query is what output filters cut
+    if (NOT_FOUND.test([document.title, ...texts('h1,h2,h3')].join(' '))) out.unshift('Looks like a 404 page of the app (the title or a heading says not found): this is not the screen asked for. Next: open the right address.');
     if (wrongOrigin()) out.push('Warning: ' + wrongOrigin());
     const h = texts('h1,h2,h3').slice(0, 8);
     if (clog.length) out.push('Console (last ' + Math.min(5, clog.length) + ' of ' + clog.length + ' since the helper loaded): ' + clog.slice(-5).map(e => e.t).join(' | '));
@@ -184,7 +195,7 @@
     if (tables.length) out.push('Tables (rows): ' + tables.join(', '));
     const foot = texts('.v-data-table-footer__info,.v-pagination__info');
     if (foot.length) out.push('Footer: ' + foot.join(' | '));
-    return clip(out.join('\n'), a.max || CAP);
+    return lines(out, a.max || CAP);
   };
 
   const read = a => {
