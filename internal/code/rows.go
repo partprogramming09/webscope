@@ -340,6 +340,9 @@ func leftoverColumns(args map[string]any) ([]string, error) {
 
 const maxLeftoverColumns = 10
 
+// maxLeftoverIDs is how many ids leftovers lists with ids.
+const maxLeftoverIDs = 50
+
 // leftovers counts the rows of table whose column (or each of columns) starts with prefix (ZZ_ by default), the mark of the rows a test wrote: a count, never a value.
 func (c *Tool) leftovers(ctx context.Context, args map[string]any) (string, error) {
 	table, prefix := input.Str(args, "table"), input.Str(args, "prefix")
@@ -403,6 +406,35 @@ func (c *Tool) leftovers(ctx context.Context, args map[string]any) (string, erro
 		lines = append(lines, line)
 	}
 	out := strings.Join(lines, "\n")
+	if idCol := input.Str(args, "ids"); idCol != "" && live {
+		if !db.ValidName.MatchString(idCol) {
+			return "", errors.New("ids is the name of the key column: letters, digits and _ only")
+		}
+		var any []string
+		for _, col := range cols {
+			any = append(any, fmt.Sprintf("%s LIKE '%s' ESCAPE '!'", col, like))
+		}
+		where := "(" + strings.Join(any, " OR ") + ")"
+		if markCol != "" {
+			where += fmt.Sprintf(" AND (%s IS NULL OR %s <> '%s')", markCol, markCol, markVal)
+		}
+		stmt, err := db.CheckSQL(fmt.Sprintf("SELECT %s FROM %s WHERE %s ORDER BY %s LIMIT %d", idCol, table, where, idCol, maxLeftoverIDs+1))
+		if err != nil {
+			return "", err
+		}
+		_, rows, err := c.readAll(ctx, stmt, input.Str(args, "tenant"))
+		if err != nil {
+			return "", err
+		}
+		var ids []string
+		for _, r := range rows {
+			ids = append(ids, r[0])
+		}
+		more := len(ids) > maxLeftoverIDs
+		ids = ids[:min(len(ids), maxLeftoverIDs)]
+		out += fmt.Sprintf("\nlive ids (%s%s): %s", idCol, map[bool]string{true: ", first " + strconv.Itoa(maxLeftoverIDs)}[more], strings.Join(ids, ", "))
+		out += fmt.Sprintf("\nFor a demo tenant only, to run by hand (webscope never writes): DELETE FROM %s WHERE %s IN (%s);", table, idCol, strings.Join(ids, ", "))
+	}
 	switch {
 	case live:
 		out += ". They are test rows: clean them through the screen, not through the database, and say in the report that they were left."

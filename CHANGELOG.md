@@ -2,6 +2,18 @@
 
 One entry per version, newest first. Tool names are `query`, `page`, `check` and `code`. Each change says what it is, what was seen that made it necessary, how it was checked and what was not checked. A change in what a tool prints is listed as a change, because a client may read it.
 
+## 0.7.0 — 2026-10-31
+
+**`page find` and element refs, `payloads` filters and times, `code legacy rejects`, `code leftovers ids`.**
+
+What was seen that made it necessary: a colleague testing the tariffs module reported that `state` and `audit` are cut on screens with many checkboxes, that `fill` on legacy inputs with the same name and no id fills the first one, that `payloads` could not be narrowed or read one request at a time and said nothing about time, that the rejection conditions of each `grabar_*.php` were read by hand, and that `ZZ_` rows left by a test could not be cleaned or even named. (Already fixed in 0.6.x and left alone: `batch` output, `code rows` ids and children, `map_back` by route path, `name#2`.)
+
+What changed. `page find {text|regex, max?}` lists only the fields, buttons, headings, alerts, errors and table headers that match, each field and button with a ref (`f3`, `b5`: its place on the screen as it is now) and the dialog or card it is in. `fill {f3: value}` and `click {ref: "b5"}` take a ref; the `fill` warning about several fields with one name now names their refs. `payloads` numbers each request (`#N`), shows the milliseconds it took, and takes `match` (regex over `METHOD address`), `body` (regex over what was sent and got) and `index` (one request, up to 8000 bytes of each body); the line of a request has a new `#N` first and a time last. `code legacy {rejects: true}` adds the throw, die, exit and 4xx/5xx status lines of each PHP file, comments left out. `code leftovers {ids: "id"}` lists the keys of the live test rows (not the soft-deleted ones, 50 at most) and a `DELETE` for the user to run by hand in a demo tenant; webscope still never writes. Every new argument is optional: without it nothing changes except the `#N` and the time in `payloads`.
+
+How it was checked: four new tests that fail without the change (the Chrome test of `find` and refs, the `payloads` filters, `legacy rejects`, `leftovers ids`); 201 tests pass with `-race`, `go vet` and `gofmt`. Checked on the real app (`demo.localhost:5173`): `find` on the roles screen (`b25 [button] Guardar · Módulos`), `payloads {match, limit}` and `{index: 1}` after `open /pricing/sales-tariffs` (`#1 GET … 200 612 ms`), `code legacy {path: comercial, rejects: true}` on 613 files (throw and die lines by file), `code leftovers {ids: "id", deleted}` on `app_tipo_tarifario` (43 rows, 42 marked, live id 554).
+
+What was not checked: `fill` and `click` by ref on the real app (only in the Chrome fixture); refs on a legacy page; `payloads` times for XMLHttpRequest on the real app; a `leftovers` list of more than 50 live ids. Not done from the colleague's list: `simulate` with a defined body, a legacy `open`, selectors by attribute for `fill`, a default tenant for `code rows`, and performance traces or console traces mapped to source (`javascript_tool` gives no access to them).
+
 ## 0.6.5 — 2026-10-31
 
 **`page open` waits for the screen to draw its data before it answers.**

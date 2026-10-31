@@ -28,6 +28,7 @@ type legacySide struct {
 	writes  []string
 	reads   []string
 	columns map[string][]string
+	rejects []string
 }
 
 // legacyDir is path inside WEBSCOPE_LEGACY, resolved: it must stay under the real root, so a link or a ../ cannot lead out of it.
@@ -80,6 +81,29 @@ func listDirs(rel string, ents []os.DirEntry) string {
 	return fmt.Sprintf(" (folders in %s: %s)", echo(rel), strings.Join(names, ", "))
 }
 
+// rejectCall matches the PHP statements that stop a request: a throw, die or exit, and an explicit 4xx or 5xx status.
+var rejectCall = regexp.MustCompile(`(?i)\b(throw\s+new\s+\w+|die\s*\(|exit\s*\(|http_response_code\s*\(\s*[45]\d\d|header\s*\(\s*['"]HTTP/[\d.]+\s+[45]\d\d)`)
+
+// rejectsOf is the lines of a PHP file that stop a request, as «line: text» with the text cut; comment lines are skipped.
+func rejectsOf(file string, all fsx.Lines) []string {
+	var out []string
+	for _, h := range fsx.Grep(rejectCall, []string{file}, all) {
+		if t := h.Text; strings.HasPrefix(t, "//") || strings.HasPrefix(t, "#") || strings.HasPrefix(t, "*") || strings.HasPrefix(t, "/*") {
+			continue
+		}
+		out = append(out, fmt.Sprintf("%d: %s", h.Line, clipText(h.Text, 90)))
+	}
+	return out
+}
+
+// clipText cuts s to n characters and marks the cut.
+func clipText(s string, n int) string {
+	if r := []rune(strings.TrimSpace(s)); len(r) > n {
+		return string(r[:n]) + "…"
+	}
+	return strings.TrimSpace(s)
+}
+
 // tablesOf is the tables named by the SQL of a PHP file, in order of appearance: those it writes and those it only reads. Comment lines are skipped.
 func tablesOf(file string, all fsx.Lines) (writes, reads []string) {
 	w, r := map[string]bool{}, map[string]bool{}
@@ -129,6 +153,7 @@ func (c *Tool) legacy(args map[string]any) (string, error) {
 		return "", err
 	}
 	all := fsx.Lines{}
+	wantRejects, _ := args["rejects"].(bool)
 	sides := map[string]*legacySide{}
 	var order []string
 	for _, f := range files {
@@ -137,6 +162,9 @@ func (c *Tool) legacy(args map[string]any) (string, error) {
 			s := &legacySide{rel: rel}
 			s.writes, s.reads = tablesOf(f, all)
 			s.columns = columnsOf(f, all)
+			if wantRejects {
+				s.rejects = rejectsOf(f, all)
+			}
 			sides[rel] = s
 			order = append(order, rel)
 		}
@@ -199,6 +227,15 @@ func (c *Tool) legacy(args map[string]any) (string, error) {
 			more = fmt.Sprintf(" (+%d)", len(orphans)-6)
 		}
 		tail = append(tail, "no caller found: "+strings.Join(orphans[:min(6, len(orphans))], ", ")+more+" (pages loaded by address, includes or dead code)")
+	}
+	if wantRejects {
+		var rl []string
+		for _, rel := range order {
+			if r := sides[rel].rejects; len(r) > 0 {
+				rl = append(rl, rel+": "+strings.Join(r[:min(4, len(r))], " | ")+map[bool]string{true: fmt.Sprintf(" (+%d)", len(r)-4)}[len(r) > 4])
+			}
+		}
+		tail = append(tail, "## rejections (throw, die, exit or a 4xx/5xx status, by line; the condition is the code above it)\n"+cutLines(firstNonEmpty(strings.Join(rl, "\n"), "none found"), 2500, "rejections"))
 	}
 	if module := input.Str(args, "module"); module != "" {
 		tail = append(tail, c.againstNew(module, legacyTables, written))

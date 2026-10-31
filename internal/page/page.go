@@ -15,6 +15,7 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"regexp"
 	"slices"
 	"strconv"
 	"strings"
@@ -38,11 +39,12 @@ const (
 	staleAfter     = 30        // seconds without a capture after which payloads says how to reload the helper
 	storeClip      = 16 << 10  // bytes of each body kept (check compares them whole; a list answer of Acme passed 2000)
 	showClip       = 600       // bytes of each body shown by payloads
+	detailClip     = 8000      // bytes of each body shown by payloads for one request picked by index
 	defaultShown   = 10        // requests shown by payloads unless limit says otherwise
 )
 
 // snippetActions are the actions answered with a JavaScript snippet for javascript_tool. Anything else is answered here.
-var snippetActions = []string{"state", "read", "fill", "click", "press", "simulate", "open", "options", "audit", "shape", "batch"}
+var snippetActions = []string{"state", "find", "read", "fill", "click", "press", "simulate", "open", "options", "audit", "shape", "batch"}
 
 // stepActions are the snippet actions that a batch can run, one after the other, in the same snippet.
 var stepActions = slices.DeleteFunc(slices.Clone(snippetActions), func(a string) bool { return a == "batch" })
@@ -66,19 +68,20 @@ func checkBatch(args map[string]any) error {
 const helpText = `page(action, args?) tests a screen in the user's Chrome through Claude in Chrome.
 Needs a tab of the app (WEBSCOPE_APP_URL) with the session already started: open one with tabs_create_mcp and navigate to a screen; if it shows the login, stop and ask the user for the session (never type credentials).
 load: one line of JavaScript; run it with javascript_tool again after every navigation, reload or /mcp: the helper is lost and the port changes (needs WEBSCOPE_APP_URL).
-state|read|fill|click|press|simulate|open|options|audit|shape|batch: return a snippet; run it with javascript_tool, its value is the answer.
+state|find|read|fill|click|press|simulate|open|options|audit|shape|batch: return a snippet; run it with javascript_tool, its value is the answer.
   batch {steps:[{action, args?}, …], keepGoing?}: several of those actions in ONE snippet (one call instead of two per action); the answers come back numbered, a failed step stops the rest unless keepGoing, and no step starts after 38 s (javascript_tool gives about 45 s). payloads, parity, download and verify are answered by the server: call them apart.
   options {field, match?, max?, fresh?}: the choices of a select or Vuetify menu, without choosing one: all of a native select, and of a menu the rows seen while it scrolls (an autocomplete is searched with match); only those that contain match, up to max (30). A menu read to its end is remembered 2 minutes (the answer says how old it is): fresh:true reads it again.
   open {path}: goes to a router path from code map (/pricing/sales-tariffs) through the app's own router, which adds the tenant prefix; a path that no route owns is refused with the similar ones, and a redirect (login) is told. It waits for the screen to draw (the requests it sent answered and its text still), so the next step finds the data. Never type the URL of a screen by hand.
   state {max?}: URL, title, console, headings, fields, buttons (dialog first, side menu last, disabled ones marked), alerts, errors, dialog, tables.
+  find {text|regex, max?}: only the fields, buttons and texts that match, each with a ref (f3 a field, b5 a button, by place on the screen as it is now) and the card or dialog it is in. fill takes a ref as the name ({f3:"x"}) and click as {ref:"b5"}: for fields that share a name and have no id.
   read {selector?, max?}: text of the first match, or of the page.
   fill {fields:{label:value}} or {label:value}: by label, name, placeholder or id (a name that fits several fields fills the first, a dialog's before the page's, and the answer warns and lists the others: use an id, or the name with #2 for the second, #3…); true/false for checkboxes; select by option text; Vuetify menus too (long lists are scrolled); a rich-text editor (contenteditable) by its aria-label or id, or as "editor" when it has neither.
-  click {text} or {selector} (a text that belongs to no button is found as a plain element); press {key, selector?}: both then say what happened (requests with status, new alerts, errors and console errors, URL change, or "No effect seen"; with WEBSCOPE_LOG set, a status 0 or 5xx adds the last error lines of the backend log).
+  click {text}, {selector} or {ref} (a text that belongs to no button is found as a plain element); press {key, selector?}: both then say what happened (requests with status, new alerts, errors and console errors, URL change, or "No effect seen"; with WEBSCOPE_LOG set, a status 0 or 5xx adds the last error lines of the backend log).
   audit {selector?}: what the page shows about itself, no reference screen: unrendered text ({{x}}, undefined, null, NaN, [object Object]), controls covered by another element, fields with no label, repeated labels, buttons with no name. A hint to look at, not a verdict; selector limits it to a part of the screen.
   shape {name, selector?}: saves what the screen, or only the part a CSS selector names, offers under a name (field labels and kinds, buttons, table columns, tabs, headings; no values) for parity.
   simulate {match, status, times?, method?}: the next requests whose URL contains match answer HTTP status 400-599 without reaching the app; {clear:true} cancels.
 result {offset?}: javascript_tool shows only 1000 characters of what a snippet returns and blocks a text that has an = together with a ; or an & (a=1&b=2, a=1;b=2, id=a1 y; z). When an answer is longer, or has them, the snippet returns a short one that ends «page(result) gives all» (query values hidden, ; and & changed) and the helper keeps the whole answer: result gives it, in parts (answered here, no snippet).
-payloads {limit?}: the requests the page sent and their answers (answered here, no snippet).
+payloads {limit?, match?, body?, index?}: the requests the page sent and their answers, each numbered #N with the milliseconds it took (answered here, no snippet); match is a regex over "METHOD address", body a regex over what was sent and got, and both together keep the requests that fit (limit applies to those); index N gives that one request with its sent and got up to 8000 bytes.
 parity {a, b, kinds?}: compares two saved shapes (say the old and the new screen) and shows only what one has and the other lacks (a repeated name once, with ×N), and fields whose kind changed (answered here, no snippet); kinds "field,column" limits it, e.g. to leave out the step buttons of a wizard. parity {req_a, req_b, map?} compares instead the latest captured request that matches each ("POST save.php": the method, then a part of the address): status and the field names sent and received, never values; map {name in a: name in b} renames a's names first.
 download {arm:true} before a real click, then {wait:true, seconds?} after it, and {report:true} lists the files the session saw appear so the user can delete them (answered here, no snippet): waits for a new file in the downloads folder (WEBSCOPE_DOWNLOADS, else ~/Downloads) and gives its name, size, type by its first bytes and time, and for an xlsx, an HTML table or a text with tabs, semicolons or commas (what a legacy .xls often is) its header names and row count, never a value. No file in time is a failure: an export counts as downloaded only if this finds the file.
 verify {claim, evidence?}: adds a claim of the final report to a table and answers its state, which the server decides: OBSERVADO (evidence «capture METHOD address» of a request that was captured, «check METHOD address» of a check with no differences, or «download» of a file that download wait found), INFERIDO (that capture was seen after an interceptor was put on the page) or NO VERIFICADO (no evidence, or none the server can find). verify {report:true} prints the table, {clear:true} empties it; build the report from it (answered here, no snippet).
@@ -92,6 +95,7 @@ type Capture struct {
 	O   bool   `json:"o,omitempty"` // an opaque answer (a no-cors request to another origin): its status is 0 but it did answer
 	Req string `json:"req"`
 	Res string `json:"res"`
+	D   int    `json:"d,omitempty"` // milliseconds from the send to the end of the answer; 0 when the page did not measure it
 }
 
 // Tool hands out snippets and runs the local listener that serves page.js and keeps what the page captures. Life ends the listener.
@@ -384,12 +388,46 @@ func (p *Tool) payloads(args map[string]any) string {
 	if f, ok := args["limit"].(float64); ok && f >= 1 && f <= maxCaptures {
 		n = int(f)
 	}
-	list := p.caps[max(0, len(p.caps)-n):]
+	if f, ok := args["index"].(float64); ok {
+		if f < 1 || int(f) > len(p.caps) {
+			return fmt.Sprintf("Failed: no request #%d among the %d captured. Next: page(payloads) lists them with their numbers.", int(f), len(p.caps))
+		}
+		c := p.caps[int(f)-1]
+		return fmt.Sprintf("#%d %s %s %d%s\nsent: %s\ngot: %s", int(f), oneLine(c.M), oneLine(c.U), c.S, took(c), clip(c.Req, detailClip), clip(c.Res, detailClip))
+	}
+	var addr, body *regexp.Regexp
+	for _, f := range []struct {
+		key string
+		to  **regexp.Regexp
+	}{{"match", &addr}, {"body", &body}} {
+		if s, _ := args[f.key].(string); s != "" {
+			re, err := regexp.Compile("(?i)" + s)
+			if err != nil {
+				return fmt.Sprintf("Failed: %s is not a regular expression (%v). Next: write it again.", f.key, err)
+			}
+			*f.to = re
+		}
+	}
+	nums := make([]int, 0, len(p.caps))
+	for i, c := range p.caps {
+		if (addr == nil || addr.MatchString(c.M+" "+c.U)) && (body == nil || body.MatchString(c.Req+"\n"+c.Res)) {
+			nums = append(nums, i)
+		}
+	}
+	nums = nums[max(0, len(nums)-n):]
+	list := make([]Capture, len(nums))
+	for i, k := range nums {
+		list[i] = p.caps[k]
+	}
 	var b strings.Builder
 	if len(p.tampered) > 0 {
 		fmt.Fprintf(&b, "Interceptor: %s replaced after the helper loaded. These requests are what the page did with that patch, not what a real click did: do not report them as a check of the real flow.\n", strings.Join(p.tampered, ", "))
 	}
-	fmt.Fprintf(&b, "%d requests captured (showing last %d)", len(p.caps), len(list))
+	if addr != nil || body != nil {
+		fmt.Fprintf(&b, "%d requests captured, %d match (showing last %d)", len(p.caps), len(nums), len(list))
+	} else {
+		fmt.Fprintf(&b, "%d requests captured (showing last %d)", len(p.caps), len(list))
+	}
 	if len(p.caps) > 0 {
 		age := int(p.now().Sub(p.lastCap).Seconds())
 		fmt.Fprintf(&b, "; last one %d s ago", age)
@@ -414,7 +452,7 @@ func (p *Tool) payloads(args map[string]any) string {
 		if c.O {
 			status = "opaque (no-cors: its status cannot be read)"
 		}
-		e := fmt.Sprintf("%s %s %s\n", clip(oneLine(c.M), 10), clip(oneLine(c.U), 300), status)
+		e := fmt.Sprintf("#%d %s %s %s%s\n", nums[i]+1, clip(oneLine(c.M), 10), clip(oneLine(c.U), 300), status, took(c))
 		if c.Req != "" {
 			e += fmt.Sprintf("  sent: %s\n", oneLine(clip(c.Req, showClip)))
 		}
@@ -435,6 +473,14 @@ func (p *Tool) payloads(args map[string]any) string {
 		b.WriteString("\nBackend log (the last error lines of WEBSCOPE_LOG, as the log wrote them):\n" + l)
 	}
 	return strings.TrimRight(b.String(), "\n")
+}
+
+// took is the time a request took as " 340 ms", or "" when it was not measured.
+func took(c Capture) string {
+	if c.D <= 0 {
+		return ""
+	}
+	return fmt.Sprintf(" %d ms", c.D)
 }
 
 // problems summarises the captured requests that failed (4xx, 5xx, no answer) over all of them, or "" when none did.

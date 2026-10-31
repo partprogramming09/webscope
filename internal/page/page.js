@@ -64,14 +64,15 @@
       return new Response(SIM_BODY, { status: sim.status, headers: { 'Content-Type': 'application/json' } });
     }
     let res;
+    const t0 = performance.now();
     pending++;
     try {
       res = await realFetch(input, init);
     } catch (e) {
-      report({ m, u, s: 0, req, res: String(e) }, true);
+      report({ m, u, s: 0, req, res: String(e), d: Math.round(performance.now() - t0) }, true);
       throw e;
     }
-    res.clone().text().then(res_ => report({ m, u, s: res.status, req, res: res_, o: res.type === 'opaque' || res.type === 'opaqueredirect' }, true)).catch(() => { pending = Math.max(0, pending - 1); });
+    res.clone().text().then(res_ => report({ m, u, s: res.status, req, res: res_, o: res.type === 'opaque' || res.type === 'opaqueredirect', d: Math.round(performance.now() - t0) }, true)).catch(() => { pending = Math.max(0, pending - 1); });
     return res;
   };
 
@@ -90,10 +91,11 @@
         reopen(c.m, cfg.base + '/sim?t=' + cfg.t + '&status=' + sim.status);
         x.withCredentials = false;
       }
+      const t0 = performance.now();
       pending++;
       x.addEventListener('loadend', () => {
         const text = x.responseType === '' || x.responseType === 'text' ? x.responseText : kind(x.response);
-        report({ m: c.m, u: c.u, s: x.status, req: c.req, res: text }, true);
+        report({ m: c.m, u: c.u, s: x.status, req: c.req, res: text, d: Math.round(performance.now() - t0) }, true);
       });
     }
   };
@@ -210,6 +212,34 @@
     return clip(norm(e.innerText != null ? e.innerText : e.textContent), a.max || CAP);
   };
 
+  // find lists only the fields, buttons and texts (headings, alerts, errors, table headers) that match a text or a regex, each with its ref and the card or dialog it is in.
+  const find = a => {
+    const q = a.text != null ? a.text : a.regex;
+    if (q == null || q === '') return fail('find needs text or regex, e.g. find {"text":"tarifa"}');
+    let re;
+    try { re = a.regex != null ? new RegExp(a.regex, 'i') : new RegExp(String(q).replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i'); } catch (x) { return fail('bad regex ' + a.regex); }
+    const where = e => {
+      if (e.closest('[role=dialog],.v-dialog')) return 'dialog';
+      const box = e.closest('.v-card,fieldset,section,form,[role=tabpanel]');
+      const h = box && box.querySelector('h1,h2,h3,h4,h5,h6,legend,.v-card-title');
+      return h ? clip(norm(h.innerText), 40) : '';
+    };
+    const hits = [];
+    fields().forEach((e, i) => {
+      const l = labelOf(e), v = valueOf(e);
+      if (re.test([l, e.name, e.id, e.placeholder, v].filter(Boolean).join(' '))) hits.push('f' + (i + 1) + ' [' + (e.isContentEditable ? 'editor' : e.type || e.tagName.toLowerCase()) + '] ' + (l || '(no label)') + (e.id ? ' #' + e.id : '') + ' = "' + clip(v.replace(/\n/g, '⏎'), 40) + '"' + (where(e) ? ' · ' + where(e) : ''));
+    });
+    clickables().forEach((e, i) => {
+      if (re.test(textOf(e))) hits.push('b' + (i + 1) + ' [button] ' + clip(textOf(e), 60) + (disabled(e) ? ' (disabled)' : '') + (where(e) ? ' · ' + where(e) : ''));
+    });
+    [['heading', 'h1,h2,h3,h4'], ['alert', ALERTS], ['error', ERRORS], ['column', 'th']].forEach(([k, sel]) => {
+      texts(sel).filter(t => re.test(t)).forEach(t => hits.push('[' + k + '] ' + clip(t, 80)));
+    });
+    if (!hits.length) return 'No field, button or text matches «' + q + '». Next: page(state) lists what the screen has.';
+    const max = a.max || 20;
+    return hits.slice(0, max).join('\n') + (hits.length > max ? '\n(… ' + (hits.length - max) + ' more matches not shown: raise max)' : '');
+  };
+
   // ---- acting on the screen
   const findFields = name => {
     const n = lower(name), f = fields().sort((a, b) => !!b.closest('[role=dialog],.v-dialog') - !!a.closest('[role=dialog],.v-dialog'));
@@ -219,10 +249,15 @@
   const pickField = name => {
     const found = findFields(name);
     if (found.length) return { e: found[0], found };
+    const r = /^f(\d+)$/.exec(name);
+    if (r) return { e: fields()[Number(r[1]) - 1], found: [] };
     const m = /^(.*)#(\d+)$/.exec(name);
     return { e: m ? findFields(m[1])[Number(m[2]) - 1] : undefined, found: [] };
   };
-  const idOf = e => e.id ? '#' + e.id : e.name ? '[name=' + e.name + ']' : '"' + labelOf(e) + '"';
+  const clickables = () => all(CLICKABLE).filter(textOf);
+  // refOf is the reference of a field (f3) or a button (b5): its place among the fields or buttons of the screen as it is now.
+  const refOf = e => { const f = fields().indexOf(e); return f >= 0 ? 'f' + (f + 1) : 'b' + (clickables().indexOf(e) + 1); };
+  const idOf = e => (e.id ? '#' + e.id : e.name ? '[name=' + e.name + ']' : '"' + labelOf(e) + '"') + ' (' + refOf(e) + ')';
   // Vuetify menus: v-select/v-autocomplete show the option text, keep a code in the input and render only the rows in view.
   const MENU = '.v-select,.v-autocomplete,.v-combobox';
   const sleep = ms => new Promise(r => setTimeout(r, ms));
@@ -379,7 +414,7 @@
     const out = [], notes = [];
     for (const [k, v] of Object.entries(fields)) {
       const { e, found } = pickField(k);
-      notes.push(found.length > 1 ? ' (warning: ' + found.length + ' fields answer to this name; filled ' + idOf(e) + ', the others are ' + found.slice(1, 4).map(idOf).join(', ') + '. Name one by its id, or write the name with #2 for the second, to be sure)' : '');
+      notes.push(found.length > 1 ? ' (warning: ' + found.length + ' fields answer to this name; filled ' + idOf(e) + ', the others are ' + found.slice(1, 4).map(idOf).join(', ') + '. Name one by its ref (f3) or id, or write the name with #2 for the second, to be sure)' : '');
       if (!e) { miss = true; out.push(k + ': not found'); continue; }
       try {
         const clicked = await setValue(e, v);
@@ -430,7 +465,11 @@
 
   const clickOnce = a => {
     let els;
-    if (a.selector) {
+    if (a.ref) {
+      const m = /^b(\d+)$/.exec(a.ref), e = m && clickables()[Number(m[1]) - 1];
+      if (!e) return fail('no button ' + a.ref + ' on this screen. Next: page(find) or page(state) lists the buttons; refs change when the screen does.');
+      els = [e];
+    } else if (a.selector) {
       try { els = all(a.selector); } catch (x) { return fail('bad selector ' + a.selector); }
     } else if (a.text) {
       const t = lower(a.text), c = all(CLICKABLE);
@@ -438,7 +477,7 @@
       if (!els.length) els = c.filter(e => lower(textOf(e)).includes(t));
       if (!els.length) els = all('body *').filter(e => !e.children.length && lower(textOf(e)) === t); // a confirmation whose button is a plain span or div
       if (els.length > 1) return fail(els.length + ' elements match "' + a.text + '": ' + els.slice(0, 6).map(describe).join(', ') + '. Next: click with a selector.');
-    } else return fail('click needs text or selector');
+    } else return fail('click needs text, selector or ref');
     if (!els.length) return fail('nothing to click for "' + (a.selector || a.text) + '". Buttons here: ' + [...new Set(all(CLICKABLE).filter(textOf).map((e, i) => ({ t: textOf(e), i, r: rank(e) })).sort((x, y) => x.r - y.r || x.i - y.i).map(x => x.t))].slice(0, 12).join(' | '));
     els[0].click();
     return 'clicked ' + describe(els[0]);
@@ -626,7 +665,7 @@
     const cut = hid.lastIndexOf('\n', lim - 140), head = hid.slice(0, cut > 0 ? cut : lim - 140);
     return head + '\n(… ' + (r.length - head.length) + ' more chars: ' + note + 'javascript_tool cuts at 1000, page(result) gives all)';
   };
-  plain = { state: wrap(state), read: wrap(read), fill: wrap(fill), click: wrap(click), press: wrap(press), simulate: wrap(simulate), open: wrap(open), options: wrap(options), batch: wrap(batch), audit: wrap(audit), shape: wrap(shape) };
+  plain = { state: wrap(state), find: wrap(find), read: wrap(read), fill: wrap(fill), click: wrap(click), press: wrap(press), simulate: wrap(simulate), open: wrap(open), options: wrap(options), batch: wrap(batch), audit: wrap(audit), shape: wrap(shape) };
   const stepLines = s => (s.match(/^\d+\. \w+: .*$/gm) || []).map(l => clip(l, 110)).join('\n');
   window.__ws = Object.fromEntries(Object.entries(plain).map(([k, f]) => [k, sink(f, k === 'batch' ? stepLines : null)]));
 })();
