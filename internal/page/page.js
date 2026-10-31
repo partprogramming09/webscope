@@ -30,7 +30,7 @@
     if (counted) pending = Math.max(0, pending - 1);
     try {
       const u = new URL(c.u, location.href);
-      log.push({ i: seq++, t: c.m + ' ' + u.pathname + ' ' + (c.s === 0 ? '0 (no answer)' : c.s) }); // no query string: it can hold a token, and payloads still shows the whole address
+      log.push({ i: seq++, t: c.m + ' ' + u.pathname + ' ' + (c.o ? 'opaque (no-cors: its status cannot be read)' : c.s === 0 ? '0 (no answer)' : c.s) }); // no query string: it can hold a token, and payloads still shows the whole address
       if (log.length > 200) log.shift();
     } catch (e) { /* an address that does not parse is left out of the log */ }
     try {
@@ -70,7 +70,7 @@
       report({ m, u, s: 0, req, res: String(e) }, true);
       throw e;
     }
-    res.clone().text().then(res_ => report({ m, u, s: res.status, req, res: res_ }, true)).catch(() => { pending = Math.max(0, pending - 1); });
+    res.clone().text().then(res_ => report({ m, u, s: res.status, req, res: res_, o: res.type === 'opaque' }, true)).catch(() => { pending = Math.max(0, pending - 1); });
     return res;
   };
 

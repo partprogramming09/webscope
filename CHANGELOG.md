@@ -2,6 +2,18 @@
 
 One entry per version, newest first. Tool names are `query`, `page`, `check` and `code`. Each change says what it is, what was seen that made it necessary, how it was checked and what was not checked. A change in what a tool prints is listed as a change, because a client may read it.
 
+## 0.5.63 — 2026-10-31
+
+**An opaque answer (a `no-cors` request to another origin) is shown as opaque and is not counted as a failure.**
+
+What was seen that made it necessary: in the real check of 0.5.60, a request that did finish was counted by `payloads` as `Problems: 1 with no answer (status 0)`, because the browser gives status 0 to the opaque answer of a `no-cors` fetch.
+
+Now the helper marks a capture whose answer type is `opaque`. `click` shows `GET /path opaque (no-cors: its status cannot be read)` instead of `0 (no answer)`, `payloads` shows the same instead of the status, and the `Problems:` line and the backend-log lookup skip it. A request that really got no answer still shows `0 (no answer)` and still counts. `tools/list` does not change.
+
+How it was checked: a test in a real Chrome that failed before: a click whose fetch is `no-cors` to a second server says `opaque` and not `no answer`, and `payloads` has no `Problems:` line; the suite with `-race` passes (exit code checked); `node --check page.js` is clean.
+
+Not checked: on the real screen; an `opaqueredirect` answer (a `redirect: manual` request) is not marked as opaque.
+
 ## 0.5.62 — 2026-10-31
 
 **`click` and `press` show the URL change with parameter names, never values.**

@@ -182,3 +182,22 @@ func TestClickShowsTheUrlChangeWithParameterNamesNeverValues(t *testing.T) {
 		t.Errorf("the URL change must carry parameter names, not values: %q", out[2])
 	}
 }
+
+func TestAnOpaqueNoCorsAnswerIsNotCountedAsAFailure(t *testing.T) {
+	other := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { io.WriteString(w, "{}") }))
+	defer other.Close()
+	out, p := runSteps(t, func(load string) []string {
+		return []string{
+			load,
+			`(document.body.insertAdjacentHTML('beforeend','<button onclick="fetch(\'` + other.URL + `/x\',{mode:\'no-cors\'})">Opaque</button>'),'ok')`,
+			"window.__ws.click({text:'Opaque'})",
+		}
+	}, nil)
+	if strings.Contains(out[2], "no answer") || !strings.Contains(out[2], "opaque") {
+		t.Errorf("click must say opaque, not no answer: %q", out[2])
+	}
+	seen, _ := askPage(t, p, "payloads", nil)
+	if strings.Contains(seen, "Problems:") || !strings.Contains(seen, "opaque") {
+		t.Errorf("payloads must not count an opaque answer as a problem, and must say it is opaque: %s", seen)
+	}
+}

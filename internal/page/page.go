@@ -65,6 +65,7 @@ type Capture struct {
 	M   string `json:"m"`
 	U   string `json:"u"`
 	S   int    `json:"s"`
+	O   bool   `json:"o,omitempty"` // an opaque answer (a no-cors request to another origin): its status is 0 but it did answer
 	Req string `json:"req"`
 	Res string `json:"res"`
 }
@@ -317,11 +318,15 @@ func (p *Tool) payloads(args map[string]any) string {
 	}
 	failed := false
 	for _, c := range list {
-		failed = failed || c.S == 0 || c.S >= 500
+		failed = failed || (c.S == 0 && !c.O) || c.S >= 500
 	}
 	for i, c := range list {
 		// The method and the URL come from the page under test: one line each, and short.
-		e := fmt.Sprintf("%s %s %d\n", clip(oneLine(c.M), 10), clip(oneLine(c.U), 300), c.S)
+		status := strconv.Itoa(c.S)
+		if c.O {
+			status = "opaque (no-cors: its status cannot be read)"
+		}
+		e := fmt.Sprintf("%s %s %s\n", clip(oneLine(c.M), 10), clip(oneLine(c.U), 300), status)
 		if c.Req != "" {
 			e += fmt.Sprintf("  sent: %s\n", oneLine(clip(c.Req, showClip)))
 		}
@@ -349,6 +354,7 @@ func problems(caps []Capture) string {
 	var c4, c5, c0 int
 	for _, c := range caps {
 		switch {
+		case c.O:
 		case c.S == 0:
 			c0++
 		case c.S >= 500:
