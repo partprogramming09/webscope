@@ -201,3 +201,26 @@ func TestAnOpaqueNoCorsAnswerIsNotCountedAsAFailure(t *testing.T) {
 		t.Errorf("payloads must not count an opaque answer as a problem, and must say it is opaque: %s", seen)
 	}
 }
+
+func TestAnOpaqueRedirectAnswerIsNotCountedAsAFailureEither(t *testing.T) {
+	app := func(w http.ResponseWriter, r *http.Request) bool {
+		if r.URL.Path == "/go" {
+			http.Redirect(w, r, "/api/ok", http.StatusFound)
+			return true
+		}
+		return false
+	}
+	out, p := runSteps(t, func(load string) []string {
+		return []string{
+			load,
+			`(document.body.insertAdjacentHTML('beforeend','<button onclick="fetch(\'/go\',{redirect:\'manual\'})">Redirect</button>'),'ok')`,
+			"window.__ws.click({text:'Redirect'})",
+		}
+	}, app)
+	if strings.Contains(out[2], "no answer") || !strings.Contains(out[2], "opaque") {
+		t.Errorf("click must say opaque, not no answer: %q", out[2])
+	}
+	if seen, _ := askPage(t, p, "payloads", nil); strings.Contains(seen, "Problems:") {
+		t.Errorf("an opaque redirect is not a problem: %s", seen)
+	}
+}

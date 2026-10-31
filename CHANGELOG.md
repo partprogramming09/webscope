@@ -2,6 +2,18 @@
 
 One entry per version, newest first. Tool names are `query`, `page`, `check` and `code`. Each change says what it is, what was seen that made it necessary, how it was checked and what was not checked. A change in what a tool prints is listed as a change, because a client may read it.
 
+## 0.5.64 — 2026-10-31
+
+**An `opaqueredirect` answer (a `redirect: manual` request) is also shown as opaque and not counted as a failure.**
+
+What was seen that made it necessary: 0.5.63 marked the opaque answer of a `no-cors` request but not the one of a `redirect: manual` request, which the browser also answers with status 0; it was left as a known defect in that entry.
+
+Now a capture whose answer type is `opaque` or `opaqueredirect` is shown as `opaque (no-cors: its status cannot be read)` by `click` and `payloads` and is skipped by the `Problems:` line. A request that got no answer still shows `0 (no answer)`.
+
+How it was checked: a test in a real Chrome that failed before (a `fetch` with `redirect: 'manual'` to a path that answers 302 was shown as `no answer`) and passes after; `go vet` and the suite with `-race` pass (exit code checked); `node --check page.js` is clean.
+
+Not checked: on the real screen of acme.
+
 ## 0.5.63 — 2026-10-31
 
 **An opaque answer (a `no-cors` request to another origin) is shown as opaque and is not counted as a failure.**
@@ -12,7 +24,7 @@ Now the helper marks a capture whose answer type is `opaque`. `click` shows `GET
 
 How it was checked: a test in a real Chrome that failed before: a click whose fetch is `no-cors` to a second server says `opaque` and not `no answer`, and `payloads` has no `Problems:` line; the suite with `-race` passes (exit code checked); `node --check page.js` is clean.
 
-Checked on the real screen of acme (2026-10-31), with the helper of this version served from a local static server (the running MCP server was still the previous build): a `no-cors` fetch to another local server showed `GET /x opaque (no-cors: its status cannot be read)`, and a fetch to a closed port still showed `GET /x 0 (no answer)`. Not checked: an `opaqueredirect` answer (a `redirect: manual` request) is not marked as opaque.
+Checked on the real screen of acme (2026-10-31), with the helper of this version served from a local static server (the running MCP server was still the previous build): a `no-cors` fetch to another local server showed `GET /x opaque (no-cors: its status cannot be read)`, and a fetch to a closed port still showed `GET /x 0 (no answer)`. Not checked: an `opaqueredirect` answer (a `redirect: manual` request) was not marked as opaque here; 0.5.64 does it.
 
 ## 0.5.62 — 2026-10-31
 

@@ -70,7 +70,7 @@
       report({ m, u, s: 0, req, res: String(e) }, true);
       throw e;
     }
-    res.clone().text().then(res_ => report({ m, u, s: res.status, req, res: res_, o: res.type === 'opaque' }, true)).catch(() => { pending = Math.max(0, pending - 1); });
+    res.clone().text().then(res_ => report({ m, u, s: res.status, req, res: res_, o: res.type === 'opaque' || res.type === 'opaqueredirect' }, true)).catch(() => { pending = Math.max(0, pending - 1); });
     return res;
   };
 
