@@ -2,6 +2,18 @@
 
 One entry per version, newest first. Tool names are `query`, `page`, `check` and `code`. Each change says what it is, what was seen that made it necessary, how it was checked and what was not checked. A change in what a tool prints is listed as a change, because a client may read it.
 
+## 0.7.8 — 2026-11-01
+
+**`query` suggests the nearest column of an unknown one, and `snap` names the columns that could be the key when one repeats.**
+
+What was seen that made it necessary: a colleague's report of 26 failed `query` calls in a day, almost all columns or tables that were guessed, and a `snap` that stopped with `the key t is not unique`. The error already listed the real columns; it did not point at the likely one, and for a repeated key it did not say which column could be the key.
+
+Two changes, both only in error text. An unknown column (`Error 1054`, SQLite `no such column`) now starts its column list with `Did you mean «col»?` when a column of the tables in FROM/JOIN is within a few letters of the one written (up to the larger of 2 and a quarter of its length, and fewer than its whole length), or is the only one that contains it or is contained in it; with no close column nothing is suggested. `snap` with a key that repeats now adds `Candidate keys in this result (all different): …` (up to five columns whose values are all different and not empty), or, if no single column is, `No single column is unique; together these are: key "a,b"`, or says that no column or pair of columns of the result is unique and to compare by `COUNT(*)`. The statement is read-only as before; nothing is written. The report named `code(rows)`, but the message is the one of `snap`.
+
+How it was checked: two new tests that fail without the change (the suggestion for `nmae`, `codee` and `name_x`, and none for `zzzzzz`; the three candidate-key answers); the suite passes with `-race`.
+
+What was not checked: on the real database (see the entry added after the last version of this series).
+
 ## 0.7.7 — 2026-11-01
 
 **`page download` says why no file came: partial file, newest file, last file seen, and what Chrome is set to.**

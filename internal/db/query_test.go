@@ -278,3 +278,22 @@ func TestAnUnknownColumnOrTableNamesTheRealColumnsOfTheTablesInTheStatement(t *t
 		t.Errorf("as the tool says it: %q", text)
 	}
 }
+
+func TestAnUnknownColumnSuggestsTheNearestOneOnlyWhenOneIsClose(t *testing.T) {
+	s := fixture(t)
+	for _, tc := range []struct {
+		sql  string
+		want string
+		not  string
+	}{
+		{"SELECT nmae FROM items", "Did you mean «name»?", ""},
+		{"SELECT codee FROM items", "Did you mean «code»?", ""},
+		{"SELECT name_x FROM items", "Did you mean «name»?", ""},
+		{"SELECT zzzzzz FROM items", "Columns of the tables", "Did you mean"},
+	} {
+		_, err := ask(t, s, tc.sql, 0)
+		if err == nil || !strings.Contains(err.Error(), tc.want) || (tc.not != "" && strings.Contains(err.Error(), tc.not)) {
+			t.Errorf("%s: want %q, not %q, got %v", tc.sql, tc.want, tc.not, err)
+		}
+	}
+}

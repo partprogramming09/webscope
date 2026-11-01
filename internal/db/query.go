@@ -188,7 +188,7 @@ func columnHint(ctx context.Context, db *sql.DB, driver, stmt, msg string) strin
 	if driver == "mysql" {
 		q = "SELECT COLUMN_NAME FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ? ORDER BY ORDINAL_POSITION"
 	}
-	var names, parts []string
+	var names, parts, every []string
 	for _, m := range fromTable.FindAllStringSubmatch(stmt, -1) {
 		if name := strings.Trim(m[1][strings.LastIndex(m[1], ".")+1:], "`\""); !slices.Contains(names, name) && len(names) < maxHintTabs {
 			names = append(names, name)
@@ -212,6 +212,8 @@ func columnHint(ctx context.Context, db *sql.DB, driver, stmt, msg string) strin
 			}
 		}
 		rows.Close()
+		every = append(every, near...)
+		every = append(every, rest...)
 		cols := append(near, rest...)
 		if len(cols) == 0 {
 			continue
@@ -224,7 +226,54 @@ func columnHint(ctx context.Context, db *sql.DB, driver, stmt, msg string) strin
 	if len(parts) == 0 {
 		return ""
 	}
-	return ". Columns of the tables in FROM/JOIN: " + strings.Join(parts, "; ")
+	return closest(want, every) + ". Columns of the tables in FROM/JOIN: " + strings.Join(parts, "; ")
+}
+
+// closest is ". Did you mean «col»?" for the column nearest to want (a few edits away, or the only one that contains it or is contained in it), "" when none is close.
+func closest(want string, cols []string) string {
+	if want == "" {
+		return ""
+	}
+	best, bestD, within := "", 1<<30, []string{}
+	for _, c := range cols {
+		l := strings.ToLower(c)
+		if strings.Contains(l, want) || strings.Contains(want, l) {
+			within = append(within, c)
+		}
+		if d := editDistance(want, l); d < bestD {
+			best, bestD = c, d
+		}
+	}
+	if bestD <= max(2, len(want)/4) && bestD < len([]rune(want)) {
+		return ". Did you mean «" + best + "»?"
+	}
+	if len(within) == 1 {
+		return ". Did you mean «" + within[0] + "»?"
+	}
+	return ""
+}
+
+// editDistance is the Levenshtein distance between a and b, in letters.
+func editDistance(a, b string) int {
+	x, y := []rune(a), []rune(b)
+	row := make([]int, len(y)+1)
+	for j := range row {
+		row[j] = j
+	}
+	for i := 1; i <= len(x); i++ {
+		prev := row[0]
+		row[0] = i
+		for j := 1; j <= len(y); j++ {
+			cur := row[j]
+			cost := 1
+			if x[i-1] == y[j-1] {
+				cost = 0
+			}
+			row[j] = min(row[j]+1, row[j-1]+1, prev+cost)
+			prev = cur
+		}
+	}
+	return row[len(y)]
 }
 
 // openDB opens mysql://user:password@host:port/db or sqlite:///path/to/file.db. The SQLite file is opened with query_only on. A non-empty

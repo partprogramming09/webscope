@@ -127,11 +127,52 @@ func keyed(cols []string, rows [][]string, key string) (map[string][]string, err
 		}
 		id := strings.Join(parts, "|")
 		if _, dup := out[id]; dup {
-			return nil, fmt.Errorf("the key %s is not unique (the value %q repeats): choose another with key, or several columns separated by commas", key, input.Show(id))
+			return nil, fmt.Errorf("the key %s is not unique (the value %q repeats): choose another with key, or several columns separated by commas. %s", key, input.Show(id), candidateKey(cols, rows))
 		}
 		out[id] = r
 	}
 	return out, nil
+}
+
+// candidateKey names a column whose values are all different and not empty in rows, or a pair of columns that are together, or says that none is.
+func candidateKey(cols []string, rows [][]string) string {
+	distinct := func(at ...int) bool {
+		seen := make(map[string]bool, len(rows))
+		for _, r := range rows {
+			var parts []string
+			for _, i := range at {
+				if r[i] == "" || r[i] == `\N` {
+					return false
+				}
+				parts = append(parts, r[i])
+			}
+			k := strings.Join(parts, "\x00")
+			if seen[k] {
+				return false
+			}
+			seen[k] = true
+		}
+		return true
+	}
+	var one []string
+	for i, c := range cols {
+		if distinct(i) {
+			one = append(one, c)
+		}
+	}
+	if len(one) > 0 {
+		return "Candidate keys in this result (all different): " + strings.Join(one[:min(len(one), 5)], ", ") + "."
+	}
+	if len(cols) <= 12 {
+		for i := range cols {
+			for j := i + 1; j < len(cols); j++ {
+				if distinct(i, j) {
+					return "No single column is unique; together these are: key \"" + cols[i] + "," + cols[j] + "\"."
+				}
+			}
+		}
+	}
+	return "No column or pair of columns of this result is unique: compare by COUNT(*) before and after."
 }
 
 func (c *Tool) snapSave(ctx context.Context, args map[string]any) (string, error) {

@@ -322,6 +322,22 @@ func TestSnapRefusesWhatItCannotCompareNorKeepSafely(t *testing.T) {
 	}
 }
 
+func TestSnapSaysWhichColumnsCouldBeTheKeyWhenOneRepeats(t *testing.T) {
+	c := codeSetup(t)
+	_, err := code(t, c, "snap", map[string]any{"name": "dup2", "sql": "SELECT estado AS t, id FROM quotes UNION ALL SELECT estado, id FROM quotes", "key": "t"})
+	if err == nil || !strings.Contains(err.Error(), "is not unique") {
+		t.Fatalf("t repeats: %v", err)
+	}
+	_, err = code(t, c, "snap", map[string]any{"name": "dup3", "sql": "SELECT id, 'a' AS part FROM quotes UNION ALL SELECT id, 'b' FROM quotes", "key": "id"})
+	if err == nil || !strings.Contains(err.Error(), `together these are: key "id,part"`) {
+		t.Errorf("no single column is unique: a pair must be named: %v", err)
+	}
+	_, err = code(t, c, "snap", map[string]any{"name": "dup4", "sql": "SELECT 'a' AS x, 'b' AS y FROM quotes UNION ALL SELECT 'a', 'b' FROM quotes", "key": "x"})
+	if err == nil || !strings.Contains(err.Error(), "No column or pair of columns of this result is unique") {
+		t.Errorf("when none is unique it says so: %v", err)
+	}
+}
+
 func TestSnapTakesAKeyOfSeveralColumns(t *testing.T) {
 	c := codeSetup(t)
 	sel := "SELECT id, 'a' AS part, estado FROM quotes UNION ALL SELECT id, 'b', estado FROM quotes"
