@@ -10,9 +10,9 @@ What was seen that made it necessary: `upload` on a real file input of the app (
 
 Now, when the input holds no file after the events, the answer says `the app emptied the input after reading it, as many do` instead of a count; with a file still in the input it says `it holds N file(s)` as before. Nothing else changes.
 
-How it was checked: the Chrome test of `upload` got a case with a page that clears the input in its `change` handler, which fails without the change; the suite passes with `-race`. On the real app (above) the old text was seen; the new text was not run there yet.
+How it was checked: the Chrome test of `upload` got a case with a page that clears the input in its `change` handler, which fails without the change; the suite passes with `-race`. On the real app (the same screen) the new text came out: `attached ZZ_contactos.csv (40 bytes) to the file input «no name»; the app emptied the input after reading it, as many do`, with no request and the `Importar Contactos` step on screen.
 
-What was not checked: the new text on the real app. The «Importar Contactos» button was not pressed: nothing was sent or saved.
+What was not checked: nothing else here. The «Importar Contactos» button was not pressed: nothing was sent or saved.
 
 ## 0.7.10 — 2026-11-01
 
