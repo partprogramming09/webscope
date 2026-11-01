@@ -2,6 +2,20 @@
 
 One entry per version, newest first. Tool names are `query`, `page`, `check` and `code`. Each change says what it is, what was seen that made it necessary, how it was checked and what was not checked. A change in what a tool prints is listed as a change, because a client may read it.
 
+## 0.7.5 — 2026-11-01
+
+**`fill` ends with the state of the form: whether the main button is enabled and which fields show an error.**
+
+What was seen that made it necessary: a colleague's report of the parity of two Acme modules: `fill` answered `ok` for every field while the form stayed invalid and the save button disabled, so a fill that did not enable the form read as done.
+
+Now the answer of `fill` ends with a line such as `Form: «Guardar» is disabled; fields with an error: Correo (Correo no válido).`. The button is the first visible one of the open dialog (or of the page, outside the side menu and the top bar) whose text says save, create, accept, send, update or confirm (Spanish or English). A field shows an error when it has `aria-invalid="true"` or sits in a Vuetify `v-input--error`, `is-invalid` or `has-error` box; its message is the error text of that box, 60 characters at most. With the button disabled and no field in error, the line says that a required or invalid field may be missing and points to `page(state)`. With no such button and no field in error the line is not added. It reads the page, writes nothing and sends nothing.
+
+How it was checked: a new Chrome test that fails without the change (a dialog with a field in error and a disabled `Guardar` that a script enables when the email has an `@`: the first `fill` says disabled and names `Correo (Correo no válido)`, the second says enabled); 211 tests pass with `-race`.
+
+On the real app (`demo.localhost`, users screen, «Nuevo Usuario» open, nothing saved): `fill {Nombre: ZZ_prueba, Correo: no-es-correo}` ended with `Form: «Guardar» is disabled; fields with an error: Correo.`; the error text of the field was not shown there (the app draws it somewhere the helper does not read, or later).
+
+What was not checked: other libraries' markup for an invalid field (only the classes above); a main button whose text is not in the list above (the line is then not added unless a field is in error).
+
 ## 0.7.4 — 2026-10-31
 
 **Any `page` action loads the helper again by itself, the interceptor warning tells a wrapper from a stand-in, the refusal of `payloads` says which origin counts, and a cut `state` keeps the dialog.**

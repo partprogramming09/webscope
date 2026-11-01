@@ -334,3 +334,20 @@ func TestStateCutByMaxSkipsALongLineInsteadOfDroppingEverythingAfterIt(t *testin
 		}
 	}
 }
+
+func TestFillSaysWhetherTheSaveButtonIsDisabledAndWhichFieldsShowAnError(t *testing.T) {
+	out, _ := runSteps(t, func(load string) []string {
+		return []string{
+			load,
+			`(document.body.insertAdjacentHTML('beforeend','<div role=dialog><div class="v-input v-input--error"><label for=mail>Correo</label><input id=mail><div class=v-messages__message>Correo no válido</div></div><label for=nom>Nombre</label><input id=nom><button id=sv disabled>Guardar</button></div>'),document.getElementById('mail').addEventListener('input',e=>{document.getElementById('sv').disabled=!e.target.value.includes('@')}),'ok')`,
+			`window.__ws.fill({fields:{Correo:"x"}})`,
+			`window.__ws.fill({fields:{Correo:"a@b.co"}})`,
+		}
+	}, nil)
+	if !strings.Contains(out[2], "«Guardar» is disabled; fields with an error: Correo (Correo no válido).") {
+		t.Errorf("an invalid form must say the button is disabled and name the field: %q", out[2])
+	}
+	if !strings.Contains(out[3], "«Guardar» is enabled") {
+		t.Errorf("a valid form must say the button is enabled: %q", out[3])
+	}
+}

@@ -440,8 +440,27 @@
       } catch (x) { miss = true; out.push(k + ': ' + x.message); }
     }
     const lines = out.map((l, i) => l + notes[i]);
+    const form = formState();
+    if (form) lines.push(form);
     if (miss) lines.push('Next: page(state) lists the fields and their labels.');
     return lines.join('\n');
+  };
+
+  const SAVE = /guardar|save|crear|create|aceptar|accept|enviar|send|submit|actualizar|update|confirmar|confirm/i;
+  // formState says whether the main button of the open dialog (or of the page) is enabled and which fields show an error, so a fill that left the form invalid is not read as done.
+  const formState = () => {
+    const root = all('[role=dialog],dialog[open]')[0] || document;
+    const save = [...root.querySelectorAll(CLICKABLE)].filter(e => vis(e) && SAVE.test(textOf(e)) && !e.closest('nav,aside,header,[role=navigation],.v-navigation-drawer,.v-app-bar,.v-toolbar'))[0];
+    const bad = [...root.querySelectorAll(FIELDS)].filter(e => vis(e) && (e.getAttribute('aria-invalid') === 'true' || e.closest('.v-input--error,.is-invalid,.has-error')));
+    const errs = bad.map(e => {
+      const box = e.closest('.v-input,.v-field,.form-group') || e.parentElement, m = box && box.querySelector(ERRORS);
+      return (labelOf(e) || '(no label)') + (m && norm(m.textContent) ? ' (' + clip(norm(m.textContent), 60) + ')' : '');
+    });
+    if (!save && !errs.length) return '';
+    const parts = [];
+    if (save) parts.push('«' + clip(textOf(save), 30) + '» is ' + (disabled(save) ? 'disabled' : 'enabled'));
+    parts.push(errs.length ? 'fields with an error: ' + errs.join(', ') : save && disabled(save) ? 'no field shows an error, so a required or invalid field may be missing: page(state) lists them' : 'no field shows an error');
+    return 'Form: ' + parts.join('; ') + '.';
   };
 
   // Runs `f` (a click or a key) and appends what it caused: the requests with their status, the new alerts and field errors, a URL change, or that nothing changed.
