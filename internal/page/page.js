@@ -25,6 +25,7 @@
 
   // ---- what the page sends: fetch and XMLHttpRequest are wrapped, and each request is reported to the listener
   const realFetch = window.fetch.bind(window);
+  let chained = false; // set when a call to the listener's address reaches the helper's fetch: a fetch that replaced it still calls it
   const log = []; // the last 200 requests with their status, for the effect of an action
   let seq = 0, pending = 0;
   const report = (c, counted) => {
@@ -54,7 +55,7 @@
   window.fetch = async function (input, init) {
     const isReq = typeof Request !== 'undefined' && input instanceof Request;
     const u = String(isReq ? input.url : input);
-    if (u.startsWith(cfg.base)) return realFetch(input, init);
+    if (u.startsWith(cfg.base)) { chained = true; return realFetch(input, init); }
     const m = String((init && init.method) || (isReq && input.method) || 'GET').toUpperCase();
     const b = init && init.body;
     const req = typeof b === 'string' ? b : b == null ? '' : kind(b);
@@ -172,32 +173,35 @@
   const NOT_FOUND = /(^|\D)404(\D|$)|not found|no (se )?encontrad[ao]|p[aá]gina no (existe|encontrada)/i;
   // lines keeps whole lines up to max characters and says how many it left out, instead of cutting one in the middle.
   const lines = (l, max) => {
-    let n = 0, i = 0;
-    while (i < l.length && n + l[i].length + 1 <= max) n += l[i++].length + 1;
-    if (i === 0) return clip(l[0], max);
-    return i === l.length ? l.join('\n') : l.slice(0, i).join('\n') + '\n(… ' + (l.length - i) + ' more lines not shown: raise max)';
+    let n = 0;
+    const keep = l.map(x => (n + x.length + 1 <= max ? ((n += x.length + 1), true) : false)); // a line that does not fit is skipped and the next ones are still tried
+    const shown = l.filter((_, i) => keep[i]), left = l.length - shown.length;
+    if (!shown.length) return clip(l[0], max);
+    return left ? shown.join('\n') + '\n(… ' + left + ' more lines not shown: raise max, and an answer longer than javascript_tool shows is kept whole for page(result))' : shown.join('\n');
   };
 
   const state = a => {
     const out = ['URL: ' + showAddress(location), 'Title: ' + norm(document.title)];
     if (NOT_FOUND.test([document.title, ...texts('h1,h2,h3')].join(' '))) out.unshift('Looks like a 404 page of the app (the title or a heading says not found): this is not the screen asked for. Next: open the right address.');
     if (wrongOrigin()) out.push('Warning: ' + wrongOrigin());
-    const h = texts('h1,h2,h3').slice(0, 8);
-    if (clog.length) out.push('Console (last ' + Math.min(5, clog.length) + ' of ' + clog.length + ' since the helper loaded): ' + clog.slice(-5).map(e => e.t).join(' | '));
-    if (h.length) out.push('Headings: ' + h.join(' | '));
-    const f = fields();
-    if (f.length) {
-      out.push('Fields:');
-      f.forEach(e => out.push('  [' + (e.isContentEditable ? 'editor' : e.type || e.tagName.toLowerCase()) + '] ' + (labelOf(e) || '(no label)') + ' = "' + valueOf(e).replace(/\n/g, '⏎') + '"'));
-    }
-    const b = [...new Set(all(CLICKABLE).filter(textOf).map((e, i) => ({ i, t: textOf(e) + (disabled(e) ? ' (disabled)' : ''), r: rank(e) })).sort((x, y) => x.r - y.r || x.i - y.i).map(x => x.t))].slice(0, 30);
-    if (b.length) out.push('Buttons (dialog first, side menu last): ' + b.join(' | '));
+    // what the next step depends on comes first, so a cut by max drops the long lists and not the dialog, the notices or the buttons
+    const dlg = all('[role=dialog],dialog[open]')[0];
+    if (dlg) out.push('Dialog: ' + clip(norm(dlg.innerText), 200));
     const al = texts(ALERTS);
     if (al.length) out.push('Alerts: ' + al.join(' | '));
     const er = texts(ERRORS);
     if (er.length) out.push('Errors: ' + er.join(' | '));
-    const dlg = all('[role=dialog],dialog[open]')[0];
-    if (dlg) out.push('Dialog: ' + clip(norm(dlg.innerText), 200));
+    if (clog.length) out.push('Console (last ' + Math.min(5, clog.length) + ' of ' + clog.length + ' since the helper loaded): ' + clog.slice(-5).map(e => e.t).join(' | '));
+    const b = [...new Set(all(CLICKABLE).filter(textOf).map((e, i) => ({ i, t: textOf(e) + (disabled(e) ? ' (disabled)' : ''), r: rank(e) })).sort((x, y) => x.r - y.r || x.i - y.i).map(x => x.t))].slice(0, 30);
+    if (b.length) out.push('Buttons (dialog first, side menu last): ' + b.join(' | '));
+    const h = texts('h1,h2,h3').slice(0, 8);
+    if (h.length) out.push('Headings: ' + h.join(' | '));
+    const inDlg = e => (e.closest('[role=dialog],.v-dialog,dialog[open]') ? 0 : 1);
+    const f = fields().map((e, i) => ({ e, i })).sort((x, y) => inDlg(x.e) - inDlg(y.e) || x.i - y.i).map(x => x.e);
+    if (f.length) {
+      out.push('Fields:');
+      f.forEach(e => out.push('  [' + (e.isContentEditable ? 'editor' : e.type || e.tagName.toLowerCase()) + '] ' + (labelOf(e) || '(no label)') + ' = "' + valueOf(e).replace(/\n/g, '⏎') + '"'));
+    }
     const tables = all('table').map(t => t.querySelectorAll('tbody tr').length);
     if (tables.length) out.push('Tables (rows): ' + tables.join(', '));
     const foot = texts('.v-data-table-footer__info,.v-pagination__info');
@@ -650,16 +654,33 @@
   const mine = { fetch: window.fetch, send: xhrProto.send, 'anchor click': HTMLAnchorElement.prototype.click };
   const current = () => ({ fetch: window.fetch, send: xhrProto.send, 'anchor click': HTMLAnchorElement.prototype.click });
   const patched = () => { const c = current(); return Object.keys(mine).filter(k => c[k] !== mine[k]); };
-  const MARK = l => 'Interceptor: ' + l.join(', ') + ' replaced after the helper loaded. What follows is what the page did with that patch, not what a real click did: do not report it as a check of the real flow.';
+  // A fetch that replaced the helper's but still calls it is a wrapper: the requests are still seen. One that does not is a stand-in, and the requests it handles are not.
+  let probed = null, passes = false;
+  const probeFetch = async () => {
+    if (window.fetch === mine.fetch) { probed = null; passes = false; return; }
+    if (window.fetch === probed) return;
+    probed = window.fetch;
+    chained = false;
+    try { await window.fetch(cfg.base + '/ping?t=' + cfg.t); } catch (e) { /* a stand-in that throws does not call the helper */ }
+    passes = chained;
+  };
+  const names = () => patched().map(k => (k === 'fetch' && passes ? 'fetch~' : k));
+  const MARK = l => {
+    const hard = l.filter(k => k !== 'fetch~'), m = [];
+    if (hard.length) m.push('Interceptor: ' + hard.join(', ') + ' replaced after the helper loaded. What follows is what the page did with that patch, not what a real click did: do not report it as a check of the real flow.');
+    if (hard.length < l.length) m.push('Note: fetch was wrapped by another script after the helper loaded. The wrapper calls the helper (checked), so the requests listed are the ones the app sent; whether it changes the answers the app receives is not checked.');
+    return m.join('\n');
+  };
   let told = '';
-  setInterval(() => {
-    const now = patched().join(',');
+  setInterval(async () => {
+    await probeFetch();
+    const now = names().join(',');
     if (now === told) return;
     told = now;
     realFetch(cfg.base + '/tamper?t=' + cfg.t + '&n=' + encodeURIComponent(now), { method: 'POST', keepalive: true }).catch(() => {});
   }, 400);
-  const marked = r => { const l = patched(); return l.length ? MARK(l) + '\n' + r : r; };
-  const wrap = f => a => { try { const r = f(a || {}); return r && r.then ? r.then(marked, e => fail(e.message)) : marked(r); } catch (e) { return fail(e.message); } };
+  const marked = r => { const l = names(); return l.length ? MARK(l) + '\n' + r : r; };
+  const wrap = f => async a => { try { const r = await f(a || {}); await probeFetch(); return marked(r); } catch (e) { return fail(e.message); } };
   // hideQuery drops the values of query strings that carry several (a=1&b=2 becomes a&b): javascript_tool blocks such text. A single ?name=value is not blocked and stays.
   const hideQuery = s => s.replace(/([?&][\w.%[\]-]+)=[^&\s#"'<>)]*(?=&[\w.%[\]-]+=)/g, '$1').replace(/&([\w.%[\]-]+)=[^&\s#"'<>)]*/g, '&$1');
   // unblock: javascript_tool blocks a text that has an = and also a ; or an & (measured: a=1;b=2, id=a1 y; z and id=a1 y & z are blocked; an = alone, a ; alone or an & alone are not),

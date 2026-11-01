@@ -67,7 +67,7 @@ func checkBatch(args map[string]any) error {
 
 const helpText = `page(action, args?) tests a screen in the user's Chrome through Claude in Chrome.
 Needs a tab of the app (WEBSCOPE_APP_URL) with the session already started: open one with tabs_create_mcp and navigate to a screen; if it shows the login, stop and ask the user for the session (never type credentials).
-load: one line of JavaScript; run it with javascript_tool again after every navigation, reload or /mcp: the helper is lost and the port changes (needs WEBSCOPE_APP_URL).
+load: one line of JavaScript; run it with javascript_tool after /mcp (the port changes). After a reload or navigation any other action loads the helper itself (needs WEBSCOPE_APP_URL).
 state|find|read|fill|click|press|simulate|open|options|audit|shape|batch: return a snippet; run it with javascript_tool, its value is the answer.
   batch {steps:[{action, args?}, …], keepGoing?}: several of those actions in ONE snippet (one call instead of two per action); the answers come back numbered, a failed step stops the rest unless keepGoing, and no step starts after 38 s (javascript_tool gives about 45 s). payloads, parity, download and verify are answered by the server: call them apart.
   options {field, match?, max?, fresh?}: the choices of a select or Vuetify menu, without choosing one: all of a native select, and of a menu the rows seen while it scrolls (an autocomplete is searched with match); only those that contain match, up to max (30). A menu read to its end is remembered 2 minutes (the answer says how old it is): fresh:true reads it again.
@@ -165,8 +165,14 @@ func originOf(appURL string) string {
 	return scheme + "://" + host + ":" + port
 }
 
-// snippet is the JavaScript for action. The arguments enter as JSON (json.Marshal escapes <, > and line separators), never as text.
+// snippet is the JavaScript for action, for a page that already holds the helper.
 func snippet(action string, args map[string]any) (string, error) {
+	return snippetBoot(action, args, "")
+}
+
+// snippetBoot is the JavaScript for action. The arguments enter as JSON (json.Marshal escapes <, > and line separators), never as text.
+// With boot (the address of the helper script) a page that lost the helper, after a reload or a navigation, loads it first and then runs the action.
+func snippetBoot(action string, args map[string]any, boot string) (string, error) {
 	if !slices.Contains(snippetActions, action) {
 		return "", fmt.Errorf("unknown action %q (load, state, read, fill, click, press, payloads, result, simulate, audit, shape, open, options, batch, parity, download, verify or help)", action)
 	}
@@ -181,6 +187,9 @@ func snippet(action string, args map[string]any) (string, error) {
 	raw, err := json.Marshal(args)
 	if err != nil {
 		return "", err
+	}
+	if boot != "" {
+		return fmt.Sprintf(`await((window.__ws||await new Promise(r=>{var s=document.createElement("script");s.src=%q;s.onload=s.onerror=()=>r(window.__ws);document.head.appendChild(s)}))?.%s(%s)??"Failed: the helper could not load in this page (its security policy or the listener). Next: page(load) and run it.")`, boot, action, raw), nil
 	}
 	return fmt.Sprintf(`await (window.__ws?window.__ws.%s(%s):"Failed: webscope is not loaded in this page. Next: page(load) and run it.")`, action, raw), nil // await: fill waits for menus
 }
@@ -201,18 +210,29 @@ func (p *Tool) answer(in input.Args) (string, error) {
 		if len(p.origins()) == 0 {
 			return "", errors.New("WEBSCOPE_APP_URL is not set, set it to the app's address, e.g. http://localhost:5173 (several, separated by commas, when the old and the new app are on different ports)")
 		}
-		base, err := p.start()
-		if err != nil {
+		if _, err := p.start(); err != nil {
 			return "", err
 		}
 		p.mu.Lock()
 		p.tamperedEver = false
 		p.mu.Unlock()
-		return fmt.Sprintf(`(()=>{if(window.__ws&&window.__wsVer!==%q)return "Failed: an older helper is in this page: reload the page, then page(load)";var s=document.createElement("script");s.src=%q;document.head.appendChild(s);return "loading the webscope helper; next: page(state)"})()`, pageVer, base+"/page.js?t="+p.token+"&v="+pageVer+"&o="+url.QueryEscape(strings.Join(p.origins(), ","))+"&k="+strconv.Itoa(p.SinkChars)), nil
+		return fmt.Sprintf(`(()=>{if(window.__ws&&window.__wsVer!==%q)return "Failed: an older helper is in this page: reload the page, then page(load)";var s=document.createElement("script");s.src=%q;document.head.appendChild(s);return "loading the webscope helper; next: page(state)"})()`, pageVer, p.bootURL()), nil
 	case "result":
 		return p.result(in.Args), nil
 	}
-	return snippet(in.Action, in.Args)
+	return snippetBoot(in.Action, in.Args, p.bootURL())
+}
+
+// bootURL is the address of the helper script for a page that lost it, or "" when WEBSCOPE_APP_URL is not set or the listener cannot start.
+func (p *Tool) bootURL() string {
+	if len(p.origins()) == 0 {
+		return ""
+	}
+	base, err := p.start()
+	if err != nil {
+		return ""
+	}
+	return base + "/page.js?t=" + p.token + "&v=" + pageVer + "&o=" + url.QueryEscape(strings.Join(p.origins(), ",")) + "&k=" + strconv.Itoa(p.SinkChars)
 }
 
 // result gives the answer that the helper kept because javascript_tool would have cut it or blocked it, in parts of about MaxAnswer bytes (offset says where to go on).
@@ -324,6 +344,7 @@ func (p *Tool) handler() http.Handler {
 	mux.HandleFunc("/result", p.guard(p.keep))
 	mux.HandleFunc("/shape", p.guard(p.shape))
 	mux.HandleFunc("/tamper", p.guard(p.tamper))
+	mux.HandleFunc("/ping", p.guard(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusNoContent) }))
 	mux.HandleFunc("/log", p.guard(p.logRoute))
 	mux.HandleFunc("/logmark", p.guard(p.logMark))
 	mux.HandleFunc("/sim", p.guard(func(w http.ResponseWriter, r *http.Request) {
@@ -374,13 +395,13 @@ func (p *Tool) capture(w http.ResponseWriter, r *http.Request) {
 func (p *Tool) tamper(w http.ResponseWriter, r *http.Request) {
 	var l []string
 	for _, n := range strings.Split(r.URL.Query().Get("n"), ",") {
-		if n == "fetch" || n == "send" || n == "anchor click" {
+		if n == "fetch" || n == "fetch~" || n == "send" || n == "anchor click" {
 			l = append(l, n)
 		}
 	}
 	p.mu.Lock()
 	p.tampered = l
-	p.tamperedEver = p.tamperedEver || len(l) > 0
+	p.tamperedEver = p.tamperedEver || len(l) > 0 && !(len(l) == 1 && l[0] == "fetch~")
 	p.mu.Unlock()
 	w.WriteHeader(http.StatusNoContent)
 }
@@ -424,8 +445,11 @@ func (p *Tool) payloads(args map[string]any) string {
 		list[i] = p.caps[k]
 	}
 	var b strings.Builder
-	if len(p.tampered) > 0 {
-		fmt.Fprintf(&b, "Interceptor: %s replaced after the helper loaded. These requests are what the page did with that patch, not what a real click did: do not report them as a check of the real flow.\n", strings.Join(p.tampered, ", "))
+	if hard := slices.DeleteFunc(slices.Clone(p.tampered), func(n string) bool { return n == "fetch~" }); len(hard) > 0 {
+		fmt.Fprintf(&b, "Interceptor: %s replaced after the helper loaded. These requests are what the page did with that patch, not what a real click did: do not report them as a check of the real flow.\n", strings.Join(hard, ", "))
+	}
+	if slices.Contains(p.tampered, "fetch~") {
+		b.WriteString("Note: fetch was wrapped by another script after the helper loaded. The wrapper calls the helper (checked), so these requests are the ones the app sent; whether it changes the answers the app receives is not checked.\n")
 	}
 	if addr != nil || body != nil {
 		fmt.Fprintf(&b, "%d requests captured, %d match (showing last %d)", len(p.caps), len(nums), len(list))
@@ -443,8 +467,8 @@ func (p *Tool) payloads(args map[string]any) string {
 	if s := problems(p.caps); s != "" {
 		b.WriteString(s + "\n")
 	}
-	if p.refused { // the origin itself is not repeated: it comes from the browser, and the agent can read the tab's address with state
-		fmt.Fprintf(&b, "(requests from another origin were refused: the tab's address must be one of those in WEBSCOPE_APP_URL, %s; restart the server after changing it)\n", strings.Join(p.origins(), ", "))
+	if p.refused { // the origin itself is not repeated: it comes from the browser, and page(state) says "This tab is X" when it differs
+		fmt.Fprintf(&b, "(requests from another origin were refused: the tab's address must be one of those in WEBSCOPE_APP_URL, %s; restart the server after changing it. Only the tab's origin counts: the address of the API the app calls need not be listed. page(state) says which address the tab has)\n", strings.Join(p.origins(), ", "))
 	}
 	failed := false
 	for _, c := range list {

@@ -20,6 +20,12 @@ import (
 // extra serves other paths of the app. It returns each step's result and the Tool.
 func runSteps(t *testing.T, steps func(load string) []string, extra func(w http.ResponseWriter, r *http.Request) bool) ([]string, *Tool) {
 	t.Helper()
+	return runStepsTool(t, func(_ *Tool, load string) []string { return steps(load) }, extra)
+}
+
+// runStepsTool is runSteps with the Tool given to steps, for a step that asks the Tool for a snippet.
+func runStepsTool(t *testing.T, steps func(p *Tool, load string) []string, extra func(w http.ResponseWriter, r *http.Request) bool) ([]string, *Tool) {
+	t.Helper()
 	var mu sync.Mutex
 	var html_ string
 	app := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -37,7 +43,7 @@ func runSteps(t *testing.T, steps func(load string) []string, extra func(w http.
 	if err != nil {
 		t.Fatal(err)
 	}
-	list := steps(load)
+	list := steps(p, load)
 	raw, _ := json.Marshal(list)
 	mu.Lock()
 	html_ = strings.Replace(xhrPage, "{{STEPS}}", string(raw), 1)
@@ -222,5 +228,109 @@ func TestAnOpaqueRedirectAnswerIsNotCountedAsAFailureEither(t *testing.T) {
 	}
 	if seen, _ := askPage(t, p, "payloads", nil); strings.Contains(seen, "Problems:") {
 		t.Errorf("an opaque redirect is not a problem: %s", seen)
+	}
+}
+
+func TestAnActionLoadsTheHelperItselfWhenThePageLostIt(t *testing.T) {
+	out, _ := runStepsTool(t, func(p *Tool, _ string) []string {
+		state, err := askPage(t, p, "state", nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return []string{
+			"String(typeof window.__ws)",
+			state,
+			"String(typeof window.__ws)",
+		}
+	}, nil)
+	if out[0] != "undefined" {
+		t.Fatalf("the page must start without the helper: %q", out[0])
+	}
+	if !strings.Contains(out[1], "URL:") || strings.Contains(out[1], "Failed") {
+		t.Errorf("state on a page without the helper must load it and answer: %q", out[1])
+	}
+	if out[2] != "object" {
+		t.Errorf("the helper must stay loaded after the action: %q", out[2])
+	}
+}
+
+func TestAFetchWrapperThatCallsTheHelperIsANoteNotAnInterceptor(t *testing.T) {
+	out, p := runSteps(t, func(load string) []string {
+		return []string{
+			load,
+			"(()=>{const f=window.fetch;window.fetch=(...a)=>f(...a);return 'wrapped'})()",
+			"window.__ws.state({})",
+			"new Promise(r=>setTimeout(()=>r('waited'),1200))",
+		}
+	}, nil)
+	if strings.Contains(out[2], "Interceptor:") || !strings.HasPrefix(out[2], "Note: fetch was wrapped") {
+		t.Errorf("a wrapper that calls the helper must give a note, not the interceptor warning: %q", out[2])
+	}
+	seen, _ := askPage(t, p, "payloads", nil)
+	if strings.Contains(seen, "Interceptor:") || !strings.Contains(seen, "Note: fetch was wrapped") {
+		t.Errorf("payloads must carry the note and not the warning: %s", seen)
+	}
+	if p.tamperedEver {
+		t.Errorf("a wrapper that calls the helper must not downgrade the evidence")
+	}
+}
+
+func TestARequestToAnApiOnAnotherOriginIsCapturedWithOnlyTheTabListed(t *testing.T) {
+	api := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Access-Control-Allow-Origin", "*")
+		w.Header().Set("Access-Control-Allow-Headers", "*")
+		io.WriteString(w, `{"ok":true}`)
+	}))
+	t.Cleanup(api.Close)
+	_, p := runSteps(t, func(load string) []string {
+		return []string{load, "fetch('" + api.URL + "/api/items').then(r=>r.text())", "new Promise(r=>setTimeout(()=>r('waited'),600))"}
+	}, nil)
+	out, _ := askPage(t, p, "payloads", nil)
+	if !strings.Contains(out, "/api/items") || strings.Contains(out, "refused") {
+		t.Errorf("a request to an API on another origin must be captured and not refused: %s", out)
+	}
+}
+
+func TestTheRefusalSaysThatOnlyTheTabOriginCountsAndNeverRepeatsIt(t *testing.T) {
+	p := testPage(t, appOrigin)
+	srv := httptest.NewServer(p.handler())
+	defer srv.Close()
+	send(t, "POST", srv.URL+"/capture?t="+p.token, "http://demo.localhost:5173", `{"m":"GET","u":"/x","s":200}`)
+	out, _ := askPage(t, p, "payloads", nil)
+	if !strings.Contains(out, "Only the tab's origin counts") || strings.Contains(out, "demo.localhost") {
+		t.Errorf("the refusal must say only the tab's origin counts and not repeat the origin: %s", out)
+	}
+}
+
+func TestStateCutByMaxKeepsTheDialogAndItsFieldsAndPointsToPageResult(t *testing.T) {
+	out, _ := runSteps(t, func(load string) []string {
+		return []string{
+			load,
+			"(document.body.insertAdjacentHTML('beforeend',Array.from({length:60},(_,i)=>'<label>Filtro '+i+'<input></label>').join('')+'<div role=dialog><p>Nuevo usuario</p><label>Correo<input></label><button>Guardar</button></div>'),'ok')",
+			"window.__ws.state({max:600})",
+		}
+	}, nil)
+	for _, want := range []string{"Dialog: Nuevo usuario", "Guardar", "[text] Correo", "page(result)"} {
+		if !strings.Contains(out[2], want) {
+			t.Errorf("state cut by max lost %q: %q", want, out[2])
+		}
+	}
+	if strings.Contains(out[2], "Filtro 59") {
+		t.Errorf("the page's long list must be what the cut drops: %q", out[2])
+	}
+}
+
+func TestStateCutByMaxSkipsALongLineInsteadOfDroppingEverythingAfterIt(t *testing.T) {
+	out, _ := runSteps(t, func(load string) []string {
+		return []string{
+			load,
+			"(document.body.insertAdjacentHTML('beforeend','<div role=dialog><p>Nuevo usuario</p><button>Guardar</button><label>Correo<input></label></div>'),console.error('x'.repeat(190)),console.error('y'.repeat(190)),'ok')",
+			"new Promise(r=>setTimeout(()=>r(window.__ws.state({max:420})),300))",
+		}
+	}, nil)
+	for _, want := range []string{"Dialog: Nuevo usuario", "Guardar", "[text] Correo"} {
+		if !strings.Contains(out[2], want) {
+			t.Errorf("a long line before it hid %q: %q", want, out[2])
+		}
 	}
 }

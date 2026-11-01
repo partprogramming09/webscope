@@ -131,7 +131,7 @@ func TestPageAcceptsTheArgumentsAtTheTopLevelToo(t *testing.T) {
 	if err != nil || res.IsError {
 		t.Fatalf("the schema refused a top-level argument: %v %+v", err, res)
 	}
-	if got := res.Content[0].(*mcp.TextContent).Text; !strings.Contains(got, `__ws.fill({"Nombre":"Ana"})`) {
+	if got := res.Content[0].(*mcp.TextContent).Text; !strings.Contains(got, `.fill({"Nombre":"Ana"})`) {
 		t.Errorf("the top-level argument did not reach the snippet: %q", got)
 	}
 	var in input.Args
