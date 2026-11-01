@@ -2,6 +2,18 @@
 
 One entry per version, newest first. Tool names are `query`, `page`, `check` and `code`. Each change says what it is, what was seen that made it necessary, how it was checked and what was not checked. A change in what a tool prints is listed as a change, because a client may read it.
 
+## 0.7.7 — 2026-11-01
+
+**`page download` says why no file came: partial file, newest file, last file seen, and what Chrome is set to.**
+
+What was seen that made it necessary: a colleague's report of 7 failures of `page download` in a day, all `no file appeared in ~/Downloads within 10-20 s`, with nothing in the answer to tell a click that never ran from a download Chrome was waiting to place.
+
+Now the failure keeps its first sentence and adds what can be known: a `.crdownload` in the folder (Chrome was still writing: wait longer); the newest file there and its age in minutes; the last file this session saw appear (from `page(download, {report:true})`); and, from the `Preferences` file of each Chrome or Chromium profile on this machine, a profile that asks where to save each file (`download.prompt_for_download`) or whose `download.default_directory` is not the watched folder. Only those two keys are read from `Preferences`; nothing else of it is read or printed. The folder itself was already named. A failure with none of these facts reads as before.
+
+How it was checked: a new test that fails without the change (a partial file, an older file, a profile with `prompt_for_download` and another folder, and a secret in another key that must not appear); the suite passes with `-race`.
+
+What was not checked: Chrome's own dialog on the real app (see the entry added after the last version of this series); profiles outside the standard folders on macOS and Linux; Windows.
+
 ## 0.7.6 — 2026-11-01
 
 **`find` reads a text written as /A|B/ as a regular expression and says when a `|` was searched as plain text.**

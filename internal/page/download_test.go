@@ -159,3 +159,27 @@ func TestDownloadReadsTheHeadersOfATextSheet(t *testing.T) {
 		}
 	}
 }
+
+func TestDownloadFailureNamesThePartialFileTheNewestFileAndWhatChromeIsSetTo(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	prof := filepath.Join(home, "Library", "Application Support", "Google", "Chrome", "Profile 1")
+	os.MkdirAll(prof, 0o755)
+	os.WriteFile(filepath.Join(prof, "Preferences"), []byte(`{"download":{"prompt_for_download":true,"default_directory":"/elsewhere/dl"},"other":{"secret":"hunter2"}}`), 0o600)
+	p, dir := dlTool(t)
+	os.WriteFile(filepath.Join(dir, "old.xlsx"), []byte("PK"), 0o600)
+	askPage(t, p, "download", map[string]any{"arm": true})
+	os.WriteFile(filepath.Join(dir, "half.xlsx.crdownload"), []byte("PK"), 0o600)
+	_, err := askPage(t, p, "download", map[string]any{"wait": true, "seconds": 1})
+	if err == nil {
+		t.Fatal("no file must fail")
+	}
+	for _, want := range []string{"A partial download is there (half.xlsx.crdownload)", "The newest file there is old.xlsx", "Profile 1", "asks where to save", "saves to /elsewhere/dl"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("the failure must say %q: %v", want, err)
+		}
+	}
+	if strings.Contains(err.Error(), "hunter2") {
+		t.Errorf("nothing but the two download settings may be read out of Preferences: %v", err)
+	}
+}

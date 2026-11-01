@@ -3,6 +3,7 @@ package page
 import (
 	"archive/zip"
 	"bytes"
+	"encoding/json"
 	"encoding/xml"
 	"fmt"
 	htmlpkg "html"
@@ -127,7 +128,81 @@ func (p *Tool) download(args map[string]any) (string, error) {
 			break
 		}
 	}
-	return "", fmt.Errorf("no file appeared in %s within %d s, so nothing was downloaded: do not report the export as downloaded. Next: check that the real click ran and that WEBSCOPE_DOWNLOADS is the folder Chrome saves to", dir, secs)
+	return "", fmt.Errorf("no file appeared in %s within %d s, so nothing was downloaded: do not report the export as downloaded.%s Next: check that the real click ran and that WEBSCOPE_DOWNLOADS is the folder Chrome saves to", dir, secs, p.noFileHints(dir))
+}
+
+// noFileHints says what the watched folder and Chrome's own settings show about a download that never came: a partial file, the newest file, the last one this session saw, and a profile that asks where to save or saves elsewhere.
+func (p *Tool) noFileHints(dir string) string {
+	var b strings.Builder
+	if es, err := os.ReadDir(dir); err == nil {
+		var newest string
+		var newestMod time.Time
+		for _, e := range es {
+			n := e.Name()
+			if strings.HasSuffix(n, ".crdownload") {
+				fmt.Fprintf(&b, " A partial download is there (%s): Chrome was still writing it, so wait longer.", clip(n, 60))
+			}
+			if i, err := e.Info(); err == nil && i.Mode().IsRegular() && !strings.HasPrefix(n, ".") && !strings.HasSuffix(n, ".crdownload") && i.ModTime().After(newestMod) {
+				newest, newestMod = n, i.ModTime()
+			}
+		}
+		if newest != "" {
+			fmt.Fprintf(&b, " The newest file there is %s, %d min old.", clip(newest, 60), int(time.Since(newestMod).Minutes()))
+		}
+	}
+	p.mu.Lock()
+	if n := len(p.dlFiles); n > 0 {
+		fmt.Fprintf(&b, " The last file this session saw appear: %s.", p.dlFiles[n-1])
+	}
+	p.mu.Unlock()
+	for _, pr := range chromeDownloadPrefs() {
+		if pr.prompt {
+			fmt.Fprintf(&b, " Chrome profile «%s» asks where to save each file (download.prompt_for_download): its dialog waits for a person.", pr.profile)
+		}
+		if pr.dir != "" && filepath.Clean(pr.dir) != filepath.Clean(dir) {
+			fmt.Fprintf(&b, " Chrome profile «%s» saves to %s, not to the watched folder.", pr.profile, clip(pr.dir, 100))
+		}
+	}
+	return b.String()
+}
+
+type chromePrefs struct {
+	profile string
+	prompt  bool
+	dir     string
+}
+
+// chromeDownloadPrefs reads only download.prompt_for_download and download.default_directory from the Preferences file of each Chrome or Chromium profile; nothing else of that file is read or shown.
+func chromeDownloadPrefs() []chromePrefs {
+	h, err := os.UserHomeDir()
+	if err != nil {
+		return nil
+	}
+	var out []chromePrefs
+	for _, root := range []string{
+		filepath.Join(h, "Library", "Application Support", "Google", "Chrome"),
+		filepath.Join(h, ".config", "google-chrome"),
+		filepath.Join(h, ".config", "chromium"),
+	} {
+		files, _ := filepath.Glob(filepath.Join(root, "*", "Preferences"))
+		for _, f := range files {
+			raw, err := os.ReadFile(f)
+			if err != nil {
+				continue
+			}
+			var v struct {
+				Download struct {
+					Prompt bool   `json:"prompt_for_download"`
+					Dir    string `json:"default_directory"`
+				} `json:"download"`
+			}
+			if json.Unmarshal(raw, &v) != nil || (!v.Download.Prompt && v.Download.Dir == "") {
+				continue
+			}
+			out = append(out, chromePrefs{filepath.Base(filepath.Dir(f)), v.Download.Prompt, v.Download.Dir})
+		}
+	}
+	return out
 }
 
 // isText is true for bytes that are text in UTF-8 or in Latin-1 (no NUL, and almost no control characters).
