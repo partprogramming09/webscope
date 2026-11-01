@@ -12,7 +12,9 @@ Now the server writes, on stderr (which the client keeps in the log of the serve
 
 How it was checked: three new tests that fail without the change (a call that fails with an argument `Ana` leaves one line with tool, action and result and not the value; a Chrome test where `click` of a button that does not exist and `state` leave `click failed`, `click nothing_to_click` and `state ok` and not the text that was typed; the route writes only listed words and only with the token); the suite passes with `-race`.
 
-What was not checked: the action log file on the real run (the server's environment does not set `WEBSCOPE_ACTIONLOG` yet). Seen on the real run: the log of the client (`mcp-logs-webscope-core`) keeps `stderr: webscope 0.7.x` at start-up only, so stderr alone does not give the lines.
+On the real run with `WEBSCOPE_ACTIONLOG` set: the file held `call page download failed 1007ms`, `call code snap failed 3ms`, and, for a `click` of a button that does not exist and a `state` in the real app, `event page click failed`, `event page click nothing_to_click` and `event page state cut`, each with its time and no text of the call.
+
+What was not checked: nothing else. Seen on the real run: the log of the client (`mcp-logs-webscope-core`) keeps `stderr: webscope 0.7.x` at start-up only, so stderr alone does not give the lines.
 
 ## 0.7.9 — 2026-11-01
 
@@ -40,7 +42,9 @@ How it was checked: two new tests that fail without the change (the suggestion f
 
 On the real database (`acme`, `users`): `SELECT emial FROM users` answered `Did you mean «email»?`; `SELECT nmae FROM users` suggested nothing (no column is close), as designed.
 
-What was not checked: the candidate keys of `snap` on the real database.
+On the real database: a key `t` that repeats while `id` is different answered `Candidate keys in this result (all different): id`; two results whose rows are all duplicated answered that no column or pair is unique.
+
+What was not checked: the pair answer on the real database.
 
 ## 0.7.7 — 2026-11-01
 
@@ -54,7 +58,9 @@ How it was checked: a new test that fails without the change (a partial file, an
 
 On the real machine: `page download` with no click answered with the folder and `The newest file there is Reporte_usuarios_2026-10-31.xlsx, 419 min old`; no Chrome profile was reported as asking where to save or saving elsewhere.
 
-What was not checked: a failure with a `.crdownload` or a profile that asks, on the real Chrome (only in the test); profiles outside the standard folders on macOS and Linux; Windows.
+On the real machine with a `.crdownload` put in the downloads folder for the test (and removed): the failure said `A partial download is there (ZZ_parcial.xlsx.crdownload): Chrome was still writing it, so wait longer`.
+
+What was not checked: a profile that asks where to save, on the real Chrome (only in the test); profiles outside the standard folders on macOS and Linux; Windows.
 
 ## 0.7.6 — 2026-11-01
 
