@@ -221,7 +221,8 @@
     const q = a.text != null ? a.text : a.regex;
     if (q == null || q === '') return fail('find needs text or regex, e.g. find {"text":"tarifa"}');
     let re;
-    try { re = a.regex != null ? new RegExp(a.regex, 'i') : new RegExp(String(q).replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i'); } catch (x) { return fail('bad regex ' + a.regex); }
+    const slashed = a.regex == null && /^\/.+\/$/.exec(String(q)); // text written as /A|B/ is a regex, on purpose
+    try { re = a.regex != null ? new RegExp(a.regex, 'i') : slashed ? new RegExp(String(q).slice(1, -1), 'i') : new RegExp(String(q).replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i'); } catch (x) { return fail('bad regex ' + (a.regex != null ? a.regex : q)); }
     const where = e => {
       if (e.closest('[role=dialog],.v-dialog')) return 'dialog';
       const box = e.closest('.v-card,fieldset,section,form,[role=tabpanel]');
@@ -239,7 +240,7 @@
     [['heading', 'h1,h2,h3,h4'], ['alert', ALERTS], ['error', ERRORS], ['column', 'th']].forEach(([k, sel]) => {
       texts(sel).filter(t => re.test(t)).forEach(t => hits.push('[' + k + '] ' + clip(t, 80)));
     });
-    if (!hits.length) return 'No field, button or text matches «' + q + '». Next: page(state) lists what the screen has.';
+    if (!hits.length) return 'No field, button or text matches «' + q + '».' + (a.regex == null && !slashed && String(q).includes('|') ? ' «text» is searched as written, with the | inside it; for alternatives use find {"regex":"A|B"} or write the text as /A|B/.' : '') + ' Next: page(state) lists what the screen has.';
     const max = a.max || 20;
     return hits.slice(0, max).join('\n') + (hits.length > max ? '\n(… ' + (hits.length - max) + ' more matches not shown: raise max)' : '');
   };

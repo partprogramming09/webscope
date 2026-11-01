@@ -2,6 +2,18 @@
 
 One entry per version, newest first. Tool names are `query`, `page`, `check` and `code`. Each change says what it is, what was seen that made it necessary, how it was checked and what was not checked. A change in what a tool prints is listed as a change, because a client may read it.
 
+## 0.7.6 — 2026-11-01
+
+**`find` reads a text written as /A|B/ as a regular expression and says when a `|` was searched as plain text.**
+
+What was seen that made it necessary: a colleague's report: `find` with `A|B` treated the `|` as plain text and answered `No field, button or text matches`, with no hint that a regex was meant.
+
+Now a `text` written between slashes, `/A|B/`, is read as a regular expression (case-insensitive), on purpose; `regex` works as before. A `text` that holds a `|`, is not between slashes and finds nothing ends with `«text» is searched as written, with the | inside it; for alternatives use find {"regex":"A|B"} or write the text as /A|B/`. A bad expression written between slashes is `Failed: bad regex /…/`. A text that is not between slashes behaves as before.
+
+How it was checked: the Chrome test of `find` got three cases that fail without the change (`/^guard|^cancel/` finds both buttons; `Guardar|Cancelar` finds nothing and says why; `/(/` is a bad regex); the suite passes with `-race`.
+
+What was not checked: on the real app (see the entry added after the last version of this series).
+
 ## 0.7.5 — 2026-11-01
 
 **`fill` ends with the state of the form: whether the main button is enabled and which fields show an error.**

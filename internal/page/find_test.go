@@ -32,6 +32,9 @@ func TestFindListsOnlyWhatMatchesAndRefsPickElements(t *testing.T) {
 		{"fill", map[string]any{"fields": map[string]any{"css:[name=c]": "por css"}}},
 		{"find", map[string]any{"text": "por css"}},
 		{"fill", map[string]any{"fields": map[string]any{"css:[name=nada]": "x", "css:((": "y"}}},
+		{"find", map[string]any{"text": "/^guard|^cancel/"}},
+		{"find", map[string]any{"text": "Guardar|Cancelar"}},
+		{"find", map[string]any{"text": "/(/"}},
 	} {
 		sn, err := snippet(s.action, s.args)
 		if err != nil {
@@ -69,5 +72,14 @@ func TestFindListsOnlyWhatMatchesAndRefsPickElements(t *testing.T) {
 	}
 	if !strings.Contains(out[13], "css:[name=nada]: not found") || !strings.Contains(out[13], "css:((: not found") {
 		t.Errorf("a selector that matches no field, or is not one, is not found: %q", out[13])
+	}
+	if !strings.Contains(out[14], "[button] Guardar") || !strings.Contains(out[14], "[button] Cancelar") {
+		t.Errorf("a text written as /A|B/ is a regex: %q", out[14])
+	}
+	if !strings.Contains(out[15], "No field, button or text matches") || !strings.Contains(out[15], `find {"regex":"A|B"}`) {
+		t.Errorf("a text with | that finds nothing says it was searched as written: %q", out[15])
+	}
+	if !strings.HasPrefix(out[16], "Failed: bad regex /(/") {
+		t.Errorf("a bad regex written as /…/ is said: %q", out[16])
 	}
 }
