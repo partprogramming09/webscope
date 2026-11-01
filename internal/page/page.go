@@ -111,6 +111,7 @@ type Tool struct {
 	lastCap time.Time        // when the last capture came
 	now     func() time.Time // the clock; a test sets it
 	shapes  map[string]Shape
+	Trace   io.Writer          // where the helper's notes about an action go, one line each; nil writes nothing
 	uploads map[string]*upload // files prepared for the helper to fetch, by random id
 
 	tampered []string // page functions replaced after the helper loaded, as the helper last said
@@ -353,6 +354,7 @@ func (p *Tool) handler() http.Handler {
 	mux.HandleFunc("/result", p.guard(p.keep))
 	mux.HandleFunc("/shape", p.guard(p.shape))
 	mux.HandleFunc("/upload", p.guard(p.serveUpload))
+	mux.HandleFunc("/event", p.guard(p.event))
 	mux.HandleFunc("/tamper", p.guard(p.tamper))
 	mux.HandleFunc("/ping", p.guard(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusNoContent) }))
 	mux.HandleFunc("/log", p.guard(p.logRoute))
@@ -568,4 +570,23 @@ func (p *Tool) Captures() []Capture {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	return slices.Clone(p.caps)
+}
+
+// eventActions and eventNotes are the only words an /event line may carry: the helper names an action and what kind of answer it gave, never a value of the page.
+var (
+	eventActions = []string{"state", "find", "read", "fill", "click", "press", "upload", "simulate", "open", "options", "audit", "shape", "batch"}
+	eventNotes   = []string{"ok", "failed", "no_effect", "nothing_to_click", "not_found", "click_on_disabled", "repeated_confirmation", "form_disabled", "interceptor", "fetch_wrapper", "still_pending", "new_alerts", "new_errors", "cut"}
+)
+
+// event writes one line to Trace for an action the helper ran, when both words are in the lists above.
+func (p *Tool) event(w http.ResponseWriter, r *http.Request) {
+	a, n := r.URL.Query().Get("a"), r.URL.Query().Get("n")
+	if p.Trace != nil && slices.Contains(eventActions, a) {
+		for _, note := range strings.Split(n, ",") {
+			if slices.Contains(eventNotes, note) {
+				fmt.Fprintf(p.Trace, "webscope: event page %s %s\n", a, note)
+			}
+		}
+	}
+	w.WriteHeader(http.StatusNoContent)
 }

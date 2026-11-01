@@ -734,7 +734,15 @@
     realFetch(cfg.base + '/tamper?t=' + cfg.t + '&n=' + encodeURIComponent(now), { method: 'POST', keepalive: true }).catch(() => {});
   }, 400);
   const marked = r => { const l = names(); return l.length ? MARK(l) + '\n' + r : r; };
-  const wrap = f => async a => { try { const r = await f(a || {}); await probeFetch(); return marked(r); } catch (e) { return fail(e.message); } };
+  // notesOf names, from a fixed list, what kind of answer an action gave; the listener writes it to its log so friction can be counted later. No text of the page goes with it.
+  const NOTES = [['failed', /^Failed:/], ['no_effect', /No effect seen/], ['nothing_to_click', /nothing to click/], ['not_found', /: not found/], ['click_on_disabled', /it is disabled/], ['repeated_confirmation', /repeated confirmation/], ['form_disabled', /«[^»]*» is disabled/], ['interceptor', /^Interceptor:/], ['fetch_wrapper', /^Note: fetch was wrapped/], ['still_pending', /Still pending/], ['new_alerts', /New alerts:/], ['new_errors', /New (console )?errors:/], ['cut', /more (lines|chars|bytes) /]];
+  const notesOf = r => { const l = NOTES.filter(([, re]) => re.test(r)).map(([n]) => n); return l.length ? l.join(',') : 'ok'; };
+  const wrap = (f, name) => async a => {
+    let r;
+    try { r = await f(a || {}); await probeFetch(); r = marked(r); } catch (e) { r = fail(e.message); }
+    realFetch(cfg.base + '/event?t=' + cfg.t + '&a=' + name + '&n=' + encodeURIComponent(notesOf(r)), { method: 'POST', keepalive: true }).catch(() => {});
+    return r;
+  };
   // hideQuery drops the values of query strings that carry several (a=1&b=2 becomes a&b): javascript_tool blocks such text. A single ?name=value is not blocked and stays.
   const hideQuery = s => s.replace(/([?&][\w.%[\]-]+)=[^&\s#"'<>)]*(?=&[\w.%[\]-]+=)/g, '$1').replace(/&([\w.%[\]-]+)=[^&\s#"'<>)]*/g, '&$1');
   // unblock: javascript_tool blocks a text that has an = and also a ; or an & (measured: a=1;b=2, id=a1 y; z and id=a1 y & z are blocked; an = alone, a ; alone or an & alone are not),
@@ -754,7 +762,7 @@
     const cut = hid.lastIndexOf('\n', lim - 140), head = hid.slice(0, cut > 0 ? cut : lim - 140);
     return head + '\n(… ' + (r.length - head.length) + ' more chars: ' + note + 'javascript_tool cuts at 1000, page(result) gives all)';
   };
-  plain = { state: wrap(state), find: wrap(find), read: wrap(read), fill: wrap(fill), click: wrap(click), press: wrap(press), upload: wrap(upload), simulate: wrap(simulate), open: wrap(open), options: wrap(options), batch: wrap(batch), audit: wrap(audit), shape: wrap(shape) };
+  plain = { state: wrap(state, 'state'), find: wrap(find, 'find'), read: wrap(read, 'read'), fill: wrap(fill, 'fill'), click: wrap(click, 'click'), press: wrap(press, 'press'), upload: wrap(upload, 'upload'), simulate: wrap(simulate, 'simulate'), open: wrap(open, 'open'), options: wrap(options, 'options'), batch: wrap(batch, 'batch'), audit: wrap(audit, 'audit'), shape: wrap(shape, 'shape') };
   const stepLines = s => (s.match(/^\d+\. \w+: .*$/gm) || []).map(l => clip(l, 110)).join('\n');
   window.__ws = Object.fromEntries(Object.entries(plain).map(([k, f]) => [k, sink(f, k === 'batch' ? stepLines : null)]));
 })();

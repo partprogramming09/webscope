@@ -2,6 +2,18 @@
 
 One entry per version, newest first. Tool names are `query`, `page`, `check` and `code`. Each change says what it is, what was seen that made it necessary, how it was checked and what was not checked. A change in what a tool prints is listed as a change, because a client may read it.
 
+## 0.7.10 — 2026-11-01
+
+**The server writes one line per call with its action, and one line per action the helper ran with the kind of answer it gave.**
+
+What was seen that made it necessary: a colleague read the log of the MCP server for a day (441 calls, 45 failures) and found it holds only `Calling MCP tool`, `completed` and `failed`: the action of `page` and `code`, and the soft answers (`No effect seen`, `nothing to click`), which are what shows where a tool is hard to use, were not in it.
+
+Now the server writes, on stderr (which the client keeps in the log of the server), one line per call: `webscope: call <tool> <action> ok|failed <n>ms`, with the action for `page`, `code` and `check` and `-` for `query`. And the helper tells the listener, after each action it runs in the page, what kind of answer it gave, from a fixed list: `failed`, `no_effect`, `nothing_to_click`, `not_found`, `click_on_disabled`, `repeated_confirmation`, `form_disabled`, `interceptor`, `fetch_wrapper`, `still_pending`, `new_alerts`, `new_errors`, `cut` (or `ok`); the listener writes `webscope: event page <action> <note>` for each. The client does not keep these lines: on the real run its log held the start-up line of stderr and none of the per-call lines. So, when `WEBSCOPE_ACTIONLOG` names a file, the same lines are also appended there, each with a UTC time (the file is created with mode 600; the variable is optional). A word that is not in the lists is dropped, and a request without the token is refused as every other route. Arguments, field values, SQL, table names, answers and the text of the page are never written. A step of a `batch` writes its own event. New route `/event` of the listener.
+
+How it was checked: three new tests that fail without the change (a call that fails with an argument `Ana` leaves one line with tool, action and result and not the value; a Chrome test where `click` of a button that does not exist and `state` leave `click failed`, `click nothing_to_click` and `state ok` and not the text that was typed; the route writes only listed words and only with the token); the suite passes with `-race`.
+
+What was not checked: the file on the real run (see the entry added after the last version of this series). Seen on the real run: the log of the client (`mcp-logs-webscope-core`) keeps `stderr: webscope 0.7.x` at start-up only, so stderr alone does not give the lines.
+
 ## 0.7.9 — 2026-11-01
 
 **`page upload` attaches a file from an allowed folder to an `<input type=file>`.**

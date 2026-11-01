@@ -4,7 +4,10 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"fmt"
+	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 
@@ -137,5 +140,35 @@ func TestPageAcceptsTheArgumentsAtTheTopLevelToo(t *testing.T) {
 	var in input.Args
 	if err := json.Unmarshal([]byte(`{"action":"fill","Nombre":"x","args":{"Nombre":"Ana"}}`), &in); err != nil || in.Args["Nombre"] != "Ana" {
 		t.Errorf("a key inside args must win: %+v, %v", in, err)
+	}
+}
+
+func TestACallLeavesOneLineWithTheToolTheActionAndTheResultButNoArgument(t *testing.T) {
+	var buf strings.Builder
+	old := traceTo
+	traceTo = &buf
+	defer func() { traceTo = old }()
+	h := traced("page", func(context.Context, *mcp.CallToolRequest, input.Args) (*mcp.CallToolResult, any, error) {
+		return &mcp.CallToolResult{IsError: true, Content: []mcp.Content{&mcp.TextContent{Text: "Failed: Ana"}}}, nil, nil
+	})
+	h(context.Background(), nil, input.Args{Action: "fill", Args: map[string]any{"Nombre": "Ana"}})
+	line := buf.String()
+	if !strings.HasPrefix(line, "webscope: call page fill failed ") || strings.Contains(line, "Ana") || strings.Count(line, "\n") != 1 {
+		t.Errorf("one line with tool, action and result, and no value: %q", line)
+	}
+}
+
+func TestTheActionLogFileGetsTheLinesWithATimeWhenItIsSet(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "actions.log")
+	t.Setenv("WEBSCOPE_ACTIONLOG", path)
+	w := openTrace()
+	fmt.Fprintln(w, "webscope: call page click ok 3ms")
+	raw, err := os.ReadFile(path)
+	if err != nil || !regexp.MustCompile(`^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ webscope: call page click ok 3ms\n$`).Match(raw) {
+		t.Errorf("the file must hold the line with a time: %q, %v", raw, err)
+	}
+	t.Setenv("WEBSCOPE_ACTIONLOG", "")
+	if openTrace() != os.Stderr {
+		t.Errorf("without the variable only stderr is used")
 	}
 }

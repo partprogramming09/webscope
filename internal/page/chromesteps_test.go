@@ -351,3 +351,54 @@ func TestFillSaysWhetherTheSaveButtonIsDisabledAndWhichFieldsShowAnError(t *test
 		t.Errorf("a valid form must say the button is enabled: %q", out[3])
 	}
 }
+
+func TestTheHelperTellsTheListenerWhatKindOfAnswerEachActionGave(t *testing.T) {
+	var buf syncBuf
+	runStepsTool(t, func(p *Tool, load string) []string {
+		p.Trace = &buf
+		return []string{load, `window.__ws.click({text:"ZZ secret button"})`, `window.__ws.state({})`, `new Promise(r=>setTimeout(()=>r('waited'),700))`}
+	}, nil)
+	got := buf.String()
+	for _, want := range []string{"webscope: event page click failed", "webscope: event page click nothing_to_click", "webscope: event page state ok"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("the log lacks %q: %q", want, got)
+		}
+	}
+	if strings.Contains(got, "secret") {
+		t.Errorf("no text of the call may reach the log: %q", got)
+	}
+}
+
+func TestTheEventRouteWritesOnlyWordsOfItsLists(t *testing.T) {
+	p := testPage(t, appOrigin)
+	var buf syncBuf
+	p.Trace = &buf
+	srv := httptest.NewServer(p.handler())
+	defer srv.Close()
+	base := srv.URL + "/event?t=" + p.token
+	send(t, "POST", base+"&a=click&n=no_effect", appOrigin, "")
+	send(t, "POST", base+"&a=click&n=hunter2", appOrigin, "")
+	send(t, "POST", base+"&a=rm%20-rf&n=ok", appOrigin, "")
+	send(t, "POST", srv.URL+"/event?a=click&n=ok", appOrigin, "")
+	if got := buf.String(); got != "webscope: event page click no_effect\n" {
+		t.Errorf("only the listed words with the token: %q", got)
+	}
+}
+
+// syncBuf is a strings.Builder that two goroutines may write and read.
+type syncBuf struct {
+	mu sync.Mutex
+	b  strings.Builder
+}
+
+func (s *syncBuf) Write(p []byte) (int, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.b.Write(p)
+}
+
+func (s *syncBuf) String() string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.b.String()
+}

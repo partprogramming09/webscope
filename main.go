@@ -17,7 +17,7 @@ import (
 )
 
 const (
-	version      = "0.7.9"
+	version      = "0.7.10"
 	instructions = `query(sql): one read-only statement (SELECT, SHOW, DESCRIBE, EXPLAIN, WITH). The answer is TSV with a header; \N is NULL; rows and cells are capped, so refine with WHERE or fewer columns. page(action,args?): test a screen in Chrome; start with page(help). check(sent,table,where,map,after?,at?,tenant?): sent is a request page captured ("POST /api/quotes"), where {column:value} picks one row, map {sent field:column}, after a later captured read; only differences are shown. code(action,args?): fields {table,tenant?} is the sheet of a table (counts, never values); consumers {table,column} lists who reads and writes a column in the backend (an estimate); map {module,walkthrough?} the routes, calls and screens of a front module; map_back {query} from them to endpoint, controller, service and table; flows {module} both in one answer, as evidence for user stories; cases {module} the tests it needs, as a list; legacy {path,module?} endpoints, callers and tables of a legacy PHP folder, against the new module's tables; rows {table,a,b,children?} how two rows differ, no values; snap {name,sql,key?,tenant?} keeps a query and snap_diff {name} shows what changed since (new, deleted, before → after). Migrating a module, parity with a legacy system, user stories or test cases: call code(help, {topic:"migration"}) first, it gives the steps and the tool for each. If a tool fails, report it as is.`
 )
 
@@ -38,26 +38,26 @@ func newServer(s *db.Source, p *page.Tool) *mcp.Server {
 		Name:        "query",
 		Description: "Read-only SQL on the project database. One statement. Answer: TSV with header, capped.",
 		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true},
-	}, guarded(query(s)))
+	}, guarded(traced("query", query(s))))
 	mcp.AddTool(srv, &mcp.Tool{
 		Name:        "page",
 		Description: "Test a screen in Chrome (Claude in Chrome): returns text or JavaScript to run with javascript_tool. page(help) lists the actions.",
 		InputSchema: input.Schema,
-	}, guarded(p.Handle))
+	}, guarded(traced("page", p.Handle)))
 	cd := &code.Tool{Src: s, Backend: os.Getenv("WEBSCOPE_BACKEND"), Front: os.Getenv("WEBSCOPE_FRONT"), Legacy: os.Getenv("WEBSCOPE_LEGACY")}
 	mcp.AddTool(srv, &mcp.Tool{
 		Name:        "code",
 		Description: "Read the project's code: fields, consumers, map, map_back, flows, cases, legacy.",
 		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true},
 		InputSchema: input.Schema,
-	}, guarded(cd.Handle))
+	}, guarded(traced("code", cd.Handle)))
 	ck := &check.Tool{Src: s, Page: p}
 	mcp.AddTool(srv, &mcp.Tool{
 		Name:        "check",
 		Description: "Saved row vs what the screen sent and read back.",
 		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true},
 		InputSchema: check.Schema,
-	}, guarded(ck.Handle))
+	}, guarded(traced("check", ck.Handle)))
 	return srv
 }
 
@@ -75,6 +75,8 @@ func main() {
 	fmt.Fprintf(os.Stderr, "webscope %s\n", version)
 	pg := page.New(os.Getenv("WEBSCOPE_APP_URL"))
 	pg.Life = ctx
+	traceTo = openTrace()
+	pg.Trace = traceTo
 	if err := newServer(&db.Source{URL: os.Getenv("WEBSCOPE_DB_URL"), TenantQuery: tenantLookup()}, pg).Run(ctx, &mcp.StdioTransport{}); err != nil && ctx.Err() == nil {
 		fmt.Fprintln(os.Stderr, "webscope:", err)
 		os.Exit(1)
