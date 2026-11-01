@@ -527,7 +527,7 @@
       e.files = dt.files;
       e.dispatchEvent(new Event('input', { bubbles: true }));
       e.dispatchEvent(new Event('change', { bubbles: true }));
-      return 'attached ' + clip(a.name, 60) + ' (' + file.size + ' bytes) to the file input «' + (labelOf(e) || e.id || e.name || 'no name') + '»; it now holds ' + e.files.length + ' file(s). This only chooses the file: nothing was saved.';
+      return 'attached ' + clip(a.name, 60) + ' (' + file.size + ' bytes) to the file input «' + (labelOf(e) || e.id || e.name || 'no name') + '»; ' + (e.files.length ? 'it holds ' + e.files.length + ' file(s)' : 'the app emptied the input after reading it, as many do') + '. This only chooses the file: nothing was saved.';
     });
   };
 

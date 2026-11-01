@@ -2,6 +2,18 @@
 
 One entry per version, newest first. Tool names are `query`, `page`, `check` and `code`. Each change says what it is, what was seen that made it necessary, how it was checked and what was not checked. A change in what a tool prints is listed as a change, because a client may read it.
 
+## 0.7.11 — 2026-11-01
+
+**`upload` does not call an input that the app emptied after reading it «0 files».**
+
+What was seen that made it necessary: `upload` on a real file input of the app (bulk upload of clients, `/crm/contacts/clients/bulk-upload`) worked: the app read the file, went to its mapping step (`Cambiar Archivo`, `Importar Contactos`) and sent no request. But the answer said `it now holds 0 file(s)`, because the app empties the input once it has read the file; that reads as a failure.
+
+Now, when the input holds no file after the events, the answer says `the app emptied the input after reading it, as many do` instead of a count; with a file still in the input it says `it holds N file(s)` as before. Nothing else changes.
+
+How it was checked: the Chrome test of `upload` got a case with a page that clears the input in its `change` handler, which fails without the change; the suite passes with `-race`. On the real app (above) the old text was seen; the new text was not run there yet.
+
+What was not checked: the new text on the real app. The «Importar Contactos» button was not pressed: nothing was sent or saved.
+
 ## 0.7.10 — 2026-11-01
 
 **The server writes one line per call with its action, and one line per action the helper ran with the kind of answer it gave.**
