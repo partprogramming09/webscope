@@ -497,6 +497,40 @@
     return out.join('\n');
   };
 
+  // upload attaches the file the listener holds under a.id to a file input and fires its input and change events, as a person choosing it would.
+  const upload = async a => {
+    const inputs = [...document.querySelectorAll('input[type=file]')];
+    let e;
+    if (a.css) {
+      try { e = document.querySelector(a.css); } catch (x) { return fail('bad selector ' + a.css); }
+      if (!e || !e.matches('input[type=file]')) return fail('the selector ' + a.css + ' matches no <input type=file>. Next: page(read {selector}) or find shows the page.');
+    } else if (a.ref) {
+      const m = /^f(\d+)$/.exec(a.ref);
+      e = m && fields()[Number(m[1]) - 1];
+      if (!e || e.type !== 'file') return fail('the ref ' + a.ref + ' is not a file input. Next: page(find) lists the fields with their refs.');
+    } else if (a.field) {
+      const n = lower(a.field);
+      e = inputs.find(x => [labelOf(x), x.name, x.id, x.getAttribute('aria-label')].some(v => v && lower(v) === n)) || inputs.find(x => lower(labelOf(x)).includes(n));
+      if (!e) return fail('no <input type=file> named «' + clip(a.field, 40) + '»; the page has ' + inputs.length + '. Next: use css or ref.');
+    } else if (inputs.length === 1) e = inputs[0];
+    else return fail(inputs.length ? inputs.length + ' file inputs on this page: name one with field, ref or css.' : 'no <input type=file> on this page. Next: open the dialog or screen that has it.');
+    let blob;
+    try {
+      const r = await realFetch(cfg.base + '/upload?t=' + cfg.t + '&id=' + encodeURIComponent(a.id));
+      if (!r.ok) return fail('the listener has no such file (' + r.status + '). Next: call page(upload) again.');
+      blob = await r.blob();
+    } catch (x) { return fail('the listener did not answer (' + x.message + '). Next: page(load) and call upload again.'); }
+    const file = new File([blob], a.name, { type: a.type });
+    return withEffect(() => {
+      const dt = new DataTransfer();
+      dt.items.add(file);
+      e.files = dt.files;
+      e.dispatchEvent(new Event('input', { bubbles: true }));
+      e.dispatchEvent(new Event('change', { bubbles: true }));
+      return 'attached ' + clip(a.name, 60) + ' (' + file.size + ' bytes) to the file input «' + (labelOf(e) || e.id || e.name || 'no name') + '»; it now holds ' + e.files.length + ' file(s). This only chooses the file: nothing was saved.';
+    });
+  };
+
   let lastClick = { el: document.body, inDialog: false }; // the element clickOnce pressed last and whether it sat in a dialog
   const clickOnce = a => {
     let els;
@@ -720,7 +754,7 @@
     const cut = hid.lastIndexOf('\n', lim - 140), head = hid.slice(0, cut > 0 ? cut : lim - 140);
     return head + '\n(… ' + (r.length - head.length) + ' more chars: ' + note + 'javascript_tool cuts at 1000, page(result) gives all)';
   };
-  plain = { state: wrap(state), find: wrap(find), read: wrap(read), fill: wrap(fill), click: wrap(click), press: wrap(press), simulate: wrap(simulate), open: wrap(open), options: wrap(options), batch: wrap(batch), audit: wrap(audit), shape: wrap(shape) };
+  plain = { state: wrap(state), find: wrap(find), read: wrap(read), fill: wrap(fill), click: wrap(click), press: wrap(press), upload: wrap(upload), simulate: wrap(simulate), open: wrap(open), options: wrap(options), batch: wrap(batch), audit: wrap(audit), shape: wrap(shape) };
   const stepLines = s => (s.match(/^\d+\. \w+: .*$/gm) || []).map(l => clip(l, 110)).join('\n');
   window.__ws = Object.fromEntries(Object.entries(plain).map(([k, f]) => [k, sink(f, k === 'batch' ? stepLines : null)]));
 })();

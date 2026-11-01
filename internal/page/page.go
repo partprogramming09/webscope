@@ -44,10 +44,10 @@ const (
 )
 
 // snippetActions are the actions answered with a JavaScript snippet for javascript_tool. Anything else is answered here.
-var snippetActions = []string{"state", "find", "read", "fill", "click", "press", "simulate", "open", "options", "audit", "shape", "batch"}
+var snippetActions = []string{"state", "find", "read", "fill", "click", "press", "simulate", "open", "options", "audit", "shape", "batch", "upload"}
 
 // stepActions are the snippet actions that a batch can run, one after the other, in the same snippet.
-var stepActions = slices.DeleteFunc(slices.Clone(snippetActions), func(a string) bool { return a == "batch" })
+var stepActions = slices.DeleteFunc(slices.Clone(snippetActions), func(a string) bool { return a == "batch" || a == "upload" })
 
 // checkBatch refuses the steps of a batch that no snippet can run: none, a step that is not an object, an action the server answers by itself, or a nested batch.
 func checkBatch(args map[string]any) error {
@@ -81,6 +81,7 @@ state|find|read|fill|click|press|simulate|open|options|audit|shape|batch: return
   shape {name, selector?}: saves what the screen, or only the part a CSS selector names, offers under a name (field labels and kinds, buttons, table columns, tabs, headings; no values) for parity.
   simulate {match, status, times?, method?, body?}: the next requests whose URL contains match answer HTTP status 400-599 without reaching the app, with body (a text or an object, 2000 characters at most) or a short default message; {clear:true} cancels.
 result {offset?}: javascript_tool shows only 1000 characters of what a snippet returns and blocks a text that has an = together with a ; or an & (a=1&b=2, a=1;b=2, id=a1 y; z). When an answer is longer, or has them, the snippet returns a short one that ends «page(result) gives all» (query values hidden, ; and & changed) and the helper keeps the whole answer: result gives it, in parts (answered here, no snippet).
+upload {path, field|ref|css?}: attaches a file to an <input type=file> and fires its input and change events (a file under the temp folder or WEBSCOPE_UPLOADS, 5 MB at most, never a hidden or .env file); field names the input by its label, name or id, ref by f<N> from find, css by a selector; with only one file input on the page none is needed. It does not press the save button.
 payloads {limit?, match?, body?, index?}: the requests the page sent and their answers, each numbered #N with the milliseconds it took (answered here, no snippet); match is a regex over "METHOD address", body a regex over what was sent and got, and both together keep the requests that fit (limit applies to those); index N gives that one request with its sent and got up to 8000 bytes.
 parity {a, b, kinds?}: compares two saved shapes (say the old and the new screen) and shows only what one has and the other lacks (a repeated name once, with ×N), and fields whose kind changed (answered here, no snippet); kinds "field,column" limits it, e.g. to leave out the step buttons of a wizard. parity {req_a, req_b, map?} compares instead the latest captured request that matches each ("POST save.php": the method, then a part of the address): status and the field names sent and received, never values; map {name in a: name in b} renames a's names first.
 download {arm:true} before a real click, then {wait:true, seconds?} after it, and {report:true} lists the files the session saw appear so the user can delete them (answered here, no snippet): waits for a new file in the downloads folder (WEBSCOPE_DOWNLOADS, else ~/Downloads) and gives its name, size, type by its first bytes and time, and for an xlsx, an HTML table or a text with tabs, semicolons or commas (what a legacy .xls often is) its header names and row count, never a value. No file in time is a failure: an export counts as downloaded only if this finds the file.
@@ -110,6 +111,7 @@ type Tool struct {
 	lastCap time.Time        // when the last capture came
 	now     func() time.Time // the clock; a test sets it
 	shapes  map[string]Shape
+	uploads map[string]*upload // files prepared for the helper to fetch, by random id
 
 	tampered []string // page functions replaced after the helper loaded, as the helper last said
 
@@ -174,7 +176,7 @@ func snippet(action string, args map[string]any) (string, error) {
 // With boot (the address of the helper script) a page that lost the helper, after a reload or a navigation, loads it first and then runs the action.
 func snippetBoot(action string, args map[string]any, boot string) (string, error) {
 	if !slices.Contains(snippetActions, action) {
-		return "", fmt.Errorf("unknown action %q (load, state, read, fill, click, press, payloads, result, simulate, audit, shape, open, options, batch, parity, download, verify or help)", action)
+		return "", fmt.Errorf("unknown action %q (load, state, read, fill, click, press, upload, payloads, result, simulate, audit, shape, open, options, batch, parity, download, verify or help)", action)
 	}
 	if args == nil {
 		args = map[string]any{}
@@ -220,7 +222,14 @@ func (p *Tool) answer(in input.Args) (string, error) {
 	case "result":
 		return p.result(in.Args), nil
 	}
-	return snippetBoot(in.Action, in.Args, p.bootURL())
+	args := in.Args
+	if in.Action == "upload" {
+		var err error
+		if args, err = p.prepareUpload(args); err != nil {
+			return "", err
+		}
+	}
+	return snippetBoot(in.Action, args, p.bootURL())
 }
 
 // bootURL is the address of the helper script for a page that lost it, or "" when WEBSCOPE_APP_URL is not set or the listener cannot start.
@@ -343,6 +352,7 @@ func (p *Tool) handler() http.Handler {
 	mux.HandleFunc("/capture", p.guard(p.capture))
 	mux.HandleFunc("/result", p.guard(p.keep))
 	mux.HandleFunc("/shape", p.guard(p.shape))
+	mux.HandleFunc("/upload", p.guard(p.serveUpload))
 	mux.HandleFunc("/tamper", p.guard(p.tamper))
 	mux.HandleFunc("/ping", p.guard(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusNoContent) }))
 	mux.HandleFunc("/log", p.guard(p.logRoute))

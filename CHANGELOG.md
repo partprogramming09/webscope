@@ -2,6 +2,18 @@
 
 One entry per version, newest first. Tool names are `query`, `page`, `check` and `code`. Each change says what it is, what was seen that made it necessary, how it was checked and what was not checked. A change in what a tool prints is listed as a change, because a client may read it.
 
+## 0.7.9 — 2026-11-01
+
+**`page upload` attaches a file from an allowed folder to an `<input type=file>`.**
+
+What was seen that made it necessary: a colleague had no way to choose a file in an `<input type=file>` and built a `File` by hand in the page with `DataTransfer`.
+
+New action `upload {path, field|ref|css?}`. The server reads the file and keeps it under a random id; the snippet it returns makes the helper fetch it from the listener (once, with the token and from the app's origin only), build the `File` with its name and type, put it in the input with `DataTransfer` and fire `input` and `change`, then report what the click-like step caused, as `click` does. The input is named by `field` (label, name, id or aria-label), by `ref` (`f<N>` from `find`), or by `css`; with only one file input on the page none is needed, and a hidden input (as most libraries draw it) is found. The file must sit under `WEBSCOPE_UPLOADS` (folders separated by commas) or, when that is not set, under the system temp folder or `/tmp` (symlinks resolved, so a link out of the folder is refused); it must be a regular file of at most 5 MB, and a hidden file (so `.env*`) is refused. It only chooses the file: the save button is not pressed, and nothing is written to the database. It cannot run inside a `batch`. The answer of `page(help)` lists it; the new environment variable is optional.
+
+How it was checked: two new tests (a Chrome test where a hidden file input's `change` handler receives the name, the type and the bytes, by field and with no name; refusals for a path outside the folder, a symlink out of it, a hidden file, a file over 5 MB, a missing file and no path); the suite passes with `-race`, and `tools/list` stays within its size.
+
+What was not checked: on the real app (see the entry added after the last version of this series); several files in one input; a drop zone that is not an `<input type=file>`.
+
 ## 0.7.8 — 2026-11-01
 
 **`query` suggests the nearest column of an unknown one, and `snap` names the columns that could be the key when one repeats.**
