@@ -12,7 +12,7 @@ Now the server writes, on stderr (which the client keeps in the log of the serve
 
 How it was checked: three new tests that fail without the change (a call that fails with an argument `Ana` leaves one line with tool, action and result and not the value; a Chrome test where `click` of a button that does not exist and `state` leave `click failed`, `click nothing_to_click` and `state ok` and not the text that was typed; the route writes only listed words and only with the token); the suite passes with `-race`.
 
-What was not checked: the file on the real run (see the entry added after the last version of this series). Seen on the real run: the log of the client (`mcp-logs-webscope-core`) keeps `stderr: webscope 0.7.x` at start-up only, so stderr alone does not give the lines.
+What was not checked: the action log file on the real run (the server's environment does not set `WEBSCOPE_ACTIONLOG` yet). Seen on the real run: the log of the client (`mcp-logs-webscope-core`) keeps `stderr: webscope 0.7.x` at start-up only, so stderr alone does not give the lines.
 
 ## 0.7.9 — 2026-11-01
 
@@ -24,7 +24,9 @@ New action `upload {path, field|ref|css?}`. The server reads the file and keeps 
 
 How it was checked: two new tests (a Chrome test where a hidden file input's `change` handler receives the name, the type and the bytes, by field and with no name; refusals for a path outside the folder, a symlink out of it, a hidden file, a file over 5 MB, a missing file and no path); the suite passes with `-race`, and `tools/list` stays within its size.
 
-What was not checked: on the real app (see the entry added after the last version of this series); several files in one input; a drop zone that is not an `<input type=file>`.
+On the real app (`demo.localhost`): the helper fetched a file from the listener and attached it to a hidden `<input type=file>` that I put in the page (the app has no harmless screen with one that I found), and the page's `change` handler received the name, the 8 bytes and the type; the input was removed and nothing was saved.
+
+What was not checked: a file input of the app itself; several files in one input; a drop zone that is not an `<input type=file>`.
 
 ## 0.7.8 — 2026-11-01
 
@@ -36,7 +38,9 @@ Two changes, both only in error text. An unknown column (`Error 1054`, SQLite `n
 
 How it was checked: two new tests that fail without the change (the suggestion for `nmae`, `codee` and `name_x`, and none for `zzzzzz`; the three candidate-key answers); the suite passes with `-race`.
 
-What was not checked: on the real database (see the entry added after the last version of this series).
+On the real database (`acme`, `users`): `SELECT emial FROM users` answered `Did you mean «email»?`; `SELECT nmae FROM users` suggested nothing (no column is close), as designed.
+
+What was not checked: the candidate keys of `snap` on the real database.
 
 ## 0.7.7 — 2026-11-01
 
@@ -48,7 +52,9 @@ Now the failure keeps its first sentence and adds what can be known: a `.crdownl
 
 How it was checked: a new test that fails without the change (a partial file, an older file, a profile with `prompt_for_download` and another folder, and a secret in another key that must not appear); the suite passes with `-race`.
 
-What was not checked: Chrome's own dialog on the real app (see the entry added after the last version of this series); profiles outside the standard folders on macOS and Linux; Windows.
+On the real machine: `page download` with no click answered with the folder and `The newest file there is Reporte_usuarios_2026-10-31.xlsx, 419 min old`; no Chrome profile was reported as asking where to save or saving elsewhere.
+
+What was not checked: a failure with a `.crdownload` or a profile that asks, on the real Chrome (only in the test); profiles outside the standard folders on macOS and Linux; Windows.
 
 ## 0.7.6 — 2026-11-01
 
@@ -60,7 +66,9 @@ Now a `text` written between slashes, `/A|B/`, is read as a regular expression (
 
 How it was checked: the Chrome test of `find` got three cases that fail without the change (`/^guard|^cancel/` finds both buttons; `Guardar|Cancelar` finds nothing and says why; `/(/` is a bad regex); the suite passes with `-race`.
 
-What was not checked: on the real app (see the entry added after the last version of this series).
+On the real app (`demo.localhost`, users screen): `find {text: "/Nuevo|Exportar/"}` listed «Exportar Excel» and «Nuevo Usuario»; `find {text: "Nuevo|Exportar"}` found nothing and gave the hint.
+
+What was not checked: the legacy.
 
 ## 0.7.5 — 2026-11-01
 
