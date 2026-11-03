@@ -18,7 +18,8 @@
   const clip = (s, n) => (s.length > n ? s.slice(0, n) + '…(+' + (s.length - n) + ' chars)' : s);
   const fail = m => 'Failed: ' + m;
   const vis = e => !!(e.offsetWidth || e.offsetHeight || e.getClientRects().length);
-  const all = sel => [...document.querySelectorAll(sel)].filter(vis);
+  const pick = (list, sel) => (sel.includes('[tabindex="0"]') ? list.filter(clickableKept) : list);
+  const all = sel => pick([...document.querySelectorAll(sel)].filter(vis), sel);
   const kind = v => '[' + Object.prototype.toString.call(v).slice(8, -1) + ']';
   const textOf = e => norm(e.innerText || e.value || e.getAttribute('aria-label') || e.title);
   const describe = e => '<' + e.tagName.toLowerCase() + (e.id ? '#' + e.id : '') + '> "' + clip(textOf(e), 40) + '"';
@@ -156,7 +157,10 @@
     return e.value;
   };
   const texts = sel => [...new Set(all(sel).map(e => norm(e.innerText)).filter(Boolean))];
-  const CLICKABLE = 'button,a,[role=button],[role=tab],[role=menuitem],[role=option],input[type=submit],input[type=button],.v-btn,.v-list-item';
+  const CLICKABLE_TAGS = 'button,a,[role=button],[role=tab],[role=menuitem],[role=option],input[type=submit],input[type=button],.v-btn,.v-list-item';
+  // a focusable element with a pointer cursor is a button too: react-native-web draws a Pressable as a div with tabindex=0 and no role
+  const CLICKABLE = CLICKABLE_TAGS + ',[tabindex="0"]';
+  const clickableKept = e => !e.matches('[tabindex="0"]') || e.matches(CLICKABLE_TAGS) || e.matches(FIELDS) || getComputedStyle(e).cursor === 'pointer';
   const disabled = e => e.disabled || e.getAttribute('aria-disabled') === 'true' || /--disabled/.test(e.className);
   // the dialog's buttons first, the page's next, the side menu and the top bar last: they come first in the DOM and would fill the 30 places
   const rank = e => e.closest('[role=dialog],.v-dialog') ? 0 : e.closest('.v-pagination') ? 1 : e.closest('nav,aside,header,[role=navigation],.v-navigation-drawer,.v-app-bar,.v-toolbar') ? 2 : 1; // a pager is a nav too, but it belongs to the page
@@ -451,7 +455,7 @@
   // formState says whether the main button of the open dialog (or of the page) is enabled and which fields show an error, so a fill that left the form invalid is not read as done.
   const formState = () => {
     const root = all('[role=dialog],dialog[open]')[0] || document;
-    const save = [...root.querySelectorAll(CLICKABLE)].filter(e => vis(e) && SAVE.test(textOf(e)) && !e.closest('nav,aside,header,[role=navigation],.v-navigation-drawer,.v-app-bar,.v-toolbar'))[0];
+    const save = [...root.querySelectorAll(CLICKABLE)].filter(e => vis(e) && clickableKept(e) && SAVE.test(textOf(e)) && !e.closest('nav,aside,header,[role=navigation],.v-navigation-drawer,.v-app-bar,.v-toolbar'))[0];
     const bad = [...root.querySelectorAll(FIELDS)].filter(e => vis(e) && (e.getAttribute('aria-invalid') === 'true' || e.closest('.v-input--error,.is-invalid,.has-error')));
     const errs = bad.map(e => {
       const box = e.closest('.v-input,.v-field,.form-group') || e.parentElement, m = box && box.querySelector(ERRORS);
@@ -637,7 +641,7 @@
       try { root = document.querySelector(a.selector); } catch (x) { return fail('bad selector ' + a.selector); }
       if (!root) return fail('nothing matches ' + a.selector);
     }
-    const q = sel => [...root.querySelectorAll(sel)].filter(vis);
+    const q = sel => pick([...root.querySelectorAll(sel)].filter(vis), sel);
     const out = [];
     const add = (name, items) => { if (items.length) out.push(name + ' (' + items.length + '): ' + items.slice(0, 5).join(' | ') + (items.length > 5 ? ' | … +' + (items.length - 5) : '')); };
     // text the framework or the server left as it was written
@@ -686,7 +690,7 @@
       try { root = document.querySelector(a.selector); } catch (x) { return fail('bad selector ' + a.selector); }
       if (!root) return fail('nothing matches ' + a.selector + '. Next: page(state) shows what is on the screen.');
     }
-    const q = sel => [...root.querySelectorAll(sel)].filter(vis);
+    const q = sel => pick([...root.querySelectorAll(sel)].filter(vis), sel);
     const uniq = l => [...new Set(l.filter(Boolean))];
     // a field named only by its name or id gets the first line of the text around it when that is short
     const nearText = e => { const t = norm(((e.parentElement && e.parentElement.innerText) || '').split('\n')[0]); return t.length <= 40 ? t : ''; };

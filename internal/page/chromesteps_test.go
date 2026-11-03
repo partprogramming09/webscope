@@ -103,6 +103,30 @@ func TestStateOverTheLimitDropsWholeLinesInsteadOfCuttingAString(t *testing.T) {
 	}
 }
 
+func TestReactNativeWebPressablesAreButtonsForStateFindAndAudit(t *testing.T) {
+	out, _ := runSteps(t, func(load string) []string {
+		return []string{
+			load,
+			"(document.body.insertAdjacentHTML('beforeend','<div tabindex=0 style=\"cursor:pointer\"><div dir=auto>Soy importador</div></div><div tabindex=0 style=\"cursor:pointer;width:20px;height:20px\"></div><div tabindex=0 style=\"overflow:auto\">Region con scroll</div>'),'ok')",
+			"window.__ws.state({})",
+			"window.__ws.find({regex:'importador'})",
+			"window.__ws.audit({})",
+		}
+	}, nil)
+	if !strings.Contains(out[2], "Soy importador") {
+		t.Errorf("state must list the pressable as a button: %q", out[2])
+	}
+	if !strings.Contains(out[3], "[button] Soy importador") {
+		t.Errorf("find must return the pressable as a button: %q", out[3])
+	}
+	if strings.Contains(out[2], "Region con scroll") || strings.Contains(out[3], "Region con scroll") {
+		t.Errorf("a focusable region with no pointer cursor is not a button: %q %q", out[2], out[3])
+	}
+	if !strings.Contains(out[4], "no name") {
+		t.Errorf("audit must report the pressable with no text as an unnamed button: %q", out[4])
+	}
+}
+
 func TestAFailedRequestBringsOnlyTheErrorLinesWrittenSinceTheClick(t *testing.T) {
 	logPath := t.TempDir() + "/php.log"
 	os.WriteFile(logPath, []byte("[10:00:00] PHP Fatal error: OLD error from before the click\n[10:00:02] GET /api/ok 200\n"), 0o600)

@@ -2,6 +2,18 @@
 
 One entry per version, newest first. Tool names are `query`, `page`, `check` and `code`. Each change says what it is, what was seen that made it necessary, how it was checked and what was not checked. A change in what a tool prints is listed as a change, because a client may read it.
 
+## 0.7.14 — 2026-11-03
+
+**`state`, `find`, `click` and `audit` read a react-native-web `Pressable` as a button.**
+
+What was seen that made it necessary: on the web build of the acme mobile app (Expo, react-native-web, `http://localhost:8081/select-profile`), the screen showed its texts and two options, but `page(state)` listed no button or text, `page(find, {regex:"freight|importador|perfil"})` answered `No field, button or text matches`, and `page(audit)` answered `No findings` while the page had 0 elements with `role=button`. A react-native-web `Pressable` is a `div` with `tabindex=0`, a pointer cursor and no `button` tag or role. `click {text}` worked, through its fallback to a plain element.
+
+Now an element with `tabindex="0"` and `cursor: pointer` counts as clickable, in the same place as `button`, `a` and `[role=button]`. A focusable element without a pointer cursor (a scroll region, for example) is not one. Those pressables appear in `state` and `find` with a ref, `click` finds them as buttons, and `audit` reports one with no text as `no name`.
+
+How it was checked: the new Chrome test (two pressables, one without text, and a focusable scroll region) fails without the change on the three answers and passes with it; `go vet` and `go test -race -count=1 ./...` pass. On the real mobile web app (`/select-profile`) `state` listed `Buttons: Soy freight forwarder … | Soy importador o exportador …` and `find` returned `b1` and `b2` as buttons, where before it answered that nothing matched.
+
+What was not checked: `audit` on that screen still says `No findings`, which is right (both options have text), but an unnamed pressable was only checked in the test. It does not help a native build (simulator or device): `page` only reads a page in Chrome.
+
 ## 0.7.13 — 2026-11-03
 
 **`code rows` with a column that does not exist lists the real columns, as `snap` and `query` do.**
