@@ -12,7 +12,9 @@ Now `readTx` gives its SQL errors the same text as `snap`: the columns of the ta
 
 How it was checked: the new test of `rows` with a missing column fails with the 0.7.12 code and passes now; `go vet` and `go test -race -count=1 ./...` pass.
 
-What was not checked: the new text of `rows` was not read on the real app after the change (the server has to be reconnected first).
+On the real acme app (tenant `demo.localhost`, server reconnected) `code rows` with `{nombre:"x"}` as `a` answered `Unknown column 'nombre' in 'where clause'. Columns of the tables in FROM/JOIN: configuraciones(id, configuracion, tipo, valor, icon, group, params). Next: that column does not exist: code(fields {table}) or SHOW COLUMNS FROM table lists the real ones`.
+
+What was not checked: nothing else here.
 
 ## 0.7.12 — 2026-11-03
 
