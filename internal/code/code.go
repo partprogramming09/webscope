@@ -108,19 +108,25 @@ func (c *Tool) run(ctx context.Context, in input.Args) (string, error) {
 	}
 	if err != nil {
 		msg := err.Error()
-		if strings.Contains(msg, "pass tenant to read the one of the app") { // withTenantHint said it: add the host names that the central database knows
+		if strings.Contains(msg, "pass tenant to read the one of the app") && !strings.Contains(msg, "(host names: ") { // withTenantHint said it: add the host names that the central database knows
 			if names := c.Src.TenantNames(ctx); len(names) > 0 {
 				msg += " (host names: " + strings.Join(names, ", ") + ")"
 			}
 		}
-		return "", errors.New(db.Redact(msg, db.Password(c.Src.URL)))
+		msg = db.Redact(msg, db.Password(c.Src.URL))
+		var qe *db.QueryError
+		if errors.As(err, &qe) {
+			return "", &db.QueryError{Msg: msg, Tenant: qe.Tenant}
+		}
+		return "", errors.New(msg)
 	}
 	return out, nil
 }
 
 // withTenantHint adds to a missing-table error of a call without tenant that the table may live in the tenant's database.
 func withTenantHint(err error, args map[string]any) error {
-	if err == nil || input.Str(args, "tenant") != "" || !strings.Contains(err.Error(), "Error 1146") {
+	var qe *db.QueryError
+	if err == nil || errors.As(err, &qe) || input.Str(args, "tenant") != "" || !strings.Contains(err.Error(), "Error 1146") {
 		return err
 	}
 	return fmt.Errorf("%w; the call named no tenant, so it read the central database: pass tenant to read the one of the app", err)
@@ -393,7 +399,12 @@ func (c *Tool) fields(ctx context.Context, args map[string]any) (string, error) 
 func (c *Tool) Handle(ctx context.Context, _ *mcp.CallToolRequest, in input.Args) (*mcp.CallToolResult, any, error) {
 	text, err := c.run(ctx, in)
 	if err != nil {
-		text = "Failed: " + strings.TrimRight(err.Error(), ". ") + ". Next: code(help) lists the actions."
+		var qe *db.QueryError
+		if errors.As(err, &qe) {
+			text = db.Failure(err, qe.Tenant)
+		} else {
+			text = "Failed: " + strings.TrimRight(err.Error(), ". ") + ". Next: code(help) lists the actions."
+		}
 	}
 	return &mcp.CallToolResult{IsError: err != nil, Content: []mcp.Content{&mcp.TextContent{Text: text}}}, nil, nil
 }

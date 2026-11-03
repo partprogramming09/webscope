@@ -302,7 +302,7 @@ func TestTheRefusalSaysThatOnlyTheTabOriginCountsAndNeverRepeatsIt(t *testing.T)
 	}
 }
 
-func TestStateCutByMaxKeepsTheDialogAndItsFieldsAndPointsToPageResult(t *testing.T) {
+func TestStateCutByMaxKeepsTheDialogAndItsFieldsAndSaysMaxCountsCharacters(t *testing.T) {
 	out, _ := runSteps(t, func(load string) []string {
 		return []string{
 			load,
@@ -310,7 +310,7 @@ func TestStateCutByMaxKeepsTheDialogAndItsFieldsAndPointsToPageResult(t *testing
 			"window.__ws.state({max:600})",
 		}
 	}, nil)
-	for _, want := range []string{"Dialog: Nuevo usuario", "Guardar", "[text] Correo", "page(result)"} {
+	for _, want := range []string{"Dialog: Nuevo usuario", "Guardar", "[text] Correo", "max counts characters (600 now)"} {
 		if !strings.Contains(out[2], want) {
 			t.Errorf("state cut by max lost %q: %q", want, out[2])
 		}

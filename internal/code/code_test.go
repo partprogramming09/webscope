@@ -12,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/partprogramming09/webscope/internal/db"
 	"github.com/partprogramming09/webscope/internal/input"
 )
@@ -297,6 +298,22 @@ func TestSnapShowsNewDeletedAndChangedRowsWithBeforeAndAfter(t *testing.T) {
 	}
 	if strings.Contains(out, "code 007") || strings.Contains(out, "changed 1: estado A → Z, code") {
 		t.Errorf("a column that did not change must not be listed:\n%s", out)
+	}
+}
+
+func TestSnapOfAMissingColumnListsTheRealColumnsLikeQueryDoes(t *testing.T) {
+	res, _, err := codeSetup(t).Handle(context.Background(), nil, input.Args{Action: "snap", Args: map[string]any{"name": "q", "sql": "SELECT id FROM quotes WHERE nombre = 'x'"}})
+	if err != nil || !res.IsError {
+		t.Fatalf("a missing column is an error result: %v %v", res, err)
+	}
+	text := res.Content[0].(*mcp.TextContent).Text
+	for _, want := range []string{"Failed: ", "Columns of the tables in FROM/JOIN: quotes(", "estado", "SHOW COLUMNS FROM table"} {
+		if !strings.Contains(text, want) {
+			t.Errorf("lacks %q: %s", want, text)
+		}
+	}
+	if strings.Contains(text, "code(help)") {
+		t.Errorf("a SQL failure must not send to code(help): %s", text)
 	}
 }
 

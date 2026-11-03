@@ -2,6 +2,26 @@
 
 One entry per version, newest first. Tool names are `query`, `page`, `check` and `code`. Each change says what it is, what was seen that made it necessary, how it was checked and what was not checked. A change in what a tool prints is listed as a change, because a client may read it.
 
+## 0.7.12 — 2026-11-03
+
+**A cut `state` says that `max` counts characters, `code` shows the real columns on a SQL error, and the guard says why it refuses a leading «(».**
+
+What was seen that made it necessary (a real session on the acme app, 2026-11-03):
+- `page(state)` with `max:40` showed no field and said `9 more lines not shown … kept whole for page(result)`. `max` counts characters, and the cut lines are never kept, so `page(result)` answered `no answer is kept`. The model had read `max` as a number of lines.
+- `code snap` with a column that does not exist answered `Next: code(help) lists the actions.`, while `query` lists the real columns of the tables for the same error.
+- `(SELECT …) UNION ALL (SELECT …)` was refused with `must start with SELECT … not "("` and no reason.
+
+Now:
+- A `state` cut by `max` says `max counts characters (N now), raise it`, without the pointer to `page(result)`; `page(help)` says that `max` of `state` and `read` is characters.
+- Errors of the SQL that `code` runs (`snap`, `rows`) end like those of `query`: the real columns or the tenant hint, and the `Next:` of a missing column or table. Other `code` errors keep `Next: code(help) lists the actions.`
+- A statement that starts with «(» is refused saying that SQLite rejects a parenthesized SELECT and what to do: drop the parentheses or wrap each part in `SELECT * FROM (…) t`.
+
+How it was checked: the new snap test failed with the old text (`Next: code(help)`) and passes now; the `state` and guard tests assert the new texts; `go vet` and `go test -race -count=1 ./...` pass, including the Chrome tests of `page`.
+
+On the real acme app (tenant `demo.localhost`, server reconnected) `code snap` with the column `nombre` answered with `Columns of the tables in FROM/JOIN: configuraciones(id, configuracion, tipo, valor, icon, group, params)` and the `Next:` of a missing column, and `query` with `(SELECT 1) UNION ALL (SELECT 2)` answered with the new reason.
+
+What was not checked: the `state` text was not read on the real app (only in the Chrome tests), and `rows` was not run against a missing column (it shares the same read as `snap`).
+
 ## 0.7.11 — 2026-11-01
 
 **`upload` does not call an input that the app emptied after reading it «0 files».**

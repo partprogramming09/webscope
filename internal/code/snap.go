@@ -72,7 +72,7 @@ func (c *Tool) readAll(ctx context.Context, stmt, tenant string) ([]string, [][]
 	defer tx.Rollback()
 	rows, err := tx.QueryContext(ctx, stmt)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, c.Src.Annotate(ctx, conn, driver, stmt, tenant, err)
 	}
 	defer rows.Close()
 	cols, err := rows.Columns()

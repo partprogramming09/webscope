@@ -159,9 +159,20 @@ func (s *Source) Answer(ctx context.Context, in QueryArgs) (string, error) {
 	}
 	out, err := runQuery(ctx, db, driver, stmt, rowLimit(in.Limit))
 	if err != nil {
-		return fail(errors.New(err.Error() + columnHint(ctx, db, driver, stmt, err.Error()) + s.TenantHint(ctx, err.Error(), in.Tenant)))
+		return "", s.Annotate(ctx, db, driver, stmt, in.Tenant, err)
 	}
 	return out, nil
+}
+
+// QueryError is the failure of a statement that reached the database; Tenant is the one the call named.
+type QueryError struct{ Msg, Tenant string }
+
+func (e *QueryError) Error() string { return e.Msg }
+
+// Annotate turns the error of a statement run on conn into a QueryError: the text gains the real columns or the tenant hint, and loses the URL password.
+func (s *Source) Annotate(ctx context.Context, conn *sql.DB, driver, stmt, tenant string, err error) error {
+	msg := err.Error() + columnHint(ctx, conn, driver, stmt, err.Error()) + s.TenantHint(ctx, err.Error(), tenant)
+	return &QueryError{Msg: Redact(msg, Password(s.URL)), Tenant: tenant}
 }
 
 var (

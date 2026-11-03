@@ -37,6 +37,7 @@ func TestCheckSQLRefuses(t *testing.T) {
 		"ALTER TABLE t ADD c int":               "must start with",
 		"CALL proc()":                           "must start with",
 		"SET @a = 1":                            "must start with",
+		"(SELECT 1) UNION ALL (SELECT 2)":       "SQLite rejects a parenthesized",
 		"-- hi\nDELETE FROM t":                  "must start with",
 		"":                                      "empty",
 		"  ;  ":                                 "empty",

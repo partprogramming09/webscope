@@ -177,7 +177,7 @@
     const keep = l.map(x => (n + x.length + 1 <= max ? ((n += x.length + 1), true) : false)); // a line that does not fit is skipped and the next ones are still tried
     const shown = l.filter((_, i) => keep[i]), left = l.length - shown.length;
     if (!shown.length) return clip(l[0], max);
-    return left ? shown.join('\n') + '\n(… ' + left + ' more lines not shown: raise max, and an answer longer than javascript_tool shows is kept whole for page(result))' : shown.join('\n');
+    return left ? shown.join('\n') + '\n(… ' + left + ' more lines not shown: max counts characters (' + max + ' now), raise it)' : shown.join('\n');
   };
 
   const state = a => {

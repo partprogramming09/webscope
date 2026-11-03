@@ -43,7 +43,9 @@ func checkDialect(stmt string, sqlite bool) (string, error) {
 	if strings.Contains(code, ";") {
 		return "", errors.New("one statement only: remove the inner ';'")
 	}
-	if first := firstWord(code); !allowed[strings.ToUpper(first)] {
+	if first := firstWord(code); first == "(" {
+		return "", errors.New("the statement must not start with \"(\": SQLite rejects a parenthesized SELECT, and the guard reads under MySQL and SQLite at once. Drop the parentheses, or wrap each part: SELECT * FROM (SELECT …) t")
+	} else if !allowed[strings.ToUpper(first)] {
 		return "", fmt.Errorf("the statement must start with SELECT, SHOW, DESCRIBE, DESC, EXPLAIN or WITH, not %q", first)
 	}
 	isWith, prev := strings.EqualFold(firstWord(code), "WITH"), ""
