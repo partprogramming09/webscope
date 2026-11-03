@@ -34,7 +34,9 @@ How it was checked: the new snap test failed with the old text (`Next: code(help
 
 On the real acme app (tenant `demo.localhost`, server reconnected) `code snap` with the column `nombre` answered with `Columns of the tables in FROM/JOIN: configuraciones(id, configuracion, tipo, valor, icon, group, params)` and the `Next:` of a missing column, and `query` with `(SELECT 1) UNION ALL (SELECT 2)` answered with the new reason.
 
-What was not checked: the `state` text was not read on the real app (only in the Chrome tests), and `rows` was not run against a missing column (it shares the same read as `snap`).
+On the real acme app (`/demo/configs/services`, server 0.7.13), `page(state, {max:40})` answered `(… 8 more lines not shown: max counts characters (40 now), raise it)`, with no pointer to `page(result)`.
+
+What was not checked: `rows` was not run against a missing column in this version (0.7.13 fixes it).
 
 ## 0.7.11 — 2026-11-01
 
