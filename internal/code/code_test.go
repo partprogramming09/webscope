@@ -317,6 +317,20 @@ func TestSnapOfAMissingColumnListsTheRealColumnsLikeQueryDoes(t *testing.T) {
 	}
 }
 
+func TestRowsOfAMissingColumnListsTheRealColumns(t *testing.T) {
+	where := map[string]any{"nombre": "x"}
+	res, _, err := codeSetup(t).Handle(context.Background(), nil, input.Args{Action: "rows", Args: map[string]any{"table": "quotes", "a": where, "b": where}})
+	if err != nil || !res.IsError {
+		t.Fatalf("a missing column is an error result: %v %v", res, err)
+	}
+	text := res.Content[0].(*mcp.TextContent).Text
+	for _, want := range []string{"Columns of the tables in FROM/JOIN: quotes(", "estado", "SHOW COLUMNS FROM table"} {
+		if !strings.Contains(text, want) {
+			t.Errorf("lacks %q: %s", want, text)
+		}
+	}
+}
+
 func TestSnapRefusesWhatItCannotCompareNorKeepSafely(t *testing.T) {
 	c := codeSetup(t)
 	if _, err := code(t, c, "snap", map[string]any{"name": "q", "sql": "DELETE FROM quotes"}); err == nil {

@@ -2,6 +2,18 @@
 
 One entry per version, newest first. Tool names are `query`, `page`, `check` and `code`. Each change says what it is, what was seen that made it necessary, how it was checked and what was not checked. A change in what a tool prints is listed as a change, because a client may read it.
 
+## 0.7.13 — 2026-11-03
+
+**`code rows` with a column that does not exist lists the real columns, as `snap` and `query` do.**
+
+What was seen that made it necessary: 0.7.12 said that the SQL errors of `snap` and `rows` end like those of `query`, but `rows` reads through another function (`readTx`). On the real acme app, `code rows {table:"configuraciones", …, key:"nombre"}` still answered `Unknown column 'nombre' in 'where clause'. Next: code(help) lists the actions.`
+
+Now `readTx` gives its SQL errors the same text as `snap`: the columns of the table and the `Next:` of a missing column or table.
+
+How it was checked: the new test of `rows` with a missing column fails with the 0.7.12 code and passes now; `go vet` and `go test -race -count=1 ./...` pass.
+
+What was not checked: the new text of `rows` was not read on the real app after the change (the server has to be reconnected first).
+
 ## 0.7.12 — 2026-11-03
 
 **A cut `state` says that `max` counts characters, `code` shows the real columns on a SQL error, and the guard says why it refuses a leading «(».**

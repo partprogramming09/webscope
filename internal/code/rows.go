@@ -63,7 +63,7 @@ func (c *Tool) readTx(ctx context.Context, tenant, stmt string, params []any, sc
 	defer tx.Rollback()
 	rows, err := tx.QueryContext(ctx, stmt, params...)
 	if err != nil {
-		return err
+		return c.Src.Annotate(ctx, conn, driver, stmt, tenant, err)
 	}
 	defer rows.Close()
 	return scan(rows)
