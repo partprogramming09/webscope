@@ -549,3 +549,29 @@ func TestMapBackFindsAModuleByTheRoutePathOfItsScreen(t *testing.T) {
 		t.Errorf("a path that no route has is still not found: %q", out)
 	}
 }
+
+func TestMapBackOfAnApiAddressWorksWithoutTheFront(t *testing.T) {
+	c := mapSetup(t)
+	c.Front = ""
+	out, err := code(t, c, "map_back", map[string]any{"query": "quotes"})
+	if err != nil {
+		t.Fatalf("no front must not fail: %v", err)
+	}
+	for _, want := range []string{"WEBSCOPE_FRONT is not set", "api GET quotes -> QuoteController@index", "model app/Modules/Crm/Quotes/Models/Quote.php -> table app_cotizaciones"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("lacks %q:\n%s", want, out)
+		}
+	}
+	if strings.Contains(out, "## front") {
+		t.Errorf("no front, no front section:\n%s", out)
+	}
+}
+
+func TestMapBackReadsARequestAsPageCapturesIt(t *testing.T) {
+	for _, q := range []string{"GET /api/quotes", "get /api/quotes?page=2", "/api/quotes"} {
+		out, err := code(t, mapSetup(t), "map_back", map[string]any{"query": q})
+		if err != nil || !strings.Contains(out, "api GET quotes -> QuoteController@index") {
+			t.Errorf("%q: %v\n%s", q, err, out)
+		}
+	}
+}

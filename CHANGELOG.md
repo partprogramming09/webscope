@@ -2,6 +2,24 @@
 
 One entry per version, newest first. Tool names are `query`, `page`, `check` and `code`. Each change says what it is, what was seen that made it necessary, how it was checked and what was not checked. A change in what a tool prints is listed as a change, because a client may read it.
 
+## 0.7.15 — 2026-11-05
+
+**`query` suggests the nearest table, says a write goes through the screen; `code map_back` takes a captured request and works without the front.**
+
+What was seen that made it necessary: in the two sessions of 2026-11-04 (acme-mobile: 101 webscope calls, 21 failed; acme: 50 calls, 14 failed rows) the agent never used `page`, and lost calls on three things.
+- A missing table (`tm_clientes`, `wm_tasks`, `tm_factura_items`, `tm_cotizaciones`, about 9 times) gave only «SHOW TABLES LIKE '%word%'», so the agent spent another call guessing names. Columns already had «Did you mean».
+- `UPDATE tm_factura_detalle …` sent through `query` (twice) answered «fix the statement or the connection (WEBSCOPE_DB_URL)», which invites a retry.
+- `code(map_back, {query:"GET /api/list/advisors"})` answered `WEBSCOPE_FRONT is not set` although an API address only needs the backend routes, and a query copied as `page` captures it (`GET /api/…`) found no route.
+
+Now:
+- An unknown-table error adds «Did you mean «table»?» (a few edits away, or the only table that contains it) and «Tables with prefix «xx_»: …» (up to 15) from the same database, before the existing hint.
+- A refused write (a statement that starts with INSERT, UPDATE, DELETE, REPLACE, CREATE, ALTER, DROP, TRUNCATE, MERGE, CALL, GRANT or REVOKE, or a WITH that ends in a write) says «webscope never writes to the database: make the change through the screen (test rows start with ZZ_) and read the result with query». A typo such as `SELEC` keeps the generic text.
+- `map_back` drops a leading `GET|POST|PUT|PATCH|DELETE` and `/api/` and any query string, so `GET /api/quotes?page=2` means `quotes`. Without `WEBSCOPE_FRONT` it answers with backend routes only and says so in one line instead of failing.
+
+How it was checked: three new unit tests, each red before the change (tables: SQLite fixture; write text; map_back without front and with request lines); then the built binary over real MCP stdio with a SQLite database and the acme backend folder: `tm_client` gave «Did you mean «tm_clients»?», `UPDATE` gave the new text, `tools/list` is 1389 bytes; `map_back {query:"GET /api/list/advisors?x=1"}` with no front on the acme backend gave `api GET list/advisors -> SettingsController@advisors  …:267` and the one-line notice. `go vet` and `go test -race ./...` pass.
+
+What was not checked: the MySQL branch of the table list (`information_schema.TABLES`) ran only through its query text, not against MySQL; the map_back answer with the front set, in the real acme app, was not repeated (only its unit test).
+
 ## 0.7.14 — 2026-11-03
 
 **`state`, `find`, `click` and `audit` read a react-native-web `Pressable` as a button.**

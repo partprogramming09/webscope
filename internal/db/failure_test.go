@@ -45,3 +45,19 @@ func TestFailureTextHasNoDoubledPeriodWhenTheErrorEndsInOne(t *testing.T) {
 		t.Fatalf("unexpected text %q", got)
 	}
 }
+
+func TestFailureOfAWriteSaysTheServerNeverWritesAndToUseTheScreen(t *testing.T) {
+	for _, e := range []string{
+		`the statement must start with SELECT, SHOW, DESCRIBE, DESC, EXPLAIN or WITH, not "UPDATE"`,
+		`the statement must start with SELECT, SHOW, DESCRIBE, DESC, EXPLAIN or WITH, not "insert"`,
+		`a WITH that ends in DELETE is a write`,
+	} {
+		got := Failure(errors.New(e), "")
+		if !strings.Contains(got, "never writes") || !strings.Contains(got, "screen") || strings.Contains(got, "WEBSCOPE_DB_URL") {
+			t.Errorf("%s: %q", e, got)
+		}
+	}
+	if got := Failure(errors.New(`the statement must start with SELECT, SHOW, DESCRIBE, DESC, EXPLAIN or WITH, not "SELEC"`), ""); strings.Contains(got, "never writes") {
+		t.Errorf("a typo is not a write: %q", got)
+	}
+}

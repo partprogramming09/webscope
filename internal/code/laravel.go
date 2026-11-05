@@ -257,17 +257,28 @@ func fitLines(out []string, budget int) []string {
 	return append(kept, fmt.Sprintf("(… %d more services and models not shown: narrow the query)", dropped))
 }
 
+var requestLine = regexp.MustCompile(`(?i)^(?:(?:get|post|put|patch|delete)\s+)?/api/([^?#\s]*)`)
+
+// requestPath is the API address of a captured request ("GET /api/quotes?page=2" gives "quotes"); any other query is returned as it came.
+func requestPath(q string) string {
+	if m := requestLine.FindStringSubmatch(strings.TrimSpace(q)); m != nil {
+		return m[1]
+	}
+	return q
+}
+
 // mapBack is map_back: from the screens of the front to the endpoint, controller (with line), service, model and table.
 func (c *Tool) mapBack(args map[string]any) (string, error) {
-	query := input.Str(args, "query")
+	query := requestPath(input.Str(args, "query"))
 	if query == "" {
 		return "", errors.New("map_back needs a query: a front module or a part of an API address")
 	}
 	if c.Backend == "" {
 		return "", errors.New("WEBSCOPE_BACKEND is not set")
 	}
+	noFront := c.Front == ""
 	base, froot, err := c.frontBase()
-	if err != nil {
+	if err != nil && !noFront {
 		return "", err
 	}
 	files, root, err := fsx.PHPFiles(c.Backend)
@@ -275,9 +286,11 @@ func (c *Tool) mapBack(args map[string]any) (string, error) {
 		return "", err
 	}
 	routes := fileRoutes(files, fsx.Lines{})
-	mods, names, err := indexModules(base)
-	if err != nil {
-		return "", err
+	mods, names := map[string]*frontModule{}, []string(nil)
+	if !noFront {
+		if mods, names, err = indexModules(base); err != nil {
+			return "", err
+		}
 	}
 	frontRel, _ := filepath.Rel(froot, base)
 	calls := map[string][]string{} // "METHOD uri" -> where
@@ -291,6 +304,9 @@ func (c *Tool) mapBack(args map[string]any) (string, error) {
 	}
 	out := []string{fmt.Sprintf("Backend of «%s»: from the frontend route to the endpoint (API address), controller, service and table. Next: read(controller, method).", echo(query)),
 		"routes read from: files Routes/*.php (artisan is not run)"}
+	if noFront {
+		out = append(out, "WEBSCOPE_FRONT is not set: the answer has backend routes only, with no screens or front calls")
+	}
 	var chosen []backRoute
 	in := func(r backRoute) bool {
 		for _, x := range chosen {

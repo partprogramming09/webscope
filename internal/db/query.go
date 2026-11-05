@@ -171,7 +171,7 @@ func (e *QueryError) Error() string { return e.Msg }
 
 // Annotate turns the error of a statement run on conn into a QueryError: the text gains the real columns or the tenant hint, and loses the URL password.
 func (s *Source) Annotate(ctx context.Context, conn *sql.DB, driver, stmt, tenant string, err error) error {
-	msg := err.Error() + columnHint(ctx, conn, driver, stmt, err.Error()) + s.TenantHint(ctx, err.Error(), tenant)
+	msg := err.Error() + tableHint(ctx, conn, driver, err.Error()) + columnHint(ctx, conn, driver, stmt, err.Error()) + s.TenantHint(ctx, err.Error(), tenant)
 	return &QueryError{Msg: Redact(msg, Password(s.URL)), Tenant: tenant}
 }
 
@@ -238,6 +238,48 @@ func columnHint(ctx context.Context, db *sql.DB, driver, stmt, msg string) strin
 		return ""
 	}
 	return closest(want, every) + ". Columns of the tables in FROM/JOIN: " + strings.Join(parts, "; ")
+}
+
+var badTable = regexp.MustCompile(`Table '(?:[^'.]*\.)?([^']+)' doesn't exist|no such table: (\S+)`)
+
+const maxHintPrefixTables = 15
+
+// tableHint is the text appended to an unknown-table error: the nearest existing table and the tables that share the missing one's prefix up to its first
+// underscore. "" when the error is another one or nothing is close.
+func tableHint(ctx context.Context, db *sql.DB, driver, msg string) string {
+	m := badTable.FindStringSubmatch(msg)
+	if m == nil {
+		return ""
+	}
+	want := strings.ToLower(m[1] + m[2])
+	ctx, cancel := context.WithTimeout(ctx, QueryTimeout)
+	defer cancel()
+	q := "SELECT name FROM sqlite_master WHERE type IN ('table','view') ORDER BY name"
+	if driver == "mysql" {
+		q = "SELECT TABLE_NAME FROM information_schema.TABLES WHERE TABLE_SCHEMA = DATABASE() ORDER BY TABLE_NAME"
+	}
+	rows, err := db.QueryContext(ctx, q)
+	if err != nil {
+		return ""
+	}
+	defer rows.Close()
+	var every, same []string
+	prefix, _, ok := strings.Cut(want, "_")
+	for rows.Next() {
+		var n string
+		if rows.Scan(&n) != nil {
+			break
+		}
+		every = append(every, n)
+		if ok && strings.HasPrefix(strings.ToLower(n), prefix+"_") && len(same) < maxHintPrefixTables {
+			same = append(same, n)
+		}
+	}
+	out := closest(want, every)
+	if len(same) > 0 {
+		out += ". Tables with prefix «" + prefix + "_»: " + strings.Join(same, ", ")
+	}
+	return out
 }
 
 // closest is ". Did you mean «col»?" for the column nearest to want (a few edits away, or the only one that contains it or is contained in it), "" when none is close.
@@ -458,10 +500,14 @@ func cell(v any) string {
 	return s
 }
 
+var writeVerb = regexp.MustCompile(`(?i)must start with .* not "(insert|update|delete|replace|create|alter|drop|truncate|merge|call|grant|revoke)"`)
+
 // Failure is the text of a failed call: what happened and what to do next. tenant is the one the call named, if any.
 func Failure(err error, tenant string) string {
 	next := "fix the statement or the connection (WEBSCOPE_DB_URL) and call again."
 	switch msg := err.Error(); {
+	case writeVerb.MatchString(msg) || strings.Contains(msg, " is a write"):
+		next = "webscope never writes to the database: make the change through the screen (test rows start with ZZ_) and read the result with query."
 	case strings.Contains(msg, "Error 1054") || strings.Contains(msg, "no such column"):
 		next = "that column does not exist: code(fields {table}) or SHOW COLUMNS FROM table lists the real ones; then call again."
 	case strings.Contains(msg, "Error 1146") || strings.Contains(msg, "no such table"):
