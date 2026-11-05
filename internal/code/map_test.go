@@ -567,6 +567,32 @@ func TestMapBackOfAnApiAddressWorksWithoutTheFront(t *testing.T) {
 	}
 }
 
+func TestMapBackReadsARequestWithItsHost(t *testing.T) {
+	for _, q := range []string{"GET http://demo.localhost:8001/api/quotes", "https://app.example.com/api/quotes?page=2"} {
+		out, err := code(t, mapSetup(t), "map_back", map[string]any{"query": q})
+		if err != nil || !strings.Contains(out, "api GET quotes -> QuoteController@index") {
+			t.Errorf("%q: %v\n%s", q, err, out)
+		}
+	}
+}
+
+func TestMapBackOfACapturedRequestKeepsOnlyItsEndpoint(t *testing.T) {
+	cases := map[string]string{
+		"GET /api/quotes":           "api GET quotes -> QuoteController@index",
+		"GET /api/quotes/42":        "api GET quotes/{} -> QuoteController@show",
+		"PUT /api/quotes/approve/7": "api PUT quotes/approve/{} -> QuoteController@approve",
+	}
+	for q, want := range cases {
+		out, _ := code(t, mapSetup(t), "map_back", map[string]any{"query": q})
+		if !strings.Contains(out, want) {
+			t.Errorf("%q lacks %q:\n%s", q, want, out)
+		}
+		if n := strings.Count(out, "\napi "); n != 1 {
+			t.Errorf("%q: %d endpoints, want 1:\n%s", q, n, out)
+		}
+	}
+}
+
 func TestMapBackReadsARequestAsPageCapturesIt(t *testing.T) {
 	for _, q := range []string{"GET /api/quotes", "get /api/quotes?page=2", "/api/quotes"} {
 		out, err := code(t, mapSetup(t), "map_back", map[string]any{"query": q})

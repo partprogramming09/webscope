@@ -257,19 +257,33 @@ func fitLines(out []string, budget int) []string {
 	return append(kept, fmt.Sprintf("(… %d more services and models not shown: narrow the query)", dropped))
 }
 
-var requestLine = regexp.MustCompile(`(?i)^(?:(?:get|post|put|patch|delete)\s+)?/api/([^?#\s]*)`)
+var requestLine = regexp.MustCompile(`(?i)^(?:(get|post|put|patch|delete)\s+)?(?:https?://[^/\s]+)?/api/([^?#\s]*)`)
 
-// requestPath is the API address of a captured request ("GET /api/quotes?page=2" gives "quotes"); any other query is returned as it came.
-func requestPath(q string) string {
+// requestPath is the API address and method of a captured request ("GET http://host/api/quotes?page=2" gives "quotes", "GET"); any other query is returned as it came, with no method.
+func requestPath(q string) (path, method string, captured bool) {
 	if m := requestLine.FindStringSubmatch(strings.TrimSpace(q)); m != nil {
-		return m[1]
+		return m[2], strings.ToUpper(m[1]), true
 	}
-	return q
+	return q, "", false
+}
+
+// uriFits reports whether a route address ("quotes/{quote}") is the one a request path ("quotes/42") went to.
+func uriFits(uri, path string) bool {
+	a, b := strings.Split(strings.Trim(uri, "/"), "/"), strings.Split(strings.Trim(path, "/"), "/")
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i] != b[i] && !strings.HasPrefix(a[i], "{") {
+			return false
+		}
+	}
+	return true
 }
 
 // mapBack is map_back: from the screens of the front to the endpoint, controller (with line), service, model and table.
 func (c *Tool) mapBack(args map[string]any) (string, error) {
-	query := requestPath(input.Str(args, "query"))
+	query, reqMethod, captured := requestPath(input.Str(args, "query"))
 	if query == "" {
 		return "", errors.New("map_back needs a query: a front module or a part of an API address")
 	}
@@ -318,8 +332,16 @@ func (c *Tool) mapBack(args map[string]any) (string, error) {
 	}
 	requested := map[string]bool{}
 	var found []string
+	var exact []backRoute // the endpoint a captured request went to
+	if captured {
+		for _, r := range routes {
+			if (reqMethod == "" || r.method == reqMethod) && uriFits(r.uri, query) {
+				exact = append(exact, r)
+			}
+		}
+	}
 	for _, n := range names {
-		if strings.Contains(n, query) || matches(query, n) || routePathHas(mods[n], query) {
+		if len(exact) == 0 && (strings.Contains(n, query) || matches(query, n) || routePathHas(mods[n], query)) {
 			found = append(found, n)
 		}
 	}
@@ -336,14 +358,20 @@ func (c *Tool) mapBack(args map[string]any) (string, error) {
 	}
 	covered := map[string]bool{}
 	for _, r := range routes {
-		if len(found) > 0 && requested[r.uri] || len(found) == 0 && (strings.Contains(r.uri, query) || matches(query, r.uri)) {
+		if len(exact) == 0 && (len(found) > 0 && requested[r.uri] || len(found) == 0 && (strings.Contains(r.uri, query) || matches(query, r.uri))) {
 			chosen = append(chosen, r)
 			covered[r.uri] = true
 		}
 	}
 	for _, r := range routes {
-		if !in(r) && (matches(query, r.uri) || matches(query, backendModule(r.action))) {
+		if len(exact) == 0 && !in(r) && (matches(query, r.uri) || matches(query, backendModule(r.action))) {
 			chosen = append(chosen, r)
+		}
+	}
+	if len(exact) > 0 {
+		chosen = exact
+		for _, r := range exact {
+			covered[r.uri] = true
 		}
 	}
 	out = append(out, "## backend")

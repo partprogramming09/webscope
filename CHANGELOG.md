@@ -2,6 +2,22 @@
 
 One entry per version, newest first. Tool names are `query`, `page`, `check` and `code`. Each change says what it is, what was seen that made it necessary, how it was checked and what was not checked. A change in what a tool prints is listed as a change, because a client may read it.
 
+## 0.7.16 — 2026-11-05
+
+**`code map_back` reads a request with its host and answers only the endpoint that request went to.**
+
+What was seen that made it necessary: running 0.7.13–0.7.15 on the real apps (acme at `demo.localhost:5173`, acme-mobile at `localhost:8081`). `page(payloads)` prints `GET http://demo.localhost:8001/api/settings`, and `map_back` with that exact text answered «no module or route contains…». With `GET /api/settings` it worked but listed about 40 endpoints of the controller and every model, though only one endpoint had been captured.
+
+Now:
+- A request line may carry `http(s)://host[:port]` before `/api/`.
+- A captured request (`/api/…` in the query) that fits a backend route (same method when given; `{param}` segments match any value, so `GET /api/quotes/42` finds `quotes/{}`) answers that endpoint only, with its controller line, service, models, tables and the front calls that reach it. Without a fit it answers as before. A query that is not a request is unchanged.
+
+How it was checked: two new unit tests, red before the change (host; one endpoint for `GET /api/quotes`, `GET /api/quotes/42`, `PUT /api/quotes/approve/7`); `go vet` and `go test -race -count=1 ./...` green (229); then the rebuilt binary on the real acme backend.
+
+Real run (rebuilt binary over MCP stdio, acme backend): `GET http://demo.localhost:8001/api/settings` answers one `api` line (`SettingsController@settings`, `SettingsController.php:25`); `tools/list` is 1389 bytes, 4 tools. The `model` lines are still many for `settings`, because that controller imports 23 models: they come from its code, not from the request.
+
+What was not checked: a route whose parameter segment is mixed with text (`file-{id}.pdf`) does not fit and falls back to the wide answer; a captured request on a prefix the backend routes do not carry (`/api/v2/…`) also falls back.
+
 ## 0.7.15 — 2026-11-05
 
 **`query` suggests the nearest table, says a write goes through the screen; `code map_back` takes a captured request and works without the front.**
