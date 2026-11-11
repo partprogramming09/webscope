@@ -78,3 +78,10 @@ func TestAMissingTableWithoutATenantSaysToPassOne(t *testing.T) {
 		t.Error("no error stays no error")
 	}
 }
+
+func TestHelpListsContract(t *testing.T) {
+	out, _ := code(t, codeSetup(t), "help", nil)
+	if !slices.Contains(codeActions, "contract") || !strings.Contains(out, "contract {endpoint}") {
+		t.Fatalf("contract must be listed and explained:\n%s", out)
+	}
+}

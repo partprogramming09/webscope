@@ -57,6 +57,7 @@ Not covered: `v-combobox`, date pickers, menus of other libraries, file uploads,
 | `consumers {table, column}` or `{column_only}` | Each read and write of a column, `file:line` | PHP backend |
 | `map {module, walkthrough?}` | Routes, HTTP calls, composables, stores; with `walkthrough`, what can be clicked | Vue modules (`src/modules`) |
 | `map_back {query}` | Endpoint, controller, service and table for a front module or API address | Laravel (`app/Modules/**/Routes/*.php`) |
+| `contract {endpoint}` | For `METHOD /path`: what each front call to it sends (object literal or TypeScript type, in snake_case when the front uses `axios-case-converter`) against the validation rules of the Laravel method (its FormRequest or an inline `validate`): sent but not in the rules, required but not sent, near names, required but optional in the front type; `incomplete` names what could not be read. It does not read the database | Vue + Laravel |
 | `flows {module}` | Screens with their actions, then endpoints, controllers and tables: evidence for user stories | Vue + Laravel (`map` and `map_back` joined) |
 | `cases {module}` | The test cases of the module as a table (happy path, permission, required field, status, HTTP error, empty list), each with what runs it; it runs nothing | Vue + Laravel (built on `flows`) |
 | `legacy {path, module?}` | The PHP endpoints of a legacy folder with their callers and the tables their SQL writes and reads; with `module`, the tables against the new module's and the columns the legacy writes that the backend never names (inline `INSERT` and `UPDATE … SET` only) | Legacy PHP with SQL in the file and jQuery calls (`WEBSCOPE_LEGACY`) |
@@ -72,7 +73,7 @@ Not covered: `v-combobox`, date pickers, menus of other libraries, file uploads,
 To test a screen and know what it really wrote:
 
 1. `code(fields)` and `query` to learn the table and its current counts.
-2. `code(map)` or `code(map_back)` to learn which endpoints and tables the screen touches.
+2. `code(map)` or `code(map_back)` to learn which endpoints and tables the screen touches; `code(contract)` on each write endpoint to see, before clicking, which fields the screen sends that the backend drops or which required ones it misses.
 3. `code(snap)` the table before the action.
 4. `page`: `load`, `state`, `fill`, `click`.
 5. `check` the saved row against what was sent and read back.

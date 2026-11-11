@@ -8,7 +8,7 @@ Un servidor MCP que deja a un agente de IA probar una aplicación web y entender
 
 Cuando le pides a un agente «prueba la pantalla de cotizaciones», lo caro no es pensar: es leer. Páginas enteras de HTML, cientos de filas de una tabla, la salida de un `grep` sobre un backend. webscope responde con texto corto, acotado y estructurado, así que el agente puede hacer la vuelta completa (mirar la pantalla, llenarla, guardar, ver qué se guardó y qué más cambió) en unas pocas llamadas.
 
-Se construyó contra una aplicación real Laravel + Vue y su versión anterior en PHP, y funciona con cualquier aplicación web y cualquier base MySQL o SQLite. Algunas piezas están atadas a un stack: `map`, `map_back`, `flows` y `cases` a las rutas de Laravel y los módulos de Vue, y `legacy` a PHP antiguo con el SQL dentro del archivo y llamadas jQuery; el resto es genérico.
+Se construyó contra una aplicación real Laravel + Vue y su versión anterior en PHP, y funciona con cualquier aplicación web y cualquier base MySQL o SQLite. Algunas piezas están atadas a un stack: `map`, `map_back`, `contract`, `flows` y `cases` a las rutas de Laravel y los módulos de Vue, y `legacy` a PHP antiguo con el SQL dentro del archivo y llamadas jQuery; el resto es genérico.
 
 ## Requisitos
 
@@ -32,6 +32,7 @@ Con el servidor registrado, pide en palabras normales:
 - «¿La pantalla nueva envía y recibe los mismos campos que la vieja?» (`page parity {req_a, req_b}`)
 - «Compara la versión vieja y la nueva de esta pantalla.» (`page shape` en cada una y después `page parity`)
 - «¿Qué endpoint, controlador y tabla usa esta pantalla?» (`code map_back`)
+- «¿Esta pantalla manda lo que el endpoint valida?» (`code contract`)
 - «¿Cuáles son los flujos y las historias de usuario de este módulo?» (`code flows`; las historias las escribes a partir de eso y las confirmas)
 - «¿Qué debo probar en este módulo, y la migración conserva lo que hacía el sistema viejo?» (`code cases` y después la cadena de «Migrar un módulo», abajo)
 - «¿Qué pruebas unitarias fijan lo que hacía el sistema viejo?» (paso 7 de `code help {topic: "migration"}`)
@@ -69,7 +70,7 @@ Para empezar solo hace falta `WEBSCOPE_DB_URL` (`query`). Las demás encienden e
 
 - `WEBSCOPE_APP_URL`: la dirección de la pestaña que se prueba, tal como la escribe el navegador (esquema, host y puerto). La necesita `page`, que además necesita la extensión Claude in Chrome. Si la aplicación vieja y la nueva responden en direcciones distintas, ponlas separadas por comas (`http://localhost:8088,http://demo.localhost:5173`): el ayudante funciona en una pestaña de cualquiera de ellas y las peticiones de todas se guardan juntas.
 - `WEBSCOPE_BACKEND`: la carpeta con el PHP del proyecto. La usa `code`.
-- `WEBSCOPE_FRONT`: la carpeta del front Vue (se lee su `src/modules` si existe). La usan `code map` y `map_back`.
+- `WEBSCOPE_FRONT`: la carpeta del front Vue (se lee su `src/modules` si existe). La usan `code map`, `map_back` y `contract`.
 - `WEBSCOPE_LEGACY`: la carpeta del PHP antiguo (la que contiene las carpetas de los módulos, por ejemplo `public_html`). La lee `code legacy`; nunca sale de ella, no sigue enlaces y no abre `.env*`.
 - `WEBSCOPE_TENANT_QUERY`: una búsqueda de tenant distinta de la de Hyn Tenancy (ver la referencia).
 - `WEBSCOPE_DOWNLOADS`: la carpeta donde Chrome guarda los archivos, para `page download` (por defecto `~/Downloads`).

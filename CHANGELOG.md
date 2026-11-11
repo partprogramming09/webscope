@@ -2,6 +2,24 @@
 
 One entry per version, newest first. Tool names are `query`, `page`, `check` and `code`. Each change says what it is, what was seen that made it necessary, how it was checked and what was not checked. A change in what a tool prints is listed as a change, because a client may read it.
 
+## 0.7.17 — 2026-11-11
+
+**New `code contract {endpoint}`: what the front sends to an endpoint against what its Laravel method validates.**
+
+What was seen that made it necessary: to tell whether a form fits its endpoint, an agent opened four to six files (composable, TypeScript type, route, controller, FormRequest). `map` and `map_back` say where each piece is, not which fields each one carries. A field the rules do not declare is dropped by `validated()` without an error, which is the hardest case to find by hand.
+
+Now:
+- `contract {endpoint: "POST /api/orders"}` finds the route and method, reads the method's rules (FormRequest `rules()`, or an inline `validate([...])`) and, for each front call to that address, the fields it sends (object literal, a variable holding one, or a parameter with a TypeScript type, following `&` and `|`), in snake_case when the front's `package.json` has `axios-case-converter`.
+- It prints only the differences: sent but not in the rules (dropped if the method reads `validated()`), required but not sent (`sometimes|required` is not required), near names, required but optional in the front type; `incomplete` names what it could not read.
+- Rules also come from `$this->validate($request, [...])` and `Validator::make(..., [...])`. A FormRequest named in the method whose file is not found prints `rules X (file not found…)`, never «none».
+- A front call counts for the route that would answer it (`'orders/main'` for `orders/{order}`, but not when `orders/main` has its own route). A `GET` or `DELETE` call says it has no body and compares nothing. When part of a body could not be read, the line says `(read incomplete)` and required rules show as «not in what could be read», never as «not sent».
+- Types are looked up in the whole front folder; when a name is declared more than once, the declaration closest to the call wins, and two equally close ones are reported as incomplete.
+- New output: the action is new, no existing answer changed. `code(help)` and the description of `code` name it; `tools/list` goes from 1431 to 1441 bytes (3 runs each over stdio).
+
+How it was checked: unit tests for the rules reader, the front reader and the cross; an adversarial pass (18 failing tests at first: comments and heredocs read as code, `<`/`>` in values taken as brackets, a union member's `?` lost, exponential work on a diamond of types, a non-exact `package.json` key) and a review (a cycle of spreads overflowed the stack and killed the server; a declaration in another function hid a typed parameter), each fixed and pinned by a test (the fixes were checked by tests, not reviewed again; two low findings were left: `nullable` is read but not printed, and a type with an unclosed `<` is scanned to the end of its file); three fuzzers 20 s each; on the real Laravel + Vue app, five write endpoints (a FormRequest with a spread object, a FormRequest with a typed parameter passed as is, a FormRequest with a union of two types where one is an intersection, an inline `validate`, and a file upload sent as `FormData` to a route with parameters), each with its full answer fixed by hand before running: every line matched.
+
+Not checked: scope beyond «the closest declaration before the call wins», grouped `use A\{B, C};`, a fully qualified request type in the signature, the database (columns may carry other names than the request; the service maps them), `GET` query parameters, `FormData` bodies (named as incomplete), rules built with `array_merge` (named as incomplete).
+
 ## 0.7.16 — 2026-11-05
 
 **`code map_back` reads a request with its host and answers only the endpoint that request went to.**

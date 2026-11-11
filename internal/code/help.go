@@ -11,13 +11,14 @@ import (
 var migrationPlaybook string
 
 // codeActions are the actions of code, in the order help lists them.
-var codeActions = []string{"fields", "consumers", "map", "map_back", "flows", "cases", "legacy", "rows", "snap", "snap_diff", "leftovers", "help"}
+var codeActions = []string{"fields", "consumers", "map", "map_back", "contract", "flows", "cases", "legacy", "rows", "snap", "snap_diff", "leftovers", "help"}
 
 const helpText = `code(action, args?) reads the project and the database; it never writes.
 fields {table, tenant?}: columns of a table, rows with a value, who reads and writes each.
 consumers {table, column} or {column_only}: each read and write of a column, file:line.
 map {module, walkthrough?}: routes, calls and screens of a front module.
 map_back {query, offset?}: from a screen (its module, or a part of its route path with a slash, such as sales-tariffs/bulk-upload) or an API address to endpoint, controller, service and table; when endpoints do not fit, the last line gives the offset of the next page.
+contract {endpoint}: endpoint is METHOD /path (POST /api/orders). What each front call to it sends (its object and TypeScript type, in snake_case when the front uses axios-case-converter) against the rules of the Laravel method (its FormRequest or an inline validate): sent but not in the rules (validated() drops them), required but not sent, near names, required but optional in the front type; "incomplete" names what could not be read.
 flows {module}: screens, endpoints and tables together, as evidence for user stories.
 cases {module}: the test cases of a module as a list; it runs nothing.
 legacy {path, module?, rejects?}: endpoints, callers and tables of a legacy PHP folder, against the new module's; rejects:true adds the lines of each file that stop a request (throw, die, exit, a 4xx/5xx status).
