@@ -1,5 +1,7 @@
 # webscope
 
+[Español](README.es.md)
+
 An MCP server that lets an AI agent test a web application and understand its data and code while spending very few tokens. It reads your database, looks at and drives a screen in your Chrome, checks that what a screen sent is what ended up saved, and reads the project's code. One Go binary, four tools, and it never writes to your database.
 
 ## What it is for
@@ -45,6 +47,14 @@ A typical session, in the order that works best (`docs/usage.md` has the contrac
 6. `code snap_diff`: see every row the action wrote.
 7. Clean up through the screen, never through the database.
 
+## Requirements
+
+- Go 1.27.3 or newer, to build it (`go.mod`).
+- An MCP client. The quick start below uses Claude Code.
+- For `query`, `check` and `code fields`: a MySQL or SQLite database.
+- For `page` and `check`: Google Chrome with the Claude in Chrome extension and a tab open on the app you test.
+- For `code`: the source folders of the app (a Laravel backend and a Vue front for `map`, `map_back`, `flows` and `cases`).
+
 ## Quick start (Claude Code)
 
     go build -o webscope .        # Go 1.27.3 or newer (go.mod)
@@ -71,7 +81,7 @@ After changing a variable, or after rebuilding, reconnect with `/mcp`: the conne
 
 - **It never writes to the database.** `query` is read-only twice (a statement check, and a read-only session); `check`, `code` and `snap` only read.
 - **Writes happen only through the screen**, with your approval, on rows prefixed `ZZ_`. Cleaning up is done through the screen too.
-- **Answers are small and say what they left out**: 50 rows (at most 500), 200 characters per cell, 8000 bytes per answer. The list of tools the agent has to load is 1443 bytes.
+- **Answers are small and say what they left out**: 50 rows (at most 500), 200 characters per cell, 8000 bytes per answer. The list of tools the agent has to load stays under 1800 bytes (a test checks it).
 - **`page` is local**: a server on `127.0.0.1` with a random port and token, which answers only the origin of your app.
 - **No guessing**: `check` takes the field-to-column map from you, and every answer of `code` that comes from searching text says it is an estimate.
 - With customer data, ask for the schema and for counts, not for rows.
@@ -105,7 +115,7 @@ The whole chain, step by step, is `code help {topic: "migration"}`. A real run o
 
 ## Docs
 
-`docs/usage.md` is the contract of each tool and the order to use them in. `docs/module-testing.md` is the procedure for testing a module and `docs/patterns.md` the list of patterns found while testing screens. `CHANGELOG.md` has one entry per version.
+`docs/usage.md` is the contract of each tool and the order to use them in. `docs/module-testing.md` is the procedure for testing a module and `docs/patterns.md` the list of patterns found while testing screens. `CHANGELOG.md` has one entry per version. To build, test or change the server, see [CONTRIBUTING.md](CONTRIBUTING.md); to report a vulnerability, [SECURITY.md](SECURITY.md).
 
 ---
 
