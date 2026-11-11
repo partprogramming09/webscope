@@ -1,19 +1,12 @@
-# Índice de documentación: webscope-core
+# Documentation index: webscope
 
-**Lector:** personas
+**Reader:** people
 
-Antes de escribir un doc nuevo, buscar aquí si el tema ya existe; nunca explicar lo mismo dos veces.
+Before writing a new doc, check here whether the topic already exists; never explain the same thing twice.
 
-## Para personas
-
-| Documento | Pregunta que responde |
+| Document | Question it answers |
 |---|---|
-| [README.md](README.md) | ¿Dónde está cada documento de `docs/` y para quién es? |
-| [usage.md](usage.md) | ¿Qué garantiza cada herramienta y en qué orden se usan juntas para probar una pantalla o migrar un módulo? |
-| [module-testing.md](module-testing.md) | ¿Cuál es el procedimiento completo para probar un módulo como usuario y como atacante, y cómo se clasifican los hallazgos? |
-| [patterns.md](patterns.md) | ¿Qué hallazgos conocidos aparecen al probar pantallas, cómo se reconocen y qué hacer con cada uno? |
-| [old-to-new-tools.md](old-to-new-tools.md) | ¿Qué herramienta de este servidor sustituye a cada una del servidor antiguo y cuáles ya no existen? |
-
-## Para el agente
-
-Ninguno por ahora.
+| [README.md](README.md) | Where is each document of `docs/`, and who is it for? |
+| [usage.md](usage.md) | What does each tool guarantee, and in what order are they used together to test a screen or migrate a module? |
+| [module-testing.md](module-testing.md) | What is the full procedure to test a module as a user and as an attacker, and how are findings classified? |
+| [patterns.md](patterns.md) | Which known findings show up when testing screens, how are they recognized, and what to do with each? |

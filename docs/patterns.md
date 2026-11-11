@@ -1,10 +1,8 @@
 # Known patterns
 
-**Lector:** personas
+**Reader:** people
 
 Findings met while testing screens with webscope 0.5 (`query`, `page`, `check`, `code`), each with how to recognize it and what to do. Check this list before testing a module; add a row when a new kind of finding appears. The last column says how far each one was verified: **measured** (seen in the Acme demo tenant, 24 to 28 October 2026), **test** (only in the Chrome test fixture) or **read** (from code or from an old session, not reproduced since).
-
-Tools of the old server (`e2e_chrome`, `__f.*`, `payload_check`, …) are in [old-to-new-tools.md](old-to-new-tools.md).
 
 ## What the screen does
 

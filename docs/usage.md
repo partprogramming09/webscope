@@ -1,6 +1,6 @@
 # Using webscope
 
-**Lector:** personas
+**Reader:** people
 
 The contract of each tool: when to use it, what it guarantees, what it cannot do. The README has the full argument reference; this page says how to use the four tools together.
 
@@ -81,11 +81,11 @@ To test a screen and know what it really wrote:
 
 To migrate a module from a legacy system and keep what it did:
 
-1. `code(flows {module})`, then write the user stories from it and have a person confirm them (skill `module-flows`).
+1. `code(flows {module})`, then write the user stories from it and have a person confirm them.
 2. `code(legacy {path, module})`: the legacy endpoints, who calls them, and the tables on one side only. A table only the legacy has and the backend names elsewhere is not a gap; one no backend file names is a question.
 3. Open the old and the new screen (two tabs): `page(shape)` on the part to compare on each, `page(parity {a, b})`; then the same action on both and `page(parity {req_a, req_b, map})`.
 4. `code(cases {module})`: what to test; run the ones you choose with `page`, on `ZZ_` rows, with `snap` before and `snap_diff` after, and `check` the saved row. Compare the row each system wrote with `rows {table, a, b, children}`: `a` and `b` pick each row, `children` is `{child table: column}`.
-5. A confirmed difference becomes a plan of unit tests (skill `parity-tests`) for the `tester` agent; the whole chain is the skill `migration-parity`.
+5. A confirmed difference becomes a unit test in the layer that owns the rule; `code(help {topic: "migration"})` has the whole chain.
 
 [module-testing.md](module-testing.md) is the full procedure for a module; [patterns.md](patterns.md) lists what has been found.
 
@@ -99,7 +99,7 @@ webscope tells you what it can check; it does not decide for you and never block
 - An HTTP status 0, a 5xx or a network error is a backend failure until shown otherwise: read the backend log before reporting the screen as broken or fine.
 - A feature is not finished until it is tested, and the next one does not start before.
 
-What webscope already marks: when `fetch`, `XMLHttpRequest.send` or the anchor `click` are replaced after `page(load)`, the answers of `page` start with `Interceptor: …` (it is a label; nothing is refused). The rest (file seen in the downloads folder, evidence states) is planned in the ROADMAP section «Informes honestos»; until each version exists, those rules are practice, not something the server checks.
+What webscope already marks: when `fetch`, `XMLHttpRequest.send` or the anchor `click` are replaced after `page(load)`, the answers of `page` start with `Interceptor: …` (it is a label; nothing is refused). `page(download)` counts a download only when the file is in the downloads folder, and `page(verify)` gives each claim of the report its evidence state. The other rules above are practice, not something the server checks.
 
 ## Setup
 

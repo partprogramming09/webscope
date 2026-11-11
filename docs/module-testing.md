@@ -1,8 +1,8 @@
 # Testing a module like a user and like someone hunting for errors
 
-**Lector:** personas
+**Reader:** people
 
-For webscope 0.5: `query`, `page`, `check` and `code`, plus `Grep` and `Read` for code and `javascript_tool` of Claude in Chrome to run what `page` returns. The order below is the one that found real defects; the old server's version of this file is in the repo history. Patterns seen so far are in [patterns.md](patterns.md); the old tools in [old-to-new-tools.md](old-to-new-tools.md).
+For webscope 0.5: `query`, `page`, `check` and `code`, plus `Grep` and `Read` for code and `javascript_tool` of Claude in Chrome to run what `page` returns. The order below is the one that found real defects. Patterns seen so far are in [patterns.md](patterns.md).
 
 A module is done only when step 9 has no pending row.
 
@@ -98,7 +98,7 @@ Seen in one session: 13 subagents, 62 failed calls in all, 11 of the 13 wrote th
 - **Budget and return.** The number of calls it may spend, the rows it may create (prefix `ZZ_`, ids listed at the end) and the format of its report: tested, excluded with reason, pending, findings with evidence. A report is data to verify, not a conclusion.
 
 ## Cost
-- The cost is the context re-read on every call, not what a tool returns: fewer calls and a smaller context are the only levers. (Measured on a 12 USD session of 431 calls of the old server.)
+- The cost is the context re-read on every call, not what a tool returns: fewer calls and a smaller context are the only levers. (Measured on a 12 USD session of 431 calls of an earlier version of this server.)
 - No screenshots to read the screen: `page(state)` gives it as text. Return from `javascript_tool` only the lines you need.
 - One call per form (`fill` with several fields), several `window.__ws` actions per `javascript_tool` call, one `check` per request.
 - Start a new session when the context passes about 500 k tokens; the task file must already hold what was learned.

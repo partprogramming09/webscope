@@ -1,6 +1,7 @@
 webscope
 webscope-core
 *.db
-
-# Configuración local de asistentes de IA (no se versiona)
 .claude/
+.env
+*.log
+.DS_Store

@@ -71,7 +71,7 @@ func TestOnlyQueryPageCheckAndCodeAreOffered(t *testing.T) {
 	if a := tools["code"].Annotations; a == nil || !a.ReadOnlyHint {
 		t.Error("code is not marked read-only")
 	}
-	// page is not read-only: the snippets it hands out can fill and click in the app (writes go through the screen, ROADMAP rule 1).
+	// page is not read-only: the snippets it hands out can fill and click in the app (writes go through the screen).
 	if a := tools["page"].Annotations; a != nil && a.ReadOnlyHint {
 		t.Error("page is marked read-only")
 	}
