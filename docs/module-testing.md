@@ -1,5 +1,7 @@
 # Testing a module like a user and like someone hunting for errors
 
+**Lector:** personas
+
 For webscope 0.5: `query`, `page`, `check` and `code`, plus `Grep` and `Read` for code and `javascript_tool` of Claude in Chrome to run what `page` returns. The order below is the one that found real defects; the old server's version of this file is in the repo history. Patterns seen so far are in [patterns.md](patterns.md); the old tools in [old-to-new-tools.md](old-to-new-tools.md).
 
 A module is done only when step 9 has no pending row.

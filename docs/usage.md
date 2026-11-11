@@ -1,5 +1,7 @@
 # Using webscope
 
+**Lector:** personas
+
 The contract of each tool: when to use it, what it guarantees, what it cannot do. The README has the full argument reference; this page says how to use the four tools together.
 
 ## Guarantees that hold for every tool

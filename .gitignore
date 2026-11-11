@@ -1,4 +1,6 @@
 webscope
 webscope-core
 *.db
-TASKS.md
+
+# Configuración local de asistentes de IA (no se versiona)
+.claude/
