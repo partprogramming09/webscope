@@ -10,4 +10,5 @@ Before writing a new doc, check here whether the topic already exists; never exp
 | [usage.md](usage.md) | What does each tool guarantee, and in what order are they used together to test a screen or migrate a module? |
 | [module-testing.md](module-testing.md) | What is the full procedure to test a module as a user and as an attacker, and how are findings classified? |
 | [patterns.md](patterns.md) | Which known findings show up when testing screens, how are they recognized, and what to do with each? |
+| [adr/0001-page-observes.md](adr/0001-page-observes.md) | Should `page` stop driving the screen and only observe, now that Claude in Chrome has native tools? (No: measured, the native path costs more.) |
 | [research/README.md](research/README.md) | What has already been looked up (with source, date and confidence) before searching again? |

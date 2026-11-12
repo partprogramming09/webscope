@@ -14,5 +14,6 @@ Question: which native Claude in Chrome tools type into fields, pick an option, 
 | A different product, the API's browser-use toolset, documents `form_input`, `file_upload`, `read_network` (requests since the last read, only from when it attached) and `javascript_exec`. It is not proven that Claude in Chrome exposes the same tools. | [Browser use tool](https://platform.claude.com/docs/en/agents-and-tools/tool-use/browser-use-tool) (search excerpt, page not read in full) | 2026-11-11 | Low |
 
 ## Pending
-- The real tool list of the installed extension (`/mcp` → View tools), saved with the extension version.
-- Whether the network tool returns the body of a POST: one POST on the real app, then one read of the network, compared with `page(payloads)`. Until this is known, `payloads` is the only place that shows what a screen sent.
+Answered on 2026-11-11 by measuring on a real app (ADR `0001-page-observes`), except the extension version:
+- Tool list seen by the session: `browser_batch`, `computer`, `file_upload`, `find`, `form_input`, `get_page_text`, `gif_creator`, `javascript_tool`, `list_connected_browsers`, `navigate`, `read_console_messages`, `read_network_requests`, `read_page`, `resize_window`, `select_browser`, `switch_browser`, `tabs_close_mcp`, `tabs_context_mcp`, `tabs_create_mcp`, `upload_image`. Still pending: the extension version (`chrome://extensions`).
+- The network tool gives no body: URL, method and status only. In that run it also did not show the create POST or the DELETE, only a CORS preflight. Confidence: high for «no body» (the output format has no body field); medium for «misses requests» (one session, two writes).
