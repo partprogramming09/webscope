@@ -2,7 +2,7 @@
 
 **Reader:** people
 
-The contract of each tool: when to use it, what it guarantees, what it cannot do. The README has the full argument reference; this page says how to use the four tools together.
+The contract of each tool: when to use it, what it guarantees, what it cannot do. [reference.md](reference.md) has the full argument reference; this page says how to use the four tools together.
 
 ## Guarantees that hold for every tool
 
@@ -104,4 +104,4 @@ What webscope already marks: when `fetch`, `XMLHttpRequest.send` or the anchor `
 
 ## Setup
 
-Set the variables once, as in the README: `WEBSCOPE_DB_URL` (required), `WEBSCOPE_APP_URL` (`page`, exact origin of the tab; several origins separated by commas when the old and the new app answer on different addresses), `WEBSCOPE_BACKEND` and `WEBSCOPE_FRONT` (`code`), `WEBSCOPE_LEGACY` (`code legacy`, the folder of the legacy PHP), `WEBSCOPE_TENANT_QUERY` (a tenant lookup other than Hyn Tenancy's), `WEBSCOPE_DOWNLOADS` (where Chrome saves files, for `page download`), `WEBSCOPE_LOG` (the backend log: `click`, `press` and `payloads` add the error lines written since the click or key began, when a request ends with status 0 or 5xx). A missing variable fails with `<NAME> is not set` and does not guess; `fields` without `WEBSCOPE_BACKEND` still answers, but without readers and writers.
+Set the variables once, as in [reference.md](reference.md#environment-variables): `WEBSCOPE_DB_URL` (required), `WEBSCOPE_APP_URL` (`page`, exact origin of the tab; several origins separated by commas when the old and the new app answer on different addresses), `WEBSCOPE_BACKEND` and `WEBSCOPE_FRONT` (`code`), `WEBSCOPE_LEGACY` (`code legacy`, the folder of the legacy PHP), `WEBSCOPE_TENANT_QUERY` (a tenant lookup other than Hyn Tenancy's), `WEBSCOPE_DOWNLOADS` (where Chrome saves files, for `page download`), `WEBSCOPE_LOG` (the backend log: `click`, `press` and `payloads` add the error lines written since the click or key began, when a request ends with status 0 or 5xx). A missing variable fails with `<NAME> is not set` and does not guess; `fields` without `WEBSCOPE_BACKEND` still answers, but without readers and writers.

@@ -8,6 +8,7 @@ Before writing a new doc, check here whether the topic already exists; never exp
 |---|---|
 | [README.md](README.md) | Where is each document of `docs/`, and who is it for? |
 | [usage.md](usage.md) | What does each tool guarantee, and in what order are they used together to test a screen or migrate a module? |
+| [reference.md](reference.md) | What are the exact variables, arguments, measured results and known limits of each tool? |
 | [install.md](install.md) | How is webscope installed in Claude Code (plugin or not) and in other agents? |
 | [adr/0002-plugin-builds-the-binary.md](adr/0002-plugin-builds-the-binary.md) | How does the Go binary reach the machine of someone who installs the plugin? (The plugin builds it on first start.) |
 | [module-testing.md](module-testing.md) | What is the full procedure to test a module as a user and as an attacker, and how are findings classified? |
