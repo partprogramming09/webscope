@@ -2,6 +2,23 @@
 
 One entry per version, newest first. Tool names are `query`, `page`, `check` and `code`. Each change says what it is, what was seen that made it necessary, how it was checked and what was not checked. A change in what a tool prints is listed as a change, because a client may read it.
 
+## 0.7.18 — 2026-11-11
+
+**`page payloads` gives a mark and `after: N`: what a click made with the browser's own tool did can be read.**
+
+What was seen that made it necessary: «what happened after the click» (the requests and the backend log lines) only came when the click was made by `page(click)` or `page(press)`. A click made with Claude in Chrome's own tools left the requests mixed with the earlier ones and no log lines at all. This is the first step of the plan to let `page` observe instead of drive.
+
+Now:
+- Every `payloads` answer but `index` starts with `mark N`, N the number of the last capture, before the `Interceptor:` warning when there is one.
+- `payloads {after: N}` shows only the requests numbered above N (`no requests after #N (last is #M)` when none, not a failure) and, with `WEBSCOPE_LOG`, the error lines the log wrote since mark N was first given, whatever the status. A mark never given says `no log mark N: log lines not read` instead of reading the end of the log, and a log shorter than at the mark (rotated or cut) says so instead of passing old lines as new. With `after`, the header counts the requests after the mark, `Problems:` counts only those, and requests after the mark already dropped from the 50 kept are named (`requests #A to #B were dropped`). `after` that is not a whole number 0 or more fails; `after: null` is ignored.
+- When the list is too long and is cut, the log lines are still shown after the cut (before, they were lost with it), also without `after`. An `index` that is not a whole number now fails instead of being read as the whole part.
+- Changed output: `#N` is now a number that keeps growing for the life of the server. Before, it was the position among the 50 kept captures and moved when the oldest were dropped; `index` uses the same numbers, and an index already dropped fails with the range that is kept. `check` does not use these numbers and does not change.
+- `page(help)` names `after` and the mark. `tools/list` stays at 1441 bytes (3 runs over stdio).
+
+How it was checked: tests without Chrome for the mark line, `after` over 3 captures, the log lines since a mark (and not the ones before it), `after` past the last, 55 captures (the list starts at #6 and `index: 6` is the sixth that came), a mark never given and an `after` that is negative, a fraction or text. A review found that `Problems:`, the header and dropped captures still counted the requests before the mark, that a cut list lost the log lines, that a rotated log was read as new lines and that `after: null` failed; each has its test. The whole suite with Chrome: 343 tests.
+
+Not checked: a real click with the browser's own tool followed by `payloads {after}` on the real app (that is the measurement of the next step). Known limits: a request still in flight when the mark is given is counted as after it; a log rotated and grown past the mark's size again is not detected, and its lines are shown as new.
+
 ## 0.7.17 — 2026-11-11
 
 **New `code contract {endpoint}`: what the front sends to an endpoint against what its Laravel method validates.**

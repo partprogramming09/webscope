@@ -15,6 +15,7 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"os"
 	"regexp"
 	"slices"
 	"strconv"
@@ -82,7 +83,7 @@ state|find|read|fill|click|press|simulate|open|options|audit|shape|batch: return
   simulate {match, status, times?, method?, body?}: the next requests whose URL contains match answer HTTP status 400-599 without reaching the app, with body (a text or an object, 2000 characters at most) or a short default message; {clear:true} cancels.
 result {offset?}: javascript_tool shows only 1000 characters of what a snippet returns and blocks a text that has an = together with a ; or an & (a=1&b=2, a=1;b=2, id=a1 y; z). When an answer is longer, or has them, the snippet returns a short one that ends «page(result) gives all» (query values hidden, ; and & changed) and the helper keeps the whole answer: result gives it, in parts (answered here, no snippet).
 upload {path, field|ref|css?}: attaches a file to an <input type=file> and fires its input and change events (a file under the temp folder or WEBSCOPE_UPLOADS, 5 MB at most, never a hidden or .env file); field names the input by its label, name or id, ref by f<N> from find, css by a selector; with only one file input on the page none is needed. It does not press the save button.
-payloads {limit?, match?, body?, index?}: the requests the page sent and their answers, each numbered #N with the milliseconds it took (answered here, no snippet); match is a regex over "METHOD address", body a regex over what was sent and got, and both together keep the requests that fit (limit applies to those); index N gives that one request with its sent and got up to 8000 bytes.
+payloads {limit?, match?, body?, index?, after?}: the requests the page sent and their answers, each numbered #N with the milliseconds it took (answered here, no snippet); match is a regex over "METHOD address", body a regex over what was sent and got, and both together keep the requests that fit (limit applies to those); index N gives that one request with its sent and got up to 8000 bytes. The first line is "mark N", N the number of the last request; after N shows only the later ones and, with WEBSCOPE_LOG, the error lines the log wrote since that mark, so a click made with the browser's own tool can be read: payloads, click, payloads {after: N}.
 parity {a, b, kinds?}: compares two saved shapes (say the old and the new screen) and shows only what one has and the other lacks (a repeated name once, with ×N), and fields whose kind changed (answered here, no snippet); kinds "field,column" limits it, e.g. to leave out the step buttons of a wizard. parity {req_a, req_b, map?} compares instead the latest captured request that matches each ("POST save.php": the method, then a part of the address): status and the field names sent and received, never values; map {name in a: name in b} renames a's names first.
 download {arm:true} before a real click, then {wait:true, seconds?} after it, and {report:true} lists the files the session saw appear so the user can delete them (answered here, no snippet): waits for a new file in the downloads folder (WEBSCOPE_DOWNLOADS, else ~/Downloads) and gives its name, size, type by its first bytes and time, and for an xlsx, an HTML table or a text with tabs, semicolons or commas (what a legacy .xls often is) its header names and row count, never a value. No file in time is a failure: an export counts as downloaded only if this finds the file.
 verify {claim, evidence?}: adds a claim of the final report to a table and answers its state, which the server decides: OBSERVADO (evidence «capture METHOD address» of a request that was captured, «check METHOD address» of a check with no differences, or «download» of a file that download wait found), INFERIDO (that capture was seen after an interceptor was put on the page) or NO VERIFICADO (no evidence, or none the server can find). verify {report:true} prints the table, {clear:true} empties it; build the report from it (answered here, no snippet).
@@ -108,6 +109,7 @@ type Tool struct {
 	mu      sync.Mutex
 	base    string
 	caps    []Capture
+	seq     int              // captures received since the server started: the number (#N) of the last one; dropping old ones does not lower it
 	lastCap time.Time        // when the last capture came
 	now     func() time.Time // the clock; a test sets it
 	shapes  map[string]Shape
@@ -118,6 +120,7 @@ type Tool struct {
 
 	logFrom      int64                // where the backend log ended when the last click or key began
 	logMarked    bool                 // logFrom was set
+	logAt        map[int]int64        // the size of the backend log when payloads first answered mark N, by N
 	LogPath      string               // the backend log; empty means WEBSCOPE_LOG
 	DownloadDir  string               // where Chrome saves files; empty means WEBSCOPE_DOWNLOADS, then ~/Downloads
 	dlSeen       map[string]fileMark  // the files of that folder when download was armed; nil if not armed
@@ -395,6 +398,7 @@ func (p *Tool) capture(w http.ResponseWriter, r *http.Request) {
 	c.Req, c.Res = clip(c.Req, storeClip), clip(c.Res, storeClip)
 	p.mu.Lock()
 	p.caps = append(p.caps, c)
+	p.seq++
 	p.lastCap = p.now()
 	if len(p.caps) > maxCaptures {
 		p.caps = p.caps[len(p.caps)-maxCaptures:]
@@ -425,12 +429,25 @@ func (p *Tool) payloads(args map[string]any) string {
 	if f, ok := args["limit"].(float64); ok && f >= 1 && f <= maxCaptures {
 		n = int(f)
 	}
+	first := p.seq - len(p.caps) + 1 // the number of p.caps[0]
 	if f, ok := args["index"].(float64); ok {
-		if f < 1 || int(f) > len(p.caps) {
-			return fmt.Sprintf("Failed: no request #%d among the %d captured. Next: page(payloads) lists them with their numbers.", int(f), len(p.caps))
+		if k := int(f) - first; f != float64(int(f)) || k < 0 || k >= len(p.caps) {
+			kept := "none is kept"
+			if len(p.caps) > 0 {
+				kept = fmt.Sprintf("those kept are #%d to #%d", first, p.seq)
+			}
+			return fmt.Sprintf("Failed: no request #%v (%s). Next: page(payloads) lists them with their numbers.", f, kept)
 		}
-		c := p.caps[int(f)-1]
+		c := p.caps[int(f)-first]
 		return fmt.Sprintf("#%d %s %s %d%s\nsent: %s\ngot: %s", int(f), oneLine(c.M), oneLine(c.U), c.S, took(c), clip(c.Req, detailClip), clip(c.Res, detailClip))
+	}
+	after := -1
+	if v, ok := args["after"]; ok && v != nil {
+		f, isNum := v.(float64)
+		if !isNum || f < 0 || f != float64(int(f)) {
+			return "Failed: after must be a whole number 0 or more. Next: give the N of a mark N line an earlier page(payloads) answered."
+		}
+		after = int(f)
 	}
 	var addr, body *regexp.Regexp
 	for _, f := range []struct {
@@ -447,7 +464,7 @@ func (p *Tool) payloads(args map[string]any) string {
 	}
 	nums := make([]int, 0, len(p.caps))
 	for i, c := range p.caps {
-		if (addr == nil || addr.MatchString(c.M+" "+c.U)) && (body == nil || body.MatchString(c.Req+"\n"+c.Res)) {
+		if first+i > after && (addr == nil || addr.MatchString(c.M+" "+c.U)) && (body == nil || body.MatchString(c.Req+"\n"+c.Res)) {
 			nums = append(nums, i)
 		}
 	}
@@ -457,15 +474,24 @@ func (p *Tool) payloads(args map[string]any) string {
 		list[i] = p.caps[k]
 	}
 	var b strings.Builder
+	fmt.Fprintf(&b, "mark %d\n", p.seq)
+	p.noteMark()
 	if hard := slices.DeleteFunc(slices.Clone(p.tampered), func(n string) bool { return n == "fetch~" }); len(hard) > 0 {
 		fmt.Fprintf(&b, "Interceptor: %s replaced after the helper loaded. These requests are what the page did with that patch, not what a real click did: do not report them as a check of the real flow.\n", strings.Join(hard, ", "))
 	}
 	if slices.Contains(p.tampered, "fetch~") {
 		b.WriteString("Note: fetch was wrapped by another script after the helper loaded. The wrapper calls the helper (checked), so these requests are the ones the app sent; whether it changes the answers the app receives is not checked.\n")
 	}
-	if addr != nil || body != nil {
+	kept := p.caps // the captures this answer is about: those after the mark when there is one
+	if after >= 0 {
+		kept = p.caps[min(len(p.caps), max(0, after-first+1)):]
+	}
+	switch {
+	case addr != nil || body != nil:
 		fmt.Fprintf(&b, "%d requests captured, %d match (showing last %d)", len(p.caps), len(nums), len(list))
-	} else {
+	case after >= 0:
+		fmt.Fprintf(&b, "%d requests captured, %d after #%d (showing last %d)", len(p.caps), len(kept), after, len(list))
+	default:
 		fmt.Fprintf(&b, "%d requests captured (showing last %d)", len(p.caps), len(list))
 	}
 	if len(p.caps) > 0 {
@@ -476,7 +502,13 @@ func (p *Tool) payloads(args map[string]any) string {
 		}
 	}
 	b.WriteString("\n")
-	if s := problems(p.caps); s != "" {
+	if after >= p.seq {
+		fmt.Fprintf(&b, "no requests after #%d (last is #%d)\n", after, p.seq)
+	}
+	if after >= 0 && after < first-1 {
+		fmt.Fprintf(&b, "requests #%d to #%d were dropped (only the last %d are kept)\n", after+1, first-1, maxCaptures)
+	}
+	if s := problems(kept); s != "" {
 		b.WriteString(s + "\n")
 	}
 	if p.refused { // the origin itself is not repeated: it comes from the browser, and page(state) says "This tab is X" when it differs
@@ -486,33 +518,58 @@ func (p *Tool) payloads(args map[string]any) string {
 	for _, c := range list {
 		failed = failed || (c.S == 0 && !c.O) || c.S >= 500
 	}
+	tail := p.logTail(after, failed)
 	for i, c := range list {
 		// The method and the URL come from the page under test: one line each, and short.
 		status := strconv.Itoa(c.S)
 		if c.O {
 			status = "opaque (no-cors: its status cannot be read)"
 		}
-		e := fmt.Sprintf("#%d %s %s %s%s\n", nums[i]+1, clip(oneLine(c.M), 10), clip(oneLine(c.U), 300), status, took(c))
+		e := fmt.Sprintf("#%d %s %s %s%s\n", first+nums[i], clip(oneLine(c.M), 10), clip(oneLine(c.U), 300), status, took(c))
 		if c.Req != "" {
 			e += fmt.Sprintf("  sent: %s\n", oneLine(clip(c.Req, showClip)))
 		}
 		if c.Res != "" {
 			e += fmt.Sprintf("  got: %s\n", oneLine(clip(c.Res, showClip)))
 		}
-		if b.Len()+len(e) > input.MaxAnswer {
-			fmt.Fprintf(&b, "(… %d more requests not shown: ask for fewer with limit)", len(list)-i)
-			return b.String()
+		if b.Len()+len(e)+len(tail) > input.MaxAnswer {
+			fmt.Fprintf(&b, "(… %d more requests not shown: ask for fewer with limit)\n", len(list)-i)
+			break
 		}
 		b.WriteString(e)
+	}
+	b.WriteString(tail)
+	return strings.TrimRight(b.String(), "\n")
+}
+
+// logTail is the part of a payloads answer about the backend log: with a mark (after >= 0), the error lines written since that mark was first
+// given; without one, the lines since the last click or key, and only when a shown request failed. Empty without a log. The caller holds p.mu.
+func (p *Tool) logTail(after int, failed bool) string {
+	path := p.logPath()
+	if path == "" {
+		return ""
+	}
+	if after >= 0 {
+		from, ok := p.logAt[after]
+		if !ok {
+			return fmt.Sprintf("\nno log mark %d: log lines not read", after)
+		}
+		if i, err := os.Stat(path); err == nil && i.Size() < from {
+			return fmt.Sprintf("\nthe log is shorter than at mark %d (rotated or cut): log lines not read", after)
+		}
+		if l := p.logLinesFrom(from); l != "" {
+			return fmt.Sprintf("\nBackend log since mark %d (its error lines, as the log wrote them):\n%s", after, l)
+		}
+		return ""
 	}
 	from := int64(-1)
 	if p.logMarked {
 		from = p.logFrom
 	}
 	if l := p.logLinesFrom(from); failed && l != "" {
-		b.WriteString("\nBackend log (the last error lines of WEBSCOPE_LOG, as the log wrote them):\n" + l)
+		return "\nBackend log (the last error lines of WEBSCOPE_LOG, as the log wrote them):\n" + l
 	}
-	return strings.TrimRight(b.String(), "\n")
+	return ""
 }
 
 // took is the time a request took as " 340 ms", or "" when it was not measured.

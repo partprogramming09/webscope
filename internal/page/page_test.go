@@ -1498,8 +1498,8 @@ func TestAnInterceptorPutOnTheFetchIsMarkedInStateAndPayloads(t *testing.T) {
 	if !strings.HasPrefix(out[3], "Interceptor: fetch") {
 		t.Errorf("state after the replacement does not start with the mark: %q", out[3])
 	}
-	if seen, _ := askPage(t, p, "payloads", nil); !strings.HasPrefix(seen, "Interceptor: fetch") {
-		t.Errorf("payloads after the replacement does not start with the mark: %s", seen)
+	if seen, _ := askPage(t, p, "payloads", nil); !strings.HasPrefix(seen, "mark 0\nInterceptor: fetch") {
+		t.Errorf("payloads after the replacement does not put the warning right after its mark line: %s", seen)
 	}
 }
 

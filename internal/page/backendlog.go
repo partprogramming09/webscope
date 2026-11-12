@@ -86,6 +86,26 @@ func (p *Tool) logMark(w http.ResponseWriter, _ *http.Request) {
 	io.WriteString(w, strconv.FormatInt(size, 10))
 }
 
+// noteMark keeps the size of the backend log as the place of mark p.seq, the first time that mark is given: a later payloads with the same
+// mark may come after the action it was meant to precede. The caller holds p.mu. Nothing is kept without a log.
+func (p *Tool) noteMark() {
+	path := p.logPath()
+	if path == "" {
+		return
+	}
+	if _, ok := p.logAt[p.seq]; ok {
+		return
+	}
+	size := int64(0)
+	if i, err := os.Stat(path); err == nil {
+		size = i.Size()
+	}
+	if p.logAt == nil {
+		p.logAt = map[int]int64{}
+	}
+	p.logAt[p.seq] = size
+}
+
 // logRoute answers the helper with the error lines written after the offset in the query (from), or the end of the file without one.
 func (p *Tool) logRoute(w http.ResponseWriter, r *http.Request) {
 	from, err := strconv.ParseInt(r.URL.Query().Get("from"), 10, 64)
