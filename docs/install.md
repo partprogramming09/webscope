@@ -2,7 +2,7 @@
 
 **Reader:** people who want to connect webscope to Claude Code or to another MCP client.
 
-webscope is one stdio MCP server. Any client that can start a command and talk to it over stdio can use it; what changes is where each client keeps its configuration. The environment variables are the same everywhere (README, «Quick start»); only `WEBSCOPE_DB_URL` is needed to start.
+webscope is one stdio MCP server. Any client that can start a command and talk to it over stdio can use it; what changes is where each client keeps its configuration. The environment variables are the same everywhere ([reference.md](reference.md#environment-variables)); only `WEBSCOPE_DB_URL` is needed to start.
 
 Sources and confidence of every format below: `docs/research/2026-11-12-mcp-marketplace-and-sdk.md`.
 
