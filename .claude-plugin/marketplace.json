@@ -1,0 +1,12 @@
+{
+  "name": "webscope",
+  "description": "webscope: an MCP server that tests a web app with few tokens",
+  "owner": { "name": "partprogramming09" },
+  "plugins": [
+    {
+      "name": "webscope",
+      "source": "./",
+      "description": "MCP server (query, page, check, code) and four skills for testing a module and comparing it with its legacy version."
+    }
+  ]
+}

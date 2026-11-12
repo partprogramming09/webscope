@@ -5,3 +5,4 @@ webscope-core
 .env
 *.log
 .DS_Store
+.build/

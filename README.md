@@ -56,6 +56,15 @@ A typical session, in the order that works best (`docs/usage.md` has the contrac
 - For `page` and `check`: Google Chrome with the Claude in Chrome extension and a tab open on the app you test.
 - For `code`: the source folders of the app (a Laravel backend and a Vue front for `map`, `map_back`, `flows` and `cases`).
 
+## Install as a Claude Code plugin
+
+    claude plugin marketplace add partprogramming09/webscope
+    claude plugin install webscope@webscope
+
+Then `/plugin configure webscope@webscope` asks for the database URL (stored as a sensitive value) and the other settings; an empty one leaves its tool off. Do not pass the URL on the command line: it stays in the shell history and shows in `ps`.
+
+It brings the server and the four skills. The first start builds the binary (needs Go; 8 to 14 s depending on whether Go's module cache is warm; `bin/webscope-launch build` does it ahead of time). Other agents (Codex, Cursor, VS Code, Gemini CLI) and the details: [docs/install.md](docs/install.md).
+
 ## Quick start (Claude Code)
 
     go build -o webscope .        # Go 1.27.3 or newer (go.mod)

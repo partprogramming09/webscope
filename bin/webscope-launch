@@ -1,0 +1,63 @@
+#!/bin/sh
+# Starts the webscope MCP server; stdout is the protocol, so every message goes to stderr.
+# Binary: $WEBSCOPE_BIN, else one built here with Go and kept per version (`build` only builds it).
+set -eu
+
+fail() {
+  echo "webscope-launch: $1" >&2
+  exit 1
+}
+
+root=$(cd "$(dirname "$0")/.." && pwd)
+
+if [ -n "${WEBSCOPE_BIN:-}" ] && [ "${1:-}" != build ]; then
+  case "$WEBSCOPE_BIN" in
+    /*) ;;
+    *) fail "WEBSCOPE_BIN must be an absolute path (got $WEBSCOPE_BIN). Next: set it to the absolute path of a built webscope, or unset it." ;;
+  esac
+  [ -f "$WEBSCOPE_BIN" ] && [ -x "$WEBSCOPE_BIN" ] || fail "WEBSCOPE_BIN is not an executable file ($WEBSCOPE_BIN). Next: build webscope and set WEBSCOPE_BIN to its absolute path, or unset it."
+  exec "$WEBSCOPE_BIN"
+fi
+
+version=$(sed -n 's/^[[:space:]]*version[[:space:]]*=[[:space:]]*"\([0-9][0-9.]*\)".*/\1/p' "$root/main.go" | head -n 1)
+[ -n "$version" ] || fail "cannot read the version from $root/main.go. Next: reinstall the plugin."
+
+cache="${CLAUDE_PLUGIN_DATA:-$root/.build}"
+case "$cache" in
+  /*) ;;
+  *) fail "CLAUDE_PLUGIN_DATA must be an absolute path (got $cache). Next: unset it or give an absolute path." ;;
+esac
+mkdir -p -- "$cache" 2>/dev/null && [ -d "$cache" ] && [ -w "$cache" ] || fail "cannot write to $cache. Next: make it a writable folder, or set WEBSCOPE_BIN to a built webscope."
+bin="$cache/webscope-$version"
+
+# A source or embedded file newer than the cached binary means the code changed under the same version.
+stale() {
+  [ ! -x "$bin" ] || [ -n "$(find "$root" \( -name node_modules -o -name vendor -o -name .build -o -name .git \) -prune -o \( \( -name '*.go' ! -name '*_test.go' \) -o -name go.mod -o -name go.sum -o \( -path '*/internal/*' \( -name '*.js' -o -name '*.md' \) \) \) -newer "$bin" -print -quit 2>/dev/null)" ]
+}
+
+if stale; then
+  command -v go >/dev/null 2>&1 || {
+    [ -x "$bin" ] && echo "webscope-launch: Go is not installed, using the cached $bin" >&2 || fail "Go is not installed. Next: install the Go version in $root/go.mod, or set WEBSCOPE_BIN to a built webscope."
+  }
+  if command -v go >/dev/null 2>&1; then
+    echo "webscope-launch: building webscope $version" >&2
+    tmp=$(mktemp "$bin.XXXXXX") || fail "cannot create a temporary file in $cache. Next: make it writable, or set WEBSCOPE_BIN."
+    if (cd "$root" && env -u WEBSCOPE_DB_URL -u GOFLAGS go build -o "$tmp" . >&2); then
+      mv "$tmp" "$bin" || {
+        rm -f "$tmp"
+        fail "cannot place the binary in $cache. Next: free space or permissions there, or set WEBSCOPE_BIN."
+      }
+    else
+      rm -f "$tmp"
+      [ -x "$bin" ] || fail "go build failed. Next: run 'go build' in $root and read the error."
+      touch "$bin"
+      echo "webscope-launch: go build failed, using the cached $bin" >&2
+    fi
+  fi
+fi
+
+if [ "${1:-}" = build ]; then
+  echo "$bin" >&2
+  exit 0
+fi
+exec "$bin"

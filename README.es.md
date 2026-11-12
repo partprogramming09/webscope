@@ -56,6 +56,15 @@ Una sesión típica, en el orden que mejor funciona (`docs/usage.md` tiene el co
 6. `code snap_diff`: ver cada fila que escribió la acción.
 7. Limpiar por la pantalla, nunca por la base.
 
+## Instalar como plugin de Claude Code
+
+    claude plugin marketplace add partprogramming09/webscope
+    claude plugin install webscope@webscope
+
+Después, `/plugin configure webscope@webscope` pide la URL de la base (se guarda como valor sensible) y los demás ajustes; uno vacío deja sin su herramienta. No pases la URL por la línea de comandos: queda en el historial del shell y se ve en `ps`.
+
+Trae el servidor y las cuatro skills. El primer arranque compila el binario (hace falta Go; de 8 a 14 s según tenga Go los módulos ya descargados; `bin/webscope-launch build` lo hace antes). Otros agentes (Codex, Cursor, VS Code, Gemini CLI) y el detalle: [docs/install.md](docs/install.md) (en inglés).
+
 ## Arranque rápido (Claude Code)
 
     go build -o webscope .        # Go 1.27.3 o más nuevo (go.mod)

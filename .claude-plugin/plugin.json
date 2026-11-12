@@ -1,0 +1,60 @@
+{
+  "name": "webscope",
+  "displayName": "webscope",
+  "version": "0.7.19",
+  "description": "Test a web app with few tokens: read-only SQL, screen tests in Chrome, sent-vs-saved checks and code maps.",
+  "author": {
+    "name": "partprogramming09"
+  },
+  "homepage": "https://github.com/partprogramming09/webscope",
+  "repository": "https://github.com/partprogramming09/webscope",
+  "license": "MIT",
+  "keywords": [
+    "mcp",
+    "testing",
+    "sql",
+    "chrome",
+    "laravel",
+    "vue"
+  ],
+  "mcpServers": {
+    "webscope": {
+      "command": "${CLAUDE_PLUGIN_ROOT}/bin/webscope-launch",
+      "env": {
+        "WEBSCOPE_DB_URL": "${user_config.db_url}",
+        "WEBSCOPE_APP_URL": "${user_config.app_url}",
+        "WEBSCOPE_BACKEND": "${user_config.backend}",
+        "WEBSCOPE_FRONT": "${user_config.front}",
+        "WEBSCOPE_LEGACY": "${user_config.legacy}"
+      }
+    }
+  },
+  "userConfig": {
+    "db_url": {
+      "type": "string",
+      "title": "Database URL",
+      "description": "mysql://user:pass@host:3306/name or sqlite:///path. Enables query, check and code fields. Leave empty to skip.",
+      "sensitive": true
+    },
+    "app_url": {
+      "type": "string",
+      "title": "App URL",
+      "description": "Exact origin of the tab to test, e.g. http://localhost:5173 (comma-separated for several). Enables page."
+    },
+    "backend": {
+      "type": "string",
+      "title": "Backend folder",
+      "description": "Folder with the project's PHP (Laravel). Enables code."
+    },
+    "front": {
+      "type": "string",
+      "title": "Front folder",
+      "description": "Folder of the Vue front. Enables code map, map_back and contract."
+    },
+    "legacy": {
+      "type": "string",
+      "title": "Legacy folder",
+      "description": "Folder of the legacy PHP, for code legacy."
+    }
+  }
+}
