@@ -174,7 +174,10 @@
     const names = [...new Set([...new URLSearchParams(l.search).keys()])].join(',');
     return l.pathname + (names ? ' ?' + names : '') + (l.hash ? ' ' + l.hash.split('?')[0] : '');
   };
-  const NOT_FOUND = /(^|\D)404(\D|$)|not found|no (se )?encontrad[ao]|p[aá]gina no (existe|encontrada)/i;
+  const NOT_FOUND = /(^|\D)404(\D|$)|not found|no (se )?encontrad[ao]|p[aá]gina no (existe|encontrada)|no (pudimos|podemos) encontrar|(could ?n[o']t|can ?n?[o']t) find/i;
+  // an error page is short: a long screen that mentions these words is not one
+  const SHORT_PAGE = 300;
+  const looksNotFound = () => NOT_FOUND.test([document.title, ...texts('h1,h2,h3')].join(' ')) || (norm(document.body.innerText || '').length < SHORT_PAGE && NOT_FOUND.test(document.body.innerText || ''));
   // lines keeps whole lines up to max characters and says how many it left out, instead of cutting one in the middle.
   const lines = (l, max) => {
     let n = 0;
@@ -186,7 +189,7 @@
 
   const state = a => {
     const out = ['URL: ' + showAddress(location), 'Title: ' + norm(document.title)];
-    if (NOT_FOUND.test([document.title, ...texts('h1,h2,h3')].join(' '))) out.unshift('Looks like a 404 page of the app (the title or a heading says not found): this is not the screen asked for. Next: open the right address.');
+    if (looksNotFound()) out.unshift('Looks like a 404 page of the app (the title, a heading or a short page says not found): this is not the screen asked for. Next: page(open {path}) goes through the app router and adds the tenant prefix (/demo/…); do not type the address by hand.');
     if (wrongOrigin()) out.push('Warning: ' + wrongOrigin());
     // what the next step depends on comes first, so a cut by max drops the long lists and not the dialog, the notices or the buttons
     const dlg = all('[role=dialog],dialog[open]')[0];
@@ -217,6 +220,7 @@
     let e;
     try { e = a.selector ? document.querySelector(a.selector) : document.body; } catch (x) { return fail('bad selector ' + a.selector); }
     if (!e) return fail('nothing matches ' + a.selector + '. Next: page(state) shows what is on the screen.');
+    if (e.tagName === 'TABLE') return clip([...e.rows].map(r => [...r.cells].map(c => norm(c.innerText != null ? c.innerText : c.textContent)).join(' | ')).join('\n'), a.max || CAP);
     return clip(norm(e.innerText != null ? e.innerText : e.textContent), a.max || CAP);
   };
 

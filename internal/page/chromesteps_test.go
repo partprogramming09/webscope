@@ -426,3 +426,39 @@ func (s *syncBuf) String() string {
 	defer s.mu.Unlock()
 	return s.b.String()
 }
+
+func TestStateRecognizesAShortErrorPageWithoutHeadingsAndPointsToOpen(t *testing.T) {
+	long := strings.Repeat("Texto de una pantalla normal con muchas palabras. ", 12)
+	out, _ := runSteps(t, func(load string) []string {
+		return []string{
+			load,
+			"(document.title='Conecta Carga',document.body.insertAdjacentHTML('beforeend','<div><p>¡Ups!</p><p>No pudimos encontrar la página que buscas.</p><a>Volver Al Inicio</a></div>'),'ok')",
+			"window.__ws.state({})",
+			"(document.body.insertAdjacentHTML('beforeend','<div><p>" + long + "</p><button>Guardar</button></div>'),'ok')",
+			"window.__ws.state({})",
+		}
+	}, nil)
+	if !strings.HasPrefix(out[2], "Looks like a 404") || !strings.Contains(out[2], "open {path}") {
+		t.Errorf("a short error page without headings must be called a 404 and point to open: %q", out[2])
+	}
+	if strings.HasPrefix(out[4], "Looks like a 404") {
+		t.Errorf("a long normal screen that mentions the words was called a 404: %q", out[4])
+	}
+}
+
+func TestReadOfATableSeparatesCellsAndRows(t *testing.T) {
+	out, _ := runSteps(t, func(load string) []string {
+		return []string{
+			load,
+			"(document.body.insertAdjacentHTML('beforeend','<table id=t><thead><tr><th>ID</th><th>Servicio</th></tr></thead><tbody><tr><td>41</td><td>Aduana Destino</td></tr><tr><td>15</td><td></td></tr></tbody></table><p id=p>uno  dos</p>'),'ok')",
+			"window.__ws.read({selector:'#t'})",
+			"window.__ws.read({selector:'#p'})",
+		}
+	}, nil)
+	if out[2] != "ID | Servicio\n41 | Aduana Destino\n15 | " {
+		t.Errorf("a table must read as rows of cells separated by ' | ': %q", out[2])
+	}
+	if out[3] != "uno dos" {
+		t.Errorf("a non-table read must stay as it was: %q", out[3])
+	}
+}

@@ -2,6 +2,20 @@
 
 One entry per version, newest first. Tool names are `query`, `page`, `check` and `code`. Each change says what it is, what was seen that made it necessary, how it was checked and what was not checked. A change in what a tool prints is listed as a change, because a client may read it.
 
+## 0.7.20 — 2026-11-17
+
+**`page(read)` on a table reads rows of cells separated by ` | `, and `page(state)` recognises a short error page and points to `page(open)`.**
+
+What was seen that made it necessary: testing the Conecta front, `read {selector:"table"}` returned `ID Servicio Servicio Inglés Venta…` with no cell boundaries, so the columns had to be guessed; and a screen opened by typing the address without the tenant prefix showed «No pudimos encontrar la página que buscas», which `state` did not call a 404 (the check looked only at the title and headings, and only for «404», «not found» or «no encontrada»).
+
+Now:
+- `read` on a `<table>` gives one line per row with `' | '` between cells; any other element reads as before.
+- `state` also calls a page a 404 when its whole text is under 300 characters and says «no pudimos encontrar», «no podemos encontrar» or «could not find»; a long screen that mentions the words is not flagged. The hint now says to use `page(open {path})`, which adds the tenant prefix, and not to type the address by hand.
+
+How it was checked: two new tests in real Chrome (`TestStateRecognizesAShortErrorPageWithoutHeadingsAndPointsToOpen`, `TestReadOfATableSeparatesCellsAndRows`), written red first; `go vet ./...` and `go test -race -count=1 ./...` pass.
+
+Not checked: other apps' 404 texts in languages other than Spanish and English; a table inside a shadow root.
+
 ## 0.7.19 — 2026-11-12
 
 **webscope installs as a Claude Code plugin, has a conformance test per MCP revision, and its tools carry a title and `openWorldHint`.**
