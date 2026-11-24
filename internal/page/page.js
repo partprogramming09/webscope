@@ -670,6 +670,59 @@
       covered.push(tagId(e) + ' "' + clip(textOf(e) || labelOf(e), 30) + '" covered by ' + tagId(top));
     });
     add('covered', covered);
+    // a control that a container with overflow hidden/clip cuts off: nobody can reach it (auto/scroll containers are reachable and are left alone)
+    const HIDES = v => v === 'hidden' || v === 'clip';
+    const unseen = e => !!e.closest('[aria-hidden=true],[inert]') || getComputedStyle(e).visibility === 'hidden';
+    const clipped = [];
+    new Set(q(FIELDS + ',' + CLICKABLE)).forEach(e => {
+      const r = e.getBoundingClientRect();
+      if (r.width < 2 || r.height < 2 || unseen(e)) return;
+      let esc = getComputedStyle(e).position, moved = getComputedStyle(e).transform !== 'none';
+      for (let n = e.parentElement; n && n !== document.body && n !== document.documentElement; n = n.parentElement) {
+        const s = getComputedStyle(n);
+        if (esc === 'fixed') return; // a fixed box leaves every container
+        const sameBlock = !(esc === 'absolute' && s.position === 'static'); // an absolute box is cut only by the container it is placed in
+        if (sameBlock && (s.overflowX !== 'visible' || s.overflowY !== 'visible')) {
+          const b = n.getBoundingClientRect(), x0 = b.left + n.clientLeft, y0 = b.top + n.clientTop, x1 = x0 + n.clientWidth, y1 = y0 + n.clientHeight;
+          const outX = r.right <= x0 + 1 || r.left >= x1 - 1, outY = r.bottom <= y0 + 1 || r.top >= y1 - 1;
+          if ((outX && !HIDES(s.overflowX) && s.overflowX !== 'visible') || (outY && !HIDES(s.overflowY) && s.overflowY !== 'visible')) return; // scrolls: reachable
+          const fx = HIDES(s.overflowX) ? Math.max(0, Math.min(r.right, x1) - Math.max(r.left, x0)) / r.width : 1;
+          const fy = HIDES(s.overflowY) ? Math.max(0, Math.min(r.bottom, y1) - Math.max(r.top, y0)) / r.height : 1;
+          const collapsed = (HIDES(s.overflowX) && n.clientWidth < 2) || (HIDES(s.overflowY) && n.clientHeight < 2); // closed on purpose, like an accordion
+          if (fx * fy < 0.5 && !collapsed) {
+            if (moved) return; // a track moved by a transform (a carousel) hides what is off its slide on purpose
+            clipped.push(tagId(e) + ' "' + clip(textOf(e) || labelOf(e), 30) + '" cut by ' + tagId(n) + ' (' + Math.round(fx * fy * 100) + '% visible)');
+            return;
+          }
+        }
+        if (n.parentElement !== document.body) moved = moved || s.transform !== 'none';
+        esc = s.position;
+      }
+    });
+    add('clipped', clipped);
+    // a box that holds more than it shows, and a page wider than the window
+    const over = [];
+    const SKIP = /^(INPUT|TEXTAREA|SELECT|OPTION|SVG|IMG|CANVAS|VIDEO|IFRAME|SCRIPT|STYLE)$/i, SLIDER = /carousel|slider|swiper|slick|marquee|ticker/i;
+    const base = root === document ? document.body : root;
+    [...base.querySelectorAll('*')].slice(0, 8000).forEach(n => {
+      if (SKIP.test(n.tagName) || n.closest('[aria-hidden=true],[inert]')) return;
+      const s = getComputedStyle(n);
+      if (!HIDES(s.overflowX) || n.clientWidth < 2 || n.scrollWidth <= n.clientWidth + 1 || s.textOverflow === 'ellipsis' || s.display === 'none' || !vis(n)) return;
+      if (SLIDER.test(n.className && n.className.baseVal === undefined ? String(n.className) : '') || SLIDER.test(n.getAttribute('aria-roledescription') || '')) return;
+      if ([...n.children].some(c => getComputedStyle(c).transform !== 'none')) return; // its content slides on purpose
+      if (over.some(o => o.n.contains(n))) return; // the outer box already says it
+      over.push({ n, t: tagId(n) + ' ' + n.scrollWidth + 'px of content in ' + n.clientWidth + 'px @ ' + where(n) });
+    });
+    [...base.querySelectorAll('iframe')].filter(f => vis(f) && !f.closest('[aria-hidden=true],[inert]')).forEach(f => {
+      try {
+        const d = f.contentDocument, de = d && d.documentElement;
+        if (!de || de.scrollWidth <= f.clientWidth + 1) return;
+        const o = getComputedStyle(de).overflowX, bo = d.body ? getComputedStyle(d.body).overflowX : 'visible';
+        if (f.getAttribute('scrolling') === 'no' || HIDES(o) || HIDES(bo)) over.push({ n: f, t: tagId(f) + ' document ' + de.scrollWidth + 'px wide in a frame of ' + f.clientWidth + 'px @ ' + where(f) });
+      } catch (x) { /* another origin: its width cannot be read */ }
+    });
+    if (root === document && document.documentElement.scrollWidth > innerWidth + 1) over.unshift({ n: document.documentElement, t: 'page ' + document.documentElement.scrollWidth + 'px wide in a window of ' + innerWidth + 'px' });
+    add('overflow', over.map(o => o.t));
     // fields a person or `fill` cannot name
     const real = e => norm([...(e.labels || [])].map(l => l.textContent).join(' ')) || norm(e.getAttribute('aria-label')) || norm(e.placeholder) || norm(((e.closest('.v-input,.v-field') || document.createElement('i')).querySelector('label') || {}).textContent) || norm((e.closest('label') || {}).textContent); // a label with no text names nothing
     const fs = q(FIELDS);
@@ -678,7 +731,7 @@
     fs.filter(real).forEach(e => { const l = lower(labelOf(e)); if (l) seen[l] = [...(seen[l] || []), labelOf(e)]; });
     add('same label', Object.values(seen).filter(v => v.length > 1).map(v => v[0] + ' x' + v.length));
     add('no name', q(CLICKABLE).filter(e => !textOf(e)).map(e => tagId(e) + ' @ ' + where(e)));
-    return out.length ? out.join('\n') : 'No findings: no unrendered text, covered control, unlabeled field, repeated label or unnamed button.';
+    return out.length ? out.join('\n') : 'No findings: no unrendered text, covered or clipped control, overflow, unlabeled field, repeated label or unnamed button.';
   };
 
   // shape keeps what the screen offers (no values) in the listener, under a name, for parity; the side menu, the top bar, the options of a list and the pagination are left out

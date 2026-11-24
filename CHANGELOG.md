@@ -2,6 +2,21 @@
 
 One entry per version, newest first. Tool names are `query`, `page`, `check` and `code`. Each change says what it is, what was seen that made it necessary, how it was checked and what was not checked. A change in what a tool prints is listed as a change, because a client may read it.
 
+## 0.7.20 — 2026-11-24
+
+**`page(audit)` reports controls cut off by a container (`clipped`) and content wider than its box or the window (`overflow`).**
+
+What was seen that made it necessary: in an invoices E2E at 360 px, `audit` said nothing about four buttons cut off in a dialog nor about a 516 px document inside a 354 px frame with `overflow: hidden`. The cause: `covered` dropped any control outside the box of a container with `overflow` other than `visible` as «scrolled out of view», and width was never measured.
+
+Now (changed output of `audit`, and its «No findings» line names the new checks):
+- `clipped (N)`: a control that less than half shows through an ancestor with `overflow: hidden` or `clip`, so nobody can reach it. `auto` and `scroll` containers are reachable and still not reported. Skipped: `aria-hidden` and `inert` parts, `visibility: hidden`, containers closed to zero size (accordions), controls moved by a transform on a box between them and the container (carousels), and absolutely placed boxes the container does not hold.
+- `overflow (N)`: a `hidden`/`clip` box whose `scrollWidth` is more than `clientWidth + 1` (outermost box only), a same-origin iframe whose document is wider than its frame and does not scroll, and the page when it is wider than `innerWidth`. Skipped: `text-overflow: ellipsis`, form controls, boxes whose class or `aria-roledescription` says carousel/slider/swiper/slick/marquee/ticker, and boxes with a transformed child.
+- Docs: `leftovers` already takes `prefix` (`"ZZ"`), now in `docs/usage.md`; `docs/patterns.md` gets the new finding and says that webscope's answers must not use key names like `token`, `secret` or `password` (Claude in Chrome blocks them).
+
+How it was checked: `auditclip_test.go`, in a real Chrome. Failed first: a 360 px dialog with four cut buttons, a 516 px document in a 354 px div and in a 354 px iframe, and a page of 2000 px gave «No findings». Healthy cases that must stay clean: a scrolling container with buttons beyond its edge, an `aria-hidden` carousel, a carousel with a transformed track, an ellipsis box, a box that fits and a collapsed box. `tools/list` 1653 bytes (unchanged, old handshake, whole line).
+
+Not checked: the real invoices screen at 360 px (no access to that app); a real Vuetify dialog or carousel; the absolute-position rule and iframes of another origin (the latter are skipped, by design).
+
 ## 0.7.19 — 2026-11-12
 
 **webscope installs as a Claude Code plugin, has a conformance test per MCP revision, and its tools carry a title and `openWorldHint`.**
