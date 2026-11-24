@@ -282,7 +282,7 @@ func textSheet(path string) string {
 	return fmt.Sprintf("\nheaders: %s\nrows: %d (header included)", strings.Join(heads, ", "), rows)
 }
 
-// describeFile reports name, size, type by its first bytes and time, and for an xlsx the header names and the row count, never a value.
+// describeFile reports name, size, type by its first bytes and time, for an xlsx the header names and the row count (never a value), and for a PDF the pages, whether it has text and its title.
 func (p *Tool) describeFile(path string, m fileMark) (string, error) {
 	head := make([]byte, 512)
 	f, err := os.Open(path)
@@ -301,7 +301,7 @@ func (p *Tool) describeFile(path string, m fileMark) (string, error) {
 			kind, extra = k, e
 		}
 	case bytes.HasPrefix(head, []byte("%PDF")):
-		kind = "pdf"
+		kind, extra = "pdf", pdfSummary(path)
 	case isText(head):
 		kind, extra = "text", textSheet(path)
 	}

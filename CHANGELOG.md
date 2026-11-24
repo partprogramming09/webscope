@@ -2,6 +2,18 @@
 
 One entry per version, newest first. Tool names are `query`, `page`, `check` and `code`. Each change says what it is, what was seen that made it necessary, how it was checked and what was not checked. A change in what a tool prints is listed as a change, because a client may read it.
 
+## 0.7.22 — 2026-11-24
+
+**`page(download)` describes a PDF: pages, whether it has text, and its title.**
+
+What was seen that made it necessary: in the invoices E2E the downloaded PDF had to be intercepted by hand to know what it held; `download` said only «type pdf».
+
+Now (changed output of `download {wait:true}` for a PDF): an extra line `pages: 2, text: yes, title: <title>`. Pages count `/Type /Page` and not `/Type /Pages`; `text` looks for a text operator in the page content; the title is the `/Title` of the document (an outline entry, which has a `/Parent`, is skipped), decoded from a literal, hexadecimal or UTF-16 string and cut at 80 characters. Standard library only: the Flate streams (page content, object streams of PDF 1.5) are inflated, within limits (4 MiB a stream, 32 MiB and 3000 streams a file, 16 MiB a file). What sits in a stream that cannot be decoded (another filter, encryption) is said as `pages: not read`, `at least N`, `text: not read` or `title not read`, never as zero or «no title».
+
+How it was checked: `pdf_test.go` with built fixtures (2 pages with a `/Pages` node and `/Type/Page` without spaces, a title with escaped parentheses; an image-only page with no title; a hex UTF-16 title; a zlib content stream; a zlib object stream; a PDF 1.5 object stream under ASCII85+Flate that is not decoded; an encrypted one) and the download flow end to end. Also two PDFs that Chrome itself printed (2 pages, accents in the title; one image-only page): `pages: 2, text: yes, title: Factura número 7 ñandú` and `pages: 1, text: no, title: Solo imagen`. `tools/list` unchanged.
+
+Not checked: PDFs from other producers (Word, wkhtmltopdf, Dompdf, which the invoices app may use), scanned PDFs with an invisible text layer, and a file over 16 MiB.
+
 ## 0.7.21 — 2026-11-24
 
 **`WEBSCOPE_APP_URL` accepts a port wildcard for the local machine: `http://localhost:*` and `http://127.0.0.1:*`.**
