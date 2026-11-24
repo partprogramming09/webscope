@@ -762,6 +762,46 @@
     return 'shape «' + clip(name, 40) + '» saved: ' + s.fields.length + ' fields, ' + s.buttons.length + ' buttons, ' + s.columns.length + ' columns, ' + s.tabs.length + ' tabs, ' + s.headings.length + ' headings. Next: open the other screen, page(shape) with another name, then page(parity, {a, b}).';
   };
 
+  // frame mounts the current address in an iframe of the same origin at a width and runs state or audit inside it: a page cannot resize the browser window,
+  // and a frame has its own viewport, so the media queries answer for that width. It sits in a sandbox without allow-top-navigation, so a page that
+  // tries to leave its frame cannot take this tab with it. The frame is removed after the run unless keep is set.
+  const frame = async a => {
+    const old = () => { const f = document.getElementById('__ws_frame'); if (f) f.remove(); };
+    if (a.close) { old(); return 'frame closed'; }
+    const w = Number(a.width), run = a.run || 'audit';
+    if (!(w >= 200 && w <= 2000)) return fail('frame needs width, in pixels from 200 to 2000. Next: page(frame, {width: 360}).');
+    if (run !== 'state' && run !== 'audit') return fail('frame runs state or audit, not ' + run + '. Next: page(frame, {width: ' + w + ', run: "audit"}).');
+    old();
+    const f = document.createElement('iframe');
+    f.id = '__ws_frame';
+    f.setAttribute('sandbox', 'allow-same-origin allow-scripts allow-forms allow-popups');
+    f.style.cssText = 'position:fixed;top:0;left:0;width:' + w + 'px;height:' + innerHeight + 'px;border:0;background:#fff;z-index:2147483647;box-shadow:0 0 0 2px #888';
+    const giveUp = why => { old(); return fail(why + '. Next: resize the browser window to ' + w + ' px by hand and run ' + run + ' there.'); };
+    f.src = location.href;
+    const loaded = new Promise(r => { f.addEventListener('load', () => r(true), { once: true }); setTimeout(() => r(false), 15000); });
+    document.body.appendChild(f);
+    if (!(await loaded)) return giveUp('the app did not finish loading inside a frame in 15 s');
+    let fw, fd;
+    try { fw = f.contentWindow; fd = f.contentDocument; void fw.location.href; } catch (e) { fd = null; }
+    if (!fd || !fd.body || !fw.location.origin || fw.location.origin !== location.origin) return giveUp('the app does not load inside a frame (X-Frame-Options or frame-ancestors, or another origin answered)');
+    if (!fw.__ws) {
+      const src = cfg.base + '/page.js?t=' + cfg.t + '&v=' + window.__wsVer + '&o=' + encodeURIComponent(cfg.o || '') + '&k=' + cfg.k;
+      await new Promise(r => { const s = fd.createElement('script'); s.src = src; s.onload = s.onerror = r; fd.head.appendChild(s); });
+    }
+    if (!fw.__ws) return giveUp('the helper could not load inside the frame (its security policy)');
+    let last = '', still = 0; // the screen is drawn when its text has not changed for 600 ms
+    for (let i = 0; i < 50 && still < 3; i++) {
+      await new Promise(r => setTimeout(r, 200));
+      const now = (fd.body ? fd.body.innerText.length : 0) + ':' + fd.getElementsByTagName('*').length;
+      still = now === last && fd.body.innerText.length ? still + 1 : 0;
+      last = now;
+    }
+    const r = await fw.__ws[run]({ selector: a.selector, max: a.max });
+    const head = 'frame ' + w + 'px (the window inside is ' + fw.innerWidth + ' x ' + fw.innerHeight + ' of ' + clip(fw.location.pathname, 60) + ')';
+    if (a.keep !== true) old();
+    return head + '\n' + r;
+  };
+
   // ---- interceptors: the functions below, as they are once the helper is in place; a page script or the agent that replaces one is reported
   const mine = { fetch: window.fetch, send: xhrProto.send, 'anchor click': HTMLAnchorElement.prototype.click };
   const current = () => ({ fetch: window.fetch, send: xhrProto.send, 'anchor click': HTMLAnchorElement.prototype.click });
@@ -820,7 +860,7 @@
     const cut = hid.lastIndexOf('\n', lim - 140), head = hid.slice(0, cut > 0 ? cut : lim - 140);
     return head + '\n(… ' + (r.length - head.length) + ' more chars: ' + note + 'javascript_tool cuts at 1000, page(result) gives all)';
   };
-  plain = { state: wrap(state, 'state'), find: wrap(find, 'find'), read: wrap(read, 'read'), fill: wrap(fill, 'fill'), click: wrap(click, 'click'), press: wrap(press, 'press'), upload: wrap(upload, 'upload'), simulate: wrap(simulate, 'simulate'), open: wrap(open, 'open'), options: wrap(options, 'options'), batch: wrap(batch, 'batch'), audit: wrap(audit, 'audit'), shape: wrap(shape, 'shape') };
+  plain = { state: wrap(state, 'state'), find: wrap(find, 'find'), read: wrap(read, 'read'), fill: wrap(fill, 'fill'), click: wrap(click, 'click'), press: wrap(press, 'press'), upload: wrap(upload, 'upload'), simulate: wrap(simulate, 'simulate'), open: wrap(open, 'open'), options: wrap(options, 'options'), batch: wrap(batch, 'batch'), audit: wrap(audit, 'audit'), frame: wrap(frame, 'frame'), shape: wrap(shape, 'shape') };
   const stepLines = s => (s.match(/^\d+\. \w+: .*$/gm) || []).map(l => clip(l, 110)).join('\n');
   window.__ws = Object.fromEntries(Object.entries(plain).map(([k, f]) => [k, sink(f, k === 'batch' ? stepLines : null)]));
 })();

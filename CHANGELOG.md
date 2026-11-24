@@ -2,6 +2,18 @@
 
 One entry per version, newest first. Tool names are `query`, `page`, `check` and `code`. Each change says what it is, what was seen that made it necessary, how it was checked and what was not checked. A change in what a tool prints is listed as a change, because a client may read it.
 
+## 0.7.23 — 2026-11-24
+
+**`page(frame, {width})`: `audit` or `state` at a phone width, inside a same-origin frame.**
+
+What was seen that made it necessary: in the invoices E2E there was no way to see the screen at 360 px; `resize_window` did not change `innerWidth`, and the check was done by hand with an iframe.
+
+Now: `frame {width, run?, selector?, keep?}` mounts the current address in an iframe of the same origin at `width` px (200 to 2000), loads the helper inside it, waits until its text has stayed still for 600 ms (15 s at most to load, 10 s to draw), and runs `audit` (or `state`) there. The first line says the width and the size of the window inside; the rest is the action's answer. The frame is removed after the run unless `keep: true`; `{close: true}` removes a kept one. It runs in a sandbox without `allow-top-navigation`, so a page that tries to leave its frame cannot take the tab with it. An app that refuses to be framed (`X-Frame-Options`, `frame-ancestors`) or answers from another origin fails with `Failed: … Next: resize the browser window to N px by hand and run audit there.` No new tool and no change to `tools/list`: `frame` is an action of `page`, listed in `page(help)` (whose text now also names the PDF summary of 0.7.22). A batch can run it.
+
+How it was checked: `frame_test.go`, in a real Chrome, on a page whose layout breaks below 550 px. Failed first (`frame is not a function`). Then: in a wide window `audit` says no findings; `frame {width:360}` finds `clipped (2)` and `overflow (1)`; `frame {width:500}` gives exactly what a Chrome window opened at 500 px gives (Chrome does not open a window narrower than about 500 px, so 500 is the narrowest comparison possible, not 360); a page served with `X-Frame-Options: DENY` fails with `Next:`; a width of 50 fails with `Next:`; `keep` leaves a frame of the width asked and `close` removes it. 4 runs in a row, same result.
+
+Not checked: a real app (Vue, Vuetify, a router, a login) inside a frame; an app whose `Content-Security-Policy` forbids the helper script inside the frame (it fails with `Next:`, by code, not seen); a frame taller than the window; media queries on height.
+
 ## 0.7.22 — 2026-11-24
 
 **`page(download)` describes a PDF: pages, whether it has text, and its title.**
