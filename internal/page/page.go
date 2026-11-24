@@ -143,15 +143,59 @@ func New(appURL string) *Tool {
 	return &Tool{appURL: appURL, token: hex.EncodeToString(b), Life: context.Background(), now: time.Now, SinkChars: 900}
 }
 
-// origins are the scheme://host of each address in WEBSCOPE_APP_URL (several are separated by commas): the only origins the listener answers.
+// wildcardOrigins are the only port wildcards WEBSCOPE_APP_URL accepts, written as is by the human: any port of the local machine, for an app
+// that starts on whatever port is free (a branch next to the main one). A wildcard for any other host is ignored: it would let any site in.
+var wildcardOrigins = []string{"http://localhost:*", "http://127.0.0.1:*"}
+
+// origins are the scheme://host of each address in WEBSCOPE_APP_URL (several are separated by commas), and the port wildcards above as written:
+// the only origins the listener answers.
 func (p *Tool) origins() []string {
 	var out []string
 	for _, a := range strings.Split(p.appURL, ",") {
-		if o := originOf(strings.TrimSpace(a)); o != "" && !slices.Contains(out, o) {
+		a = strings.TrimSuffix(strings.ToLower(strings.TrimSpace(a)), "/")
+		if strings.HasSuffix(a, ":*") {
+			if slices.Contains(wildcardOrigins, a) && !slices.Contains(out, a) {
+				out = append(out, a)
+			}
+			continue
+		}
+		if o := originOf(a); o != "" && !slices.Contains(out, o) {
 			out = append(out, o)
 		}
 	}
 	return out
+}
+
+// allows says whether origin, as the browser writes the Origin header, is one of origins(): equal, or the wildcard's host with a port of 1 to 5 digits (or none).
+func (p *Tool) allows(origin string) bool {
+	for _, o := range p.origins() {
+		if o == origin {
+			return true
+		}
+		if host, ok := strings.CutSuffix(o, ":*"); ok {
+			if origin == host {
+				return true
+			}
+			if port, ok := strings.CutPrefix(origin, host+":"); ok && validPort(port) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func validPort(s string) bool {
+	if s == "" || len(s) > 5 {
+		return false
+	}
+	n := 0
+	for _, c := range s {
+		if c < '0' || c > '9' {
+			return false
+		}
+		n = n*10 + int(c-'0')
+	}
+	return n >= 1 && n <= 65535
 }
 
 // originOf is the origin of one address, as the browser writes it, or "" if it is not an address.
@@ -325,7 +369,7 @@ func (p *Tool) guard(next http.HandlerFunc) http.HandlerFunc {
 			return
 		}
 		if o := r.Header.Get("Origin"); o != "" {
-			if !slices.Contains(p.origins(), o) {
+			if !p.allows(o) {
 				p.mu.Lock()
 				p.refused = true
 				p.mu.Unlock()

@@ -9,7 +9,7 @@
 Only `WEBSCOPE_DB_URL` is needed to start (`query`). The others switch on the rest.
 
 - `WEBSCOPE_DB_URL`: `mysql://user:password@host:port/db` or `sqlite:///path/file.db`. Enables `query`, `check` and `code fields`.
-- `WEBSCOPE_APP_URL`: the address of the tab to test, exactly as the browser writes it (scheme, host and port). `page` needs it, and it needs the Claude in Chrome extension. When the old and the new app answer on different addresses, list them separated by commas (`http://localhost:8088,http://demo.localhost:5173`): the helper then works in a tab of any of them and the requests of all of them are kept together.
+- `WEBSCOPE_APP_URL`: the address of the tab to test, exactly as the browser writes it (scheme, host and port). `page` needs it, and it needs the Claude in Chrome extension. When the old and the new app answer on different addresses, list them separated by commas (`http://localhost:8088,http://demo.localhost:5173`): the helper then works in a tab of any of them and the requests of all of them are kept together. For an app that starts on whatever port is free, write `http://localhost:*` or `http://127.0.0.1:*` (any port of that host, no other host takes a wildcard; you write it here, the agent cannot add origins).
 - `WEBSCOPE_BACKEND`: the folder with the project's PHP. `code` uses it.
 - `WEBSCOPE_FRONT`: the folder of the Vue front (its `src/modules` is read if it exists). `code map`, `map_back` and `contract` use it.
 - `WEBSCOPE_LEGACY`: the folder of the legacy PHP (the one that holds the module folders, for example `public_html`). `code legacy` reads it; it never leaves it, follows no link and opens no `.env*`.

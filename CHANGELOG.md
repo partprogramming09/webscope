@@ -2,6 +2,18 @@
 
 One entry per version, newest first. Tool names are `query`, `page`, `check` and `code`. Each change says what it is, what was seen that made it necessary, how it was checked and what was not checked. A change in what a tool prints is listed as a change, because a client may read it.
 
+## 0.7.21 — 2026-11-24
+
+**`WEBSCOPE_APP_URL` accepts a port wildcard for the local machine: `http://localhost:*` and `http://127.0.0.1:*`.**
+
+What was seen that made it necessary: in the invoices E2E the app of the branch ran on port 5180, and `payloads` and `simulate` were refused because the variable named another port; the fix was to edit the variable and restart the server each time.
+
+Now: those two exact strings, written by the human in the variable, let the listener answer a tab of any port of that host (1 to 65535, or none) and stop the helper from warning about it. Any other wildcard (`http://other.example:*`, `https://localhost:*`, `http://*`, `*`) is ignored, as is any host that only looks like localhost (`localhost.evil.com`, `evil.localhost.example`). The agent still cannot add origins at run time. Changed output: none (the refusal message lists the wildcard as written).
+
+How it was checked: `origins_test.go`. 6 origins accepted and 18 refused (the three attacks above, other scheme, other host, junk ports, userinfo, other wildcards); the HTTP listener answers 503 to `http://localhost:5180` and 403 to the look-alikes; in a real Chrome a 127.0.0.1 tab under `http://127.0.0.1:*` gets no warning and under `http://localhost:*` it does. `tools/list` unchanged.
+
+Not checked: Claude in Chrome with a real branch app on 5180; IPv6 `[::1]` (not accepted).
+
 ## 0.7.20 — 2026-11-24
 
 **`page(audit)` reports controls cut off by a container (`clipped`) and content wider than its box or the window (`overflow`).**

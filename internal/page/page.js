@@ -167,7 +167,8 @@
   const ALERTS ='[role=alert],.v-alert,.v-snackbar__content,.alert,.toast';
   const ERRORS = '.v-messages__message,.invalid-feedback,.error--text,.text-danger';
 
-  const wrongOrigin = () => cfg.o && !cfg.o.split(',').includes(location.origin) ? 'This tab is ' + location.origin + ' but WEBSCOPE_APP_URL is ' + cfg.o.split(',').join(', ') + ': captures and simulate are refused. Open the app at that address.' : '';
+  const originOk = o => cfg.o.split(',').some(x => x === o || (x.endsWith(':*') && (o === x.slice(0, -2) || (o.startsWith(x.slice(0, -1)) && /^\d{1,5}$/.test(o.slice(x.length - 1)))))); // a wildcard is a port of the host the server wrote, as in origins() of page.go
+  const wrongOrigin = () => cfg.o && !originOk(location.origin) ? 'This tab is ' + location.origin + ' but WEBSCOPE_APP_URL is ' + cfg.o.split(',').join(', ') + ': captures and simulate are refused. Open the app at that address.' : '';
 
   // showAddress is an address as the answers show it: parameter names only, because a value can be a token and a URL with a query is what output filters cut.
   const showAddress = l => {
