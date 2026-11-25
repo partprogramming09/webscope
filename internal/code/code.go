@@ -162,10 +162,23 @@ func (c *Tool) do(ctx context.Context, in input.Args) (string, error) {
 		return c.cases(in.Args)
 	case "legacy":
 		return c.legacy(in.Args)
+	case "doctor":
+		return c.doctor(ctx), nil
 	case "help":
 		return help(in.Args)
 	}
-	return "", fmt.Errorf("unknown action %q: fields {table, tenant?}, consumers {table, column} or {column_only}, map {module, walkthrough?}, map_back {query, offset?}, contract {endpoint}, flows {module}, cases {module}, legacy {path, module?}, rows {table, a, b, key?, children?, tenant?}, snap {name, sql, key?, tenant?} or snap_diff {name}, leftovers {table, column or columns[≤10], prefix?, deleted? {column: value}, tenant?}", in.Action)
+	if tool, ok := otherTool[in.Action]; ok {
+		return "", fmt.Errorf("%q is not an action of code. Next: %s", echo(in.Action), tool)
+	}
+	return "", fmt.Errorf("unknown action %q: doctor, fields {table, tenant?}, consumers {table, column} or {column_only}, map {module, walkthrough?}, map_back {query, offset?}, contract {endpoint}, flows {module}, cases {module}, legacy {path, module?}, rows {table, a, b, key?, children?, tenant?}, snap {name, sql, key?, tenant?} or snap_diff {name}, leftovers {table, column or columns[≤10], prefix?, deleted? {column: value}, tenant?}", in.Action)
+}
+
+// otherTool maps an action that belongs to another tool to the call that does it: the model reaches for code(query) or code(click) by habit.
+var otherTool = map[string]string{
+	"query": "call the query tool: query(sql)", "sql": "call the query tool: query(sql)",
+	"check": "call the check tool: check(sent, table, where, map)",
+	"state": "call the page tool: page(state)", "click": "call the page tool: page(click)", "load": "call the page tool: page(load)",
+	"fill": "call the page tool: page(fill)", "open": "call the page tool: page(open)", "upload": "call the page tool: page(upload)", "payloads": "call the page tool: page(payloads)",
 }
 
 // consumers lists who reads and who writes a column in the PHP of WEBSCOPE_BACKEND.
@@ -406,6 +419,9 @@ func (c *Tool) Handle(ctx context.Context, _ *mcp.CallToolRequest, in input.Args
 			text = db.Failure(err, qe.Tenant)
 		} else {
 			text = "Failed: " + strings.TrimRight(err.Error(), ". ") + ". Next: code(help) lists the actions."
+			if msg := err.Error(); strings.Contains(msg, ". Next: ") { // the error already says what to do: do not add a second Next
+				text = "Failed: " + msg
+			}
 		}
 	}
 	return &mcp.CallToolResult{IsError: err != nil, Content: []mcp.Content{&mcp.TextContent{Text: text}}}, nil, nil

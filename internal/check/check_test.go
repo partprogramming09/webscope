@@ -178,8 +178,12 @@ func TestCheckRefusesWhatItCannotCompareHonestly(t *testing.T) {
 	sent(p, "GET", "/api/quotes", "", `{"data":[{"notes":"x"…(+612 chars)`) // the mark that page.js leaves when it cuts a body
 	cutRead := args("059", map[string]string{"notes": "notes"})
 	cutRead.After, cutRead.At = "GET /api/quotes", "data.0"
-	if _, err := run(t, c, cutRead); err == nil || !strings.Contains(err.Error(), "cut") {
-		t.Errorf("a body that page.js cut must be named as cut, not as not JSON: %v", err)
+	out, err := run(t, c, cutRead)
+	if err != nil || !strings.Contains(out, "read NOT VERIFIED") || !strings.Contains(out, "(+612 chars)") || !strings.Contains(out, "1 different") {
+		t.Errorf("a read that page.js cut must not stop the comparison of sent and stored, and must say it was not verified: %q, %v", out, err)
+	}
+	if strings.Contains(out, "\tread") {
+		t.Errorf("a read that was not compared must not get a column: %q", out)
 	}
 	p.caps = p.caps[:len(p.caps)-1]
 	if _, err := run(t, c, args("999", fourFields)); err == nil || !strings.Contains(err.Error(), "no row") {
@@ -367,5 +371,25 @@ func TestWhereTakesANumberAsItsText(t *testing.T) {
 		if err == nil || !strings.Contains(err.Error(), `where "id" must be a text or a number`) {
 			t.Errorf("%s: err = %v", bad, err)
 		}
+	}
+}
+
+func TestCheckPutsTheUnverifiedReadInTheFirstLinesAndDoesNotNoteItAsFullyEqual(t *testing.T) {
+	c, p := checkSetup(t)
+	n := &noteCaps{fakeCaps: p}
+	c.Page = n
+	sent(p, "POST", "/api/quotes", `{"sub_type":"AI","office":"MIA","notes":"secret note","code":"007"}`, "")
+	sent(p, "GET", "/api/quotes", "", `{"data":[{"notes":"x"…(+612 chars)`)
+	a := args("059", fourFields)
+	a.After, a.At = "GET /api/quotes", "data.0"
+	out, err := run(t, c, a)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if first := strings.Join(strings.SplitN(out, "\n", 3)[:2], "\n"); !strings.Contains(first, "read NOT VERIFIED") {
+		t.Errorf("the headline must say the read was not verified, before the counts are read: %q", out)
+	}
+	if n.unsure < 1 {
+		t.Errorf("a check whose read was not compared must be noted as unsure, not as fully equal: %+v", n)
 	}
 }

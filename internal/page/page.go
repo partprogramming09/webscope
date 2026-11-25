@@ -47,8 +47,8 @@ const (
 // snippetActions are the actions answered with a JavaScript snippet for javascript_tool. Anything else is answered here.
 var snippetActions = []string{"state", "find", "read", "fill", "click", "press", "simulate", "open", "options", "audit", "shape", "batch", "upload"}
 
-// stepActions are the snippet actions that a batch can run, one after the other, in the same snippet.
-var stepActions = slices.DeleteFunc(slices.Clone(snippetActions), func(a string) bool { return a == "batch" || a == "upload" })
+// stepActions are the snippet actions that a batch can run, one after the other, in the same snippet. An upload step is prepared in Go first (prepareBatchUploads).
+var stepActions = slices.DeleteFunc(slices.Clone(snippetActions), func(a string) bool { return a == "batch" })
 
 // checkBatch refuses the steps of a batch that no snippet can run: none, a step that is not an object, an action the server answers by itself, or a nested batch.
 func checkBatch(args map[string]any) error {
@@ -176,6 +176,13 @@ func snippet(action string, args map[string]any) (string, error) {
 	return snippetBoot(action, args, "")
 }
 
+// What a page that cannot load the helper answers, by cause. Neither says page(load) for a policy: it loads the same script and fails the same way.
+const (
+	bootNoListener = "Failed: the helper script did not arrive and no page policy blocked it, so the webscope listener did not answer: the server may have restarted (the port changes) or the tab's address is not in WEBSCOPE_APP_URL. Next: run page(load) and run its line with javascript_tool for the new address; if it repeats, call code(doctor)."
+	bootPolicyA    = "Failed: the page's security policy (CSP, "
+	bootPolicyB    = ") blocked the helper script from the webscope listener. Next: do not repeat page(load); drive this screen with the Claude in Chrome tools (read_page, find, form_input, computer), or ask the app's team for a development policy that allows 127.0.0.1 in script-src and connect-src."
+)
+
 // snippetBoot is the JavaScript for action. The arguments enter as JSON (json.Marshal escapes <, > and line separators), never as text.
 // With boot (the address of the helper script) a page that lost the helper, after a reload or a navigation, loads it first and then runs the action.
 func snippetBoot(action string, args map[string]any, boot string) (string, error) {
@@ -195,7 +202,9 @@ func snippetBoot(action string, args map[string]any, boot string) (string, error
 		return "", err
 	}
 	if boot != "" {
-		return fmt.Sprintf(`await((window.__ws||await new Promise(r=>{var s=document.createElement("script");s.src=%q;s.onload=s.onerror=()=>r(window.__ws);document.head.appendChild(s)}))?.%s(%s)??"Failed: the helper could not load in this page (its security policy or the listener). Next: page(load) and run it.")`, boot, action, raw), nil
+		// The helper is loaded as a script tag. A policy that blocks it fires securitypolicyviolation (before or just after the tag's error; a violation of another kind, such as an image, does not count, and a short wait covers the late event), so the two causes read differently:
+		// a policy (page(load) would fail the same way) or no answer from the listener (the server restarted, so the port changed: page(load) gives the new address).
+		return fmt.Sprintf(`await((async()=>{if(window.__ws)return window.__ws;var v="",h=e=>{var d=e.effectiveDirective||e.violatedDirective||"";if(/^script-src/.test(d))v=d};document.addEventListener("securitypolicyviolation",h);await new Promise(r=>{var s=document.createElement("script");s.src=%q;s.onload=s.onerror=r;document.head.appendChild(s)});if(!window.__ws&&!v)await new Promise(r=>setTimeout(r,60));document.removeEventListener("securitypolicyviolation",h);return window.__ws||v||"none"})().then(w=>typeof w==="object"?w.%s(%s):w==="none"?%q:%q+w+%q))`, boot, action, raw, bootNoListener, bootPolicyA, bootPolicyB), nil
 	}
 	return fmt.Sprintf(`await (window.__ws?window.__ws.%s(%s):"Failed: webscope is not loaded in this page. Next: page(load) and run it.")`, action, raw), nil // await: fill waits for menus
 }
@@ -227,6 +236,12 @@ func (p *Tool) answer(in input.Args) (string, error) {
 		return p.result(in.Args), nil
 	}
 	args := in.Args
+	if in.Action == "batch" {
+		var err error
+		if args, err = p.prepareBatchUploads(args); err != nil {
+			return "", err
+		}
+	}
 	if in.Action == "upload" {
 		var err error
 		if args, err = p.prepareUpload(args); err != nil {
@@ -295,6 +310,9 @@ func (p *Tool) Handle(_ context.Context, _ *mcp.CallToolRequest, in input.Args) 
 	text, err := p.answer(in)
 	if err != nil {
 		text = "Failed: " + strings.TrimRight(err.Error(), ". ") + ". Next: page(help) lists the actions and their arguments."
+		if msg := err.Error(); strings.Contains(msg, ". Next: ") { // the error already says what to do: do not add a second Next
+			text = "Failed: " + msg
+		}
 	}
 	return &mcp.CallToolResult{IsError: err != nil, Content: []mcp.Content{&mcp.TextContent{Text: text}}}, nil, nil
 }

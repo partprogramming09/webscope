@@ -40,19 +40,22 @@ Run `page(help)` first. The order of a session:
 
 7. To build the final report: `verify {claim, evidence}` for each thing it will say, with `evidence` as `capture METHOD address`, `check METHOD address` (the last `check` of that request) or `download`; then `verify {report:true}` and write the report from that table. The server gives the state (OBSERVADO, INFERIDO if an interceptor was seen, NO VERIFICADO without a reference it can find).
 
-Not covered: `v-combobox`, date pickers, menus of other libraries, file uploads, pages whose Content-Security-Policy blocks the helper. If the screen shows the login, stop and ask the user for the session; never type credentials. Use one Chrome agent at a time.
+`upload` also runs as a step of `batch` (fill, upload, click in one call). When the helper cannot load, the answer says why: the page's Content-Security-Policy (with its directive; `page(load)` would fail the same way) or no answer from the listener (the port changes after a restart).
+
+Not covered: `v-combobox`, date pickers, menus of other libraries, pages whose Content-Security-Policy blocks the helper. If the screen shows the login, stop and ask the user for the session; never type credentials. Use one Chrome agent at a time.
 
 ### `check(sent, table, where, map, after?, at?, tenant?)`
 
 - `sent` is a request `page` captured (`POST /api/quotes`); `where` picks one row; `map` says which column holds each sent field.
 - `after` and `at` add what the screen read back (a later `GET` and the path of the object in its answer).
 - The answer is counts plus one line per field that differs. `empty~`, `unread~` and `space~` are equivalent or unknown, not equal and not different.
-- A body cut when captured is refused, not compared.
+- A sent body cut when captured is refused. A read (`after`) cut when captured is not compared: the answer says `read NOT VERIFIED` and compares sent against stored only.
 
 ### `code(action, args?)`
 
 | Action | Answers | Stack |
 |---|---|---|
+| `doctor` | The setup in one call: each `WEBSCOPE_` variable (set, and what it points at), the database with `SELECT 1`, the folders, the tenants it knows, and one `Next:` listing what to fix; never a password | Any |
 | `fields {table, tenant?}` | Per column: type, null, default, rows with a value, PHP files that read and write it | Any database; PHP files for the usage counts |
 | `consumers {table, column}` or `{column_only}` | Each read and write of a column, `file:line` | PHP backend |
 | `map {module, walkthrough?}` | Routes, HTTP calls, composables, stores; with `walkthrough`, what can be clicked | Vue modules (`src/modules`) |

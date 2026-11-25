@@ -2,6 +2,26 @@
 
 One entry per version, newest first. Tool names are `query`, `page`, `check` and `code`. Each change says what it is, what was seen that made it necessary, how it was checked and what was not checked. A change in what a tool prints is listed as a change, because a client may read it.
 
+## 0.7.21 — 2026-11-24
+
+**A failed call says what is wrong and what to do, `code(doctor)` checks the setup in one call, `upload` runs inside `page(batch)`, and `check` compares sent against stored even when the read was cut.**
+
+What was seen that made it necessary: 508 calls of real sessions on a large web project, 182 of them failed (36 %). The causes that repeated: the helper could not load (about 115: a page policy, a dead listener and an older helper, all said as «its security policy or the listener» with `Next: page(load)`, which loads the same script); the database (44 of 245 `query` calls: `WEBSCOPE_DB_URL` empty, port refused, user refused, all told as «fix the statement»); `check` refusing the whole comparison for a cut read (7 of 10); `code(query)` and similar (the action of another tool); and `upload` refused inside a batch.
+
+Now:
+- New `code(doctor)`: reads each `WEBSCOPE_` variable (set or not, and what it points at), runs `SELECT 1`, checks the folders and the app address, lists up to 4 tenants, and ends with one `Next:`. It reads only and never prints a password.
+- The helper that cannot load says which: `Failed: the page's security policy (CSP, <directive>) blocked the helper script…` (and does not send the model back to `page(load)`), or `…the helper script did not arrive and no page policy blocked it, so the webscope listener did not answer…` (with `page(load)` and `code(doctor)`).
+- Database failures read by cause: URL missing or malformed, nothing answers at the address, user refused; each points at `code(doctor)` and none blames the statement.
+- `code` with an action of another tool (`query`, `sql`, `check`, `state`, `click`, `load`, `fill`, `open`, `upload`, `payloads`) says which tool to call. An error that already carries a `Next:` no longer gets a second one in `code` and `page`.
+- `page(batch)` accepts `upload` steps (the file is prepared in Go before the snippet runs; a failed one is named `batch step N`). The path error lists the allowed folders.
+- `check` with a read that was cut when captured no longer fails: it compares sent against stored and says `read NOT VERIFIED` with the cut mark, in the headline and at the end; `verify` sees that check as unsure, not as a full pass. A sent body that was cut is still refused. The tool contract changed here, so a client that read the old refusal sees a result instead.
+
+A read of the code before the commit found three things that were fixed with a red test each: an unrelated policy violation (an image) was blamed for the helper (only `script-src*` counts now, with a short wait for a late event); error 1044 (a database the user may not open) was told as a wrong password and a read that timed out as an unreachable host; and files prepared by a batch stayed in memory when a later step failed.
+
+How it was checked: tests written red first (`TestFailureNamesTheConnectionProblemAndPointsToDoctor`, `TestDoctor*`, `TestCodeWithTheActionOfAnotherToolNamesThatTool`, `TestBootUnderAScriptPolicy…` and `TestBootWithNoListener…` in real Chrome with a `Content-Security-Policy` header, `TestBatchRunsAnUploadStepAmongOthersInOneSnippet` in real Chrome, `TestCheckRefusesWhatItCannotCompareHonestly` rewritten for the cut read).
+
+Not checked: `code(doctor)` against a real MySQL (tested with SQLite and with a closed port); the CSP message on an app with its own policy; the older-helper case, which still needs a reload (the helper is not reconnected without one; see `docs/plans/2026-11-24-fewer-failures.md`).
+
 ## 0.7.20 — 2026-11-17
 
 **`page(read)` on a table reads rows of cells separated by ` | `, and `page(state)` recognises a short error page and points to `page(open)`.**

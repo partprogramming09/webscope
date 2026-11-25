@@ -11,9 +11,10 @@ import (
 var migrationPlaybook string
 
 // codeActions are the actions of code, in the order help lists them.
-var codeActions = []string{"fields", "consumers", "map", "map_back", "contract", "flows", "cases", "legacy", "rows", "snap", "snap_diff", "leftovers", "help"}
+var codeActions = []string{"doctor", "fields", "consumers", "map", "map_back", "contract", "flows", "cases", "legacy", "rows", "snap", "snap_diff", "leftovers", "help"}
 
 const helpText = `code(action, args?) reads the project and the database; it never writes.
+doctor: checks the setup in one call (each WEBSCOPE_ variable, the database with SELECT 1, the folders, the tenants); run it first, or when a call fails for the environment.
 fields {table, tenant?}: columns of a table, rows with a value, who reads and writes each.
 consumers {table, column} or {column_only}: each read and write of a column, file:line.
 map {module, walkthrough?}: routes, calls and screens of a front module.
