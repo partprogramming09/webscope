@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"sort"
 	"strings"
 
@@ -214,7 +215,7 @@ func gaps(fields []sent, rs ruleSet, complete bool) []string {
 	var out []string
 	add := func(label string, names []string) {
 		if len(names) > 0 {
-			sort.Strings(names)
+			slices.Sort(names)
 			out = append(out, label+strings.Join(names, ", "))
 		}
 	}

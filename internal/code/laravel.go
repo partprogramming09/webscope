@@ -9,7 +9,6 @@ import (
 	"path/filepath"
 	"regexp"
 	"slices"
-	"sort"
 	"strings"
 )
 
@@ -94,7 +93,7 @@ func backendModule(action string) string {
 // shortcut: apiResource parameters as `{}`, groups only with Route::prefix, `api/` assumed; improve if there are routes outside that pattern.
 func fileRoutes(files []string, all fsx.Lines) []backRoute {
 	var routes []backRoute
-	sort.Strings(files)
+	slices.Sort(files)
 	for _, f := range files {
 		if filepath.Base(filepath.Dir(f)) != "Routes" || !strings.Contains(filepath.ToSlash(f), "/app/Modules/") {
 			continue
@@ -416,7 +415,7 @@ func (c *Tool) mapBack(args map[string]any) (string, error) {
 			orphan = append(orphan, u)
 		}
 	}
-	sort.Strings(orphan)
+	slices.Sort(orphan)
 	for _, u := range orphan {
 		out = append(out, "api without a route in the backend: "+u)
 	}

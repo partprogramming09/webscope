@@ -6,7 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
-	"sort"
+	"slices"
 	"strings"
 
 	"github.com/partprogramming09/webscope/internal/fsx"
@@ -169,7 +169,7 @@ func (c *Tool) legacy(args map[string]any) (string, error) {
 			order = append(order, rel)
 		}
 	}
-	sort.Strings(order)
+	slices.Sort(order)
 	base := filepath.Base(dir)
 	for _, h := range fsx.Grep(phpMention, files, all) {
 		inside := strings.HasPrefix(h.File, dir+string(filepath.Separator))
@@ -273,7 +273,7 @@ func (c *Tool) againstNew(module string, legacy map[string]bool, written map[str
 		}
 	}
 	list := func(l []string) string {
-		sort.Strings(l)
+		slices.Sort(l)
 		if len(l) > 60 {
 			return strings.Join(l[:60], ", ") + fmt.Sprintf(" (+%d more)", len(l)-60)
 		}
@@ -281,7 +281,7 @@ func (c *Tool) againstNew(module string, legacy map[string]bool, written map[str
 	}
 	left := "\nonly in legacy: " + list(onlyL)
 	if elsewhere, none := c.namedInBackend(onlyL); c.Backend != "" {
-		sort.Strings(none)
+		slices.Sort(none)
 		var named []string
 		for _, t := range onlyL {
 			if n := elsewhere[t]; n > 0 {

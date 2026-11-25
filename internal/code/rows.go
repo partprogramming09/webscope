@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"regexp"
 	"slices"
-	"sort"
 	"strconv"
 	"strings"
 	"unicode/utf8"
@@ -41,7 +40,7 @@ func whereOf(args map[string]any, name string) (cols []string, vals []any, err e
 		}
 		cols = append(cols, k)
 	}
-	sort.Strings(cols)
+	slices.Sort(cols)
 	for _, k := range cols {
 		vals = append(vals, fmt.Sprint(m[k]))
 	}
@@ -221,7 +220,7 @@ func (c *Tool) rows(ctx context.Context, args map[string]any) (string, error) {
 		for t := range children {
 			tables = append(tables, t)
 		}
-		sort.Strings(tables)
+		slices.Sort(tables)
 		for _, t := range tables {
 			col := fmt.Sprint(children[t])
 			ka, names, err := c.childValues(ctx, tenant, t, col, aVals[0])
