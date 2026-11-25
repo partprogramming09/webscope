@@ -8,7 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
-	"sort"
+	"slices"
 	"strconv"
 	"strings"
 	"unicode/utf8"
@@ -60,7 +60,7 @@ func indexModules(base string) (map[string]*frontModule, []string, error) {
 	if err != nil {
 		return nil, nil, err
 	}
-	sort.Strings(files)
+	slices.Sort(files)
 	mods := map[string]*frontModule{}
 	var names []string
 	for _, f := range files {
@@ -271,7 +271,7 @@ func walkthrough(base string, mods map[string]*frontModule, module string) []str
 	if err != nil {
 		return nil
 	}
-	sort.Strings(files)
+	slices.Sort(files)
 	var out []string
 	for _, f := range files {
 		rel, _ := filepath.Rel(base, f)

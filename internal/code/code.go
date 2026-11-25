@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -58,7 +59,7 @@ func tableFiles(table string, files []string, all fsx.Lines) ([]string, []string
 			moduleDirs = append(moduleDirs, filepath.Dir(filepath.Dir(h.File)))
 		}
 	}
-	sort.Strings(models)
+	slices.Sort(models)
 	names := []string{regexp.QuoteMeta(table)}
 	for _, m := range models {
 		names = append(names, regexp.QuoteMeta(m)) // a file name is not a pattern: "Foo (old.php" must not break the search
@@ -248,7 +249,7 @@ func (c *Tool) consumers(args map[string]any) (string, error) {
 		for m := range marks {
 			ms = append(ms, m)
 		}
-		sort.Strings(ms)
+		slices.Sort(ms)
 		rel, _ := filepath.Rel(real, f)
 		first, extra := per[f][0], ""
 		if len(per[f]) > 1 {
