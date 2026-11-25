@@ -5,9 +5,11 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
+	"github.com/partprogramming09/webscope/internal/db"
 	"github.com/partprogramming09/webscope/internal/input"
 )
 
@@ -23,13 +25,51 @@ func traced[In, Out any](tool string, h mcp.ToolHandlerFor[In, Out]) mcp.ToolHan
 		if a, ok := any(in).(input.Args); ok && a.Action != "" {
 			act = a.Action
 		}
-		status := "ok"
+		text := resultText(res)
+		status, kind := "ok", ""
 		if err != nil || (res != nil && res.IsError) {
-			status = "failed"
+			status, kind = "failed", " err="+errKind(text)
+			if text == "" && err != nil {
+				kind = " err=" + errKind(err.Error())
+			}
 		}
-		fmt.Fprintf(traceTo, "webscope: call %s %s %s %dms\n", tool, act, status, time.Since(start).Milliseconds())
+		fmt.Fprintf(traceTo, "webscope: call %s %s %s %dms bytes=%d%s\n", tool, act, status, time.Since(start).Milliseconds(), len(text), kind)
 		return res, out, err
 	}
+}
+
+// resultText is the text of an answer, to size it and to sort a failure; it is never written.
+func resultText(res *mcp.CallToolResult) string {
+	if res == nil {
+		return ""
+	}
+	var b strings.Builder
+	for _, c := range res.Content {
+		if t, ok := c.(*mcp.TextContent); ok {
+			b.WriteString(t.Text)
+		}
+	}
+	return b.String()
+}
+
+// errKind sorts the text of a failure into one fixed slug, so a log can be counted by cause without holding a value. Failures that happen in the page itself
+// (a helper that cannot load) are not seen here: javascript_tool runs them in the browser.
+func errKind(text string) string {
+	switch {
+	case db.ConnKind(text) != "":
+		return db.ConnKind(text)
+	case strings.Contains(text, "the call named no tenant"):
+		return "tenant_missing"
+	case strings.Contains(text, "was cut when it was captured"):
+		return "body_cut"
+	case strings.Contains(text, "unknown action") || strings.Contains(text, "is not an action of") || strings.Contains(text, "no topic "):
+		return "bad_action"
+	case strings.Contains(text, "is not under an allowed folder"):
+		return "upload_path"
+	case strings.Contains(text, "WEBSCOPE_") && strings.Contains(text, " is not set"):
+		return "env"
+	}
+	return "other"
 }
 
 // stamped puts the time at the start of each line it writes to w.

@@ -2,6 +2,21 @@
 
 One entry per version, newest first. Tool names are `query`, `page`, `check` and `code`. Each change says what it is, what was seen that made it necessary, how it was checked and what was not checked. A change in what a tool prints is listed as a change, because a client may read it.
 
+## 0.7.22 — 2026-11-24
+
+**`page(help)` is an index of four topics, and the log of calls says the size of each answer and the cause of each failure.**
+
+What was seen that made it necessary: in real sessions `page(help)` was called 21 times and each time returned the whole text (7219 bytes); and the log could say that a call failed but not why, so no version could be shown to fail less.
+
+Now:
+- `page(help)` returns an index of 9 lines (855 bytes; the `screen` topic is 3544) with the four topics `screen`, `network`, `audit` and `proof`; `page(help, {topic})` returns the lines of that group, the same text as before. An unknown topic lists the valid ones.
+- Each line of `WEBSCOPE_ACTIONLOG` ends with `bytes=<n>` (the size of the answer) and, when the call failed, `err=<slug>`: `db_env`, `db_conn`, `db_perm`, `tenant_missing`, `body_cut`, `bad_action`, `upload_path`, `env` or `other`. The slug is chosen from the text and the text is not written. A client that read the old line (`… ok 3ms`) gets the same prefix, with more at the end.
+- New `scripts/score.py <log>`: success rate, failures by cause, the share caused by a setup or a wrong call, bytes of an ok answer, calls to `help`.
+
+How it was checked: tests written red first (`TestHelpWithoutATopicIsAShortIndexOfTheTopics`, `TestEveryActionOfPageIsDocumentedInATopic`, `TestErrKindSortsAFailureIntoAFixedSlugWithoutKeepingItsText`, `TestTheCallLineCarriesTheSizeOfTheAnswerAndTheKindOfTheFailureNeverTheText`); the built server run over MCP stdio wrote five real lines and `score.py` read them (2 ok, 3 failed: `bad_action` 2, `db_env` 1), and a fabricated log with old lines too; `tools/list` measured by the conformance test.
+
+Not checked: the baseline of the large project (64 % ok in the 508 calls read by hand) was not recomputed with `score.py`, because those sessions ran before the log had slugs; the next real session gives the first measured number. Failures of the helper inside the page are not in the log.
+
 ## 0.7.21 — 2026-11-24
 
 **A failed call says what is wrong and what to do, `code(doctor)` checks the setup in one call, `upload` runs inside `page(batch)`, and `check` compares sent against stored even when the read was cut.**

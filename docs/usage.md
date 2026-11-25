@@ -29,7 +29,7 @@ The contract of each tool: when to use it, what it guarantees, what it cannot do
 
 ### `page(action, args?)`
 
-Run `page(help)` first. The order of a session:
+Run `page(help)` first: it is an index of four topics (`screen`, `network`, `audit`, `proof`); `page(help, {topic})` gives the arguments of that group. The order of a session:
 
 1. `page(load)` and run the snippet. Run it again after every navigation, reload or `/mcp`: the helper is lost and the port changes.
 2. `state` to see the screen (a first line says when it looks like a 404; the URL shows the names of its query parameters, never the values), then `fill`, `click` or `press`. `click` and `press` report the requests (method, path, status), new alerts, field errors and console errors, or `No effect seen`; if a request had not answered after about 2.5 s they say `Still pending` and the effect may be incomplete (look at `payloads` later). `payloads` has a `Problems:` line, right after its `mark N` and count lines, when any captured request (with `after`, any request after the mark) was a 4xx, a 5xx or had no answer.
@@ -108,3 +108,8 @@ What webscope already marks: when `fetch`, `XMLHttpRequest.send` or the anchor `
 ## Setup
 
 Set the variables once, as in the README: `WEBSCOPE_DB_URL` (required), `WEBSCOPE_APP_URL` (`page`, exact origin of the tab; several origins separated by commas when the old and the new app answer on different addresses), `WEBSCOPE_BACKEND` and `WEBSCOPE_FRONT` (`code`), `WEBSCOPE_LEGACY` (`code legacy`, the folder of the legacy PHP), `WEBSCOPE_TENANT_QUERY` (a tenant lookup other than Hyn Tenancy's), `WEBSCOPE_DOWNLOADS` (where Chrome saves files, for `page download`), `WEBSCOPE_LOG` (the backend log: `click`, `press` and `payloads` add the error lines written since the click or key began, when a request ends with status 0 or 5xx). A missing variable fails with `<NAME> is not set` and does not guess; `fields` without `WEBSCOPE_BACKEND` still answers, but without readers and writers.
+
+## Measuring a session
+
+Set `WEBSCOPE_ACTIONLOG` to a file: each call adds `webscope: call <tool> <action> ok|failed <n>ms bytes=<n>`, and a failed one ends with `err=<slug>` (`db_env`, `db_conn`, `db_perm`, `tenant_missing`, `body_cut`, `bad_action`, `upload_path`, `env` or `other`). It never holds an argument, a value or the text of an answer.
+`python3 -I scripts/score.py <log>` prints the success rate, the failures by cause, the share that a setup or a wrong call causes, the average size of an ok answer and the calls to `help`. A helper that cannot load fails in the browser, so the log does not show it.

@@ -172,3 +172,45 @@ func TestTheActionLogFileGetsTheLinesWithATimeWhenItIsSet(t *testing.T) {
 		t.Errorf("without the variable only stderr is used")
 	}
 }
+
+func TestErrKindSortsAFailureIntoAFixedSlugWithoutKeepingItsText(t *testing.T) {
+	for want, text := range map[string]string{
+		"db_env":         "Failed: WEBSCOPE_DB_URL is not set. Next: set it",
+		"db_conn":        "Failed: dial tcp 127.0.0.1:3306: connect: connection refused. Next: x",
+		"db_perm":        "Failed: Error 1045 (28000): Access denied for user 'ro'. Next: x",
+		"tenant_missing": "Failed: Error 1146 (42S02): Table 'a.b' doesn't exist; the call named no tenant, so it read the central database: pass tenant. Next: x",
+		"body_cut":       "Failed: the answer that was read was cut when it was captured (…(+6126 chars)): it cannot be compared whole. Next: x",
+		"bad_action":     `Failed: unknown action "frobnicate": doctor, fields. Next: code(help)`,
+		"upload_path":    "Failed: /x/y.csv is not under an allowed folder (/tmp). Next: put the file there",
+		"env":            "Failed: WEBSCOPE_BACKEND is not set. Next: code(help) lists the actions.",
+		"other":          "Failed: something nobody classified. Next: x",
+	} {
+		if got := errKind(text); got != want {
+			t.Errorf("errKind(%q) = %s, want %s", text, got, want)
+		}
+	}
+	if got := errKind(`Failed: "query" is not an action of code. Next: call the query tool: query(sql)`); got != "bad_action" {
+		t.Errorf("an action of another tool is a bad action: %s", got)
+	}
+}
+
+func TestTheCallLineCarriesTheSizeOfTheAnswerAndTheKindOfTheFailureNeverTheText(t *testing.T) {
+	var buf strings.Builder
+	old := traceTo
+	traceTo = &buf
+	defer func() { traceTo = old }()
+	mk := func(isErr bool, text string) mcp.ToolHandlerFor[input.Args, any] {
+		return func(context.Context, *mcp.CallToolRequest, input.Args) (*mcp.CallToolResult, any, error) {
+			return &mcp.CallToolResult{IsError: isErr, Content: []mcp.Content{&mcp.TextContent{Text: text}}}, nil, nil
+		}
+	}
+	traced("query", mk(false, "id\n7\n"))(context.Background(), nil, input.Args{})
+	traced("query", mk(true, "Failed: WEBSCOPE_DB_URL is not set for Ana"))(context.Background(), nil, input.Args{})
+	lines := strings.Split(strings.TrimSpace(buf.String()), "\n")
+	if len(lines) != 2 || !regexp.MustCompile(`^webscope: call query - ok \d+ms bytes=5$`).MatchString(lines[0]) {
+		t.Fatalf("an ok call has the size and no err: %q", lines)
+	}
+	if !regexp.MustCompile(`^webscope: call query - failed \d+ms bytes=\d+ err=db_env$`).MatchString(lines[1]) || strings.Contains(lines[1], "Ana") {
+		t.Errorf("a failed call has the kind and never the text: %q", lines[1])
+	}
+}
