@@ -335,7 +335,7 @@ func zipKind(path string) (string, string) {
 	if files["xl/workbook.xml"] == nil || len(sheets) == 0 {
 		return "", ""
 	}
-	sort.Strings(sheets)
+	slices.Sort(sheets)
 	shared := readShared(files["xl/sharedStrings.xml"])
 	headers, rows := readSheet(files[sheets[0]], shared)
 	if len(headers) > maxHeaders {

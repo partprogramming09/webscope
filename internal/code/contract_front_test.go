@@ -3,7 +3,7 @@ package code
 import (
 	"path/filepath"
 	"reflect"
-	"sort"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -38,7 +38,7 @@ func names(fs []sent) []string {
 		}
 		out = append(out, n)
 	}
-	sort.Strings(out)
+	slices.Sort(out)
 	return out
 }
 
