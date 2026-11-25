@@ -167,7 +167,8 @@
   const ALERTS ='[role=alert],.v-alert,.v-snackbar__content,.alert,.toast';
   const ERRORS = '.v-messages__message,.invalid-feedback,.error--text,.text-danger';
 
-  const wrongOrigin = () => cfg.o && !cfg.o.split(',').includes(location.origin) ? 'This tab is ' + location.origin + ' but WEBSCOPE_APP_URL is ' + cfg.o.split(',').join(', ') + ': captures and simulate are refused. Open the app at that address.' : '';
+  const originOk = o => cfg.o.split(',').some(x => x === o || (x.endsWith(':*') && (o === x.slice(0, -2) || (o.startsWith(x.slice(0, -1)) && /^\d{1,5}$/.test(o.slice(x.length - 1)))))); // a wildcard is a port of the host the server wrote, as in origins() of page.go
+  const wrongOrigin = () => cfg.o && !originOk(location.origin) ? 'This tab is ' + location.origin + ' but WEBSCOPE_APP_URL is ' + cfg.o.split(',').join(', ') + ': captures and simulate are refused. Open the app at that address.' : '';
 
   // showAddress is an address as the answers show it: parameter names only, because a value can be a token and a URL with a query is what output filters cut.
   const showAddress = l => {
@@ -674,6 +675,59 @@
       covered.push(tagId(e) + ' "' + clip(textOf(e) || labelOf(e), 30) + '" covered by ' + tagId(top));
     });
     add('covered', covered);
+    // a control that a container with overflow hidden/clip cuts off: nobody can reach it (auto/scroll containers are reachable and are left alone)
+    const HIDES = v => v === 'hidden' || v === 'clip';
+    const unseen = e => !!e.closest('[aria-hidden=true],[inert]') || getComputedStyle(e).visibility === 'hidden';
+    const clipped = [];
+    new Set(q(FIELDS + ',' + CLICKABLE)).forEach(e => {
+      const r = e.getBoundingClientRect();
+      if (r.width < 2 || r.height < 2 || unseen(e)) return;
+      let esc = getComputedStyle(e).position, moved = getComputedStyle(e).transform !== 'none';
+      for (let n = e.parentElement; n && n !== document.body && n !== document.documentElement; n = n.parentElement) {
+        const s = getComputedStyle(n);
+        if (esc === 'fixed') return; // a fixed box leaves every container
+        const sameBlock = !(esc === 'absolute' && s.position === 'static'); // an absolute box is cut only by the container it is placed in
+        if (sameBlock && (s.overflowX !== 'visible' || s.overflowY !== 'visible')) {
+          const b = n.getBoundingClientRect(), x0 = b.left + n.clientLeft, y0 = b.top + n.clientTop, x1 = x0 + n.clientWidth, y1 = y0 + n.clientHeight;
+          const outX = r.right <= x0 + 1 || r.left >= x1 - 1, outY = r.bottom <= y0 + 1 || r.top >= y1 - 1;
+          if ((outX && !HIDES(s.overflowX) && s.overflowX !== 'visible') || (outY && !HIDES(s.overflowY) && s.overflowY !== 'visible')) return; // scrolls: reachable
+          const fx = HIDES(s.overflowX) ? Math.max(0, Math.min(r.right, x1) - Math.max(r.left, x0)) / r.width : 1;
+          const fy = HIDES(s.overflowY) ? Math.max(0, Math.min(r.bottom, y1) - Math.max(r.top, y0)) / r.height : 1;
+          const collapsed = (HIDES(s.overflowX) && n.clientWidth < 2) || (HIDES(s.overflowY) && n.clientHeight < 2); // closed on purpose, like an accordion
+          if (fx * fy < 0.5 && !collapsed) {
+            if (moved) return; // a track moved by a transform (a carousel) hides what is off its slide on purpose
+            clipped.push(tagId(e) + ' "' + clip(textOf(e) || labelOf(e), 30) + '" cut by ' + tagId(n) + ' (' + Math.round(fx * fy * 100) + '% visible)');
+            return;
+          }
+        }
+        if (n.parentElement !== document.body) moved = moved || s.transform !== 'none';
+        esc = s.position;
+      }
+    });
+    add('clipped', clipped);
+    // a box that holds more than it shows, and a page wider than the window
+    const over = [];
+    const SKIP = /^(INPUT|TEXTAREA|SELECT|OPTION|SVG|IMG|CANVAS|VIDEO|IFRAME|SCRIPT|STYLE)$/i, SLIDER = /carousel|slider|swiper|slick|marquee|ticker/i;
+    const base = root === document ? document.body : root;
+    [...base.querySelectorAll('*')].slice(0, 8000).forEach(n => {
+      if (SKIP.test(n.tagName) || n.closest('[aria-hidden=true],[inert]')) return;
+      const s = getComputedStyle(n);
+      if (!HIDES(s.overflowX) || n.clientWidth < 2 || n.scrollWidth <= n.clientWidth + 1 || s.textOverflow === 'ellipsis' || s.display === 'none' || !vis(n)) return;
+      if (SLIDER.test(n.className && n.className.baseVal === undefined ? String(n.className) : '') || SLIDER.test(n.getAttribute('aria-roledescription') || '')) return;
+      if ([...n.children].some(c => getComputedStyle(c).transform !== 'none')) return; // its content slides on purpose
+      if (over.some(o => o.n.contains(n))) return; // the outer box already says it
+      over.push({ n, t: tagId(n) + ' ' + n.scrollWidth + 'px of content in ' + n.clientWidth + 'px @ ' + where(n) });
+    });
+    [...base.querySelectorAll('iframe')].filter(f => vis(f) && !f.closest('[aria-hidden=true],[inert]')).forEach(f => {
+      try {
+        const d = f.contentDocument, de = d && d.documentElement;
+        if (!de || de.scrollWidth <= f.clientWidth + 1) return;
+        const o = getComputedStyle(de).overflowX, bo = d.body ? getComputedStyle(d.body).overflowX : 'visible';
+        if (f.getAttribute('scrolling') === 'no' || HIDES(o) || HIDES(bo)) over.push({ n: f, t: tagId(f) + ' document ' + de.scrollWidth + 'px wide in a frame of ' + f.clientWidth + 'px @ ' + where(f) });
+      } catch (x) { /* another origin: its width cannot be read */ }
+    });
+    if (root === document && document.documentElement.scrollWidth > innerWidth + 1) over.unshift({ n: document.documentElement, t: 'page ' + document.documentElement.scrollWidth + 'px wide in a window of ' + innerWidth + 'px' });
+    add('overflow', over.map(o => o.t));
     // fields a person or `fill` cannot name
     const real = e => norm([...(e.labels || [])].map(l => l.textContent).join(' ')) || norm(e.getAttribute('aria-label')) || norm(e.placeholder) || norm(((e.closest('.v-input,.v-field') || document.createElement('i')).querySelector('label') || {}).textContent) || norm((e.closest('label') || {}).textContent); // a label with no text names nothing
     const fs = q(FIELDS);
@@ -682,7 +736,7 @@
     fs.filter(real).forEach(e => { const l = lower(labelOf(e)); if (l) seen[l] = [...(seen[l] || []), labelOf(e)]; });
     add('same label', Object.values(seen).filter(v => v.length > 1).map(v => v[0] + ' x' + v.length));
     add('no name', q(CLICKABLE).filter(e => !textOf(e)).map(e => tagId(e) + ' @ ' + where(e)));
-    return out.length ? out.join('\n') : 'No findings: no unrendered text, covered control, unlabeled field, repeated label or unnamed button.';
+    return out.length ? out.join('\n') : 'No findings: no unrendered text, covered or clipped control, overflow, unlabeled field, repeated label or unnamed button.';
   };
 
   // shape keeps what the screen offers (no values) in the listener, under a name, for parity; the side menu, the top bar, the options of a list and the pagination are left out
@@ -710,6 +764,46 @@
     const r = await realFetch(cfg.base + '/shape?t=' + cfg.t + '&name=' + encodeURIComponent(name), { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(s) });
     if (!r.ok) return fail('the listener refused the shape (' + r.status + '). Next: page(load) again and check WEBSCOPE_APP_URL.');
     return 'shape «' + clip(name, 40) + '» saved: ' + s.fields.length + ' fields, ' + s.buttons.length + ' buttons, ' + s.columns.length + ' columns, ' + s.tabs.length + ' tabs, ' + s.headings.length + ' headings. Next: open the other screen, page(shape) with another name, then page(parity, {a, b}).';
+  };
+
+  // frame mounts the current address in an iframe of the same origin at a width and runs state or audit inside it: a page cannot resize the browser window,
+  // and a frame has its own viewport, so the media queries answer for that width. It sits in a sandbox without allow-top-navigation, so a page that
+  // tries to leave its frame cannot take this tab with it. The frame is removed after the run unless keep is set.
+  const frame = async a => {
+    const old = () => { const f = document.getElementById('__ws_frame'); if (f) f.remove(); };
+    if (a.close) { old(); return 'frame closed'; }
+    const w = Number(a.width), run = a.run || 'audit';
+    if (!(w >= 200 && w <= 2000)) return fail('frame needs width, in pixels from 200 to 2000. Next: page(frame, {width: 360}).');
+    if (run !== 'state' && run !== 'audit') return fail('frame runs state or audit, not ' + run + '. Next: page(frame, {width: ' + w + ', run: "audit"}).');
+    old();
+    const f = document.createElement('iframe');
+    f.id = '__ws_frame';
+    f.setAttribute('sandbox', 'allow-same-origin allow-scripts allow-forms allow-popups');
+    f.style.cssText = 'position:fixed;top:0;left:0;width:' + w + 'px;height:' + innerHeight + 'px;border:0;background:#fff;z-index:2147483647;box-shadow:0 0 0 2px #888';
+    const giveUp = why => { old(); return fail(why + '. Next: resize the browser window to ' + w + ' px by hand and run ' + run + ' there.'); };
+    f.src = location.href;
+    const loaded = new Promise(r => { f.addEventListener('load', () => r(true), { once: true }); setTimeout(() => r(false), 15000); });
+    document.body.appendChild(f);
+    if (!(await loaded)) return giveUp('the app did not finish loading inside a frame in 15 s');
+    let fw, fd;
+    try { fw = f.contentWindow; fd = f.contentDocument; void fw.location.href; } catch (e) { fd = null; }
+    if (!fd || !fd.body || !fw.location.origin || fw.location.origin !== location.origin) return giveUp('the app does not load inside a frame (X-Frame-Options or frame-ancestors, or another origin answered)');
+    if (!fw.__ws) {
+      const src = cfg.base + '/page.js?t=' + cfg.t + '&v=' + window.__wsVer + '&o=' + encodeURIComponent(cfg.o || '') + '&k=' + cfg.k;
+      await new Promise(r => { const s = fd.createElement('script'); s.src = src; s.onload = s.onerror = r; fd.head.appendChild(s); });
+    }
+    if (!fw.__ws) return giveUp('the helper could not load inside the frame (its security policy)');
+    let last = '', still = 0; // the screen is drawn when its text has not changed for 600 ms
+    for (let i = 0; i < 50 && still < 3; i++) {
+      await new Promise(r => setTimeout(r, 200));
+      const now = (fd.body ? fd.body.innerText.length : 0) + ':' + fd.getElementsByTagName('*').length;
+      still = now === last && fd.body.innerText.length ? still + 1 : 0;
+      last = now;
+    }
+    const r = await fw.__ws[run]({ selector: a.selector, max: a.max });
+    const head = 'frame ' + w + 'px (the window inside is ' + fw.innerWidth + ' x ' + fw.innerHeight + ' of ' + clip(fw.location.pathname, 60) + ')';
+    if (a.keep !== true) old();
+    return head + '\n' + r;
   };
 
   // ---- interceptors: the functions below, as they are once the helper is in place; a page script or the agent that replaces one is reported
@@ -770,7 +864,7 @@
     const cut = hid.lastIndexOf('\n', lim - 140), head = hid.slice(0, cut > 0 ? cut : lim - 140);
     return head + '\n(… ' + (r.length - head.length) + ' more chars: ' + note + 'javascript_tool cuts at 1000, page(result) gives all)';
   };
-  plain = { state: wrap(state, 'state'), find: wrap(find, 'find'), read: wrap(read, 'read'), fill: wrap(fill, 'fill'), click: wrap(click, 'click'), press: wrap(press, 'press'), upload: wrap(upload, 'upload'), simulate: wrap(simulate, 'simulate'), open: wrap(open, 'open'), options: wrap(options, 'options'), batch: wrap(batch, 'batch'), audit: wrap(audit, 'audit'), shape: wrap(shape, 'shape') };
+  plain = { state: wrap(state, 'state'), find: wrap(find, 'find'), read: wrap(read, 'read'), fill: wrap(fill, 'fill'), click: wrap(click, 'click'), press: wrap(press, 'press'), upload: wrap(upload, 'upload'), simulate: wrap(simulate, 'simulate'), open: wrap(open, 'open'), options: wrap(options, 'options'), batch: wrap(batch, 'batch'), audit: wrap(audit, 'audit'), frame: wrap(frame, 'frame'), shape: wrap(shape, 'shape') };
   const stepLines = s => (s.match(/^\d+\. \w+: .*$/gm) || []).map(l => clip(l, 110)).join('\n');
   window.__ws = Object.fromEntries(Object.entries(plain).map(([k, f]) => [k, sink(f, k === 'batch' ? stepLines : null)]));
 })();

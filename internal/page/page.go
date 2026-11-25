@@ -45,7 +45,7 @@ const (
 )
 
 // snippetActions are the actions answered with a JavaScript snippet for javascript_tool. Anything else is answered here.
-var snippetActions = []string{"state", "find", "read", "fill", "click", "press", "simulate", "open", "options", "audit", "shape", "batch", "upload"}
+var snippetActions = []string{"state", "find", "read", "fill", "click", "press", "simulate", "open", "options", "audit", "frame", "shape", "batch", "upload"}
 
 // stepActions are the snippet actions that a batch can run, one after the other, in the same snippet.
 var stepActions = slices.DeleteFunc(slices.Clone(snippetActions), func(a string) bool { return a == "batch" || a == "upload" })
@@ -69,7 +69,7 @@ func checkBatch(args map[string]any) error {
 const helpText = `page(action, args?) tests a screen in the user's Chrome through Claude in Chrome.
 Needs a tab of the app (WEBSCOPE_APP_URL) with the session already started: open one with tabs_create_mcp and navigate to a screen; if it shows the login, stop and ask the user for the session (never type credentials).
 load: one line of JavaScript; run it with javascript_tool after /mcp (the port changes). After a reload or navigation any other action loads the helper itself (needs WEBSCOPE_APP_URL).
-state|find|read|fill|click|press|simulate|open|options|audit|shape|batch: return a snippet; run it with javascript_tool, its value is the answer.
+state|find|read|fill|click|press|simulate|open|options|audit|frame|shape|batch: return a snippet; run it with javascript_tool, its value is the answer.
   batch {steps:[{action, args?}, …], keepGoing?}: several of those actions in ONE snippet (one call instead of two per action); the answers come back numbered, a failed step stops the rest unless keepGoing, and no step starts after 38 s (javascript_tool gives about 45 s). payloads, parity, download and verify are answered by the server: call them apart.
   options {field, match?, max?, fresh?}: the choices of a select or Vuetify menu, without choosing one: all of a native select, and of a menu the rows seen while it scrolls (an autocomplete is searched with match); only those that contain match, up to max (30). A menu read to its end is remembered 2 minutes (the answer says how old it is): fresh:true reads it again.
   open {path}: goes to a router path from code map (/pricing/sales-tariffs) through the app's own router, which adds the tenant prefix; a path that no route owns is refused with the similar ones, and a redirect (login) is told. It waits for the screen to draw (the requests it sent answered and its text still), so the next step finds the data. Never type the URL of a screen by hand.
@@ -78,14 +78,15 @@ state|find|read|fill|click|press|simulate|open|options|audit|shape|batch: return
   read {selector?, max?}: max is characters. Text of the first match, or of the page.
   fill {fields:{label:value}} or {label:value}: by label, name, placeholder or id (a name that fits several fields fills the first, a dialog's before the page's, and the answer warns and lists the others: use an id, or the name with #2 for the second, #3…; a ref from find such as f3; or "css:" and a selector, such as "css:[data-variacion=3]", for fields with no label or id); true/false for checkboxes; select by option text; Vuetify menus too (long lists are scrolled); a rich-text editor (contenteditable) by its aria-label or id, or as "editor" when it has neither.
   click {text}, {selector} or {ref} (a text that belongs to no button is found as a plain element); press {key, selector?}: both then say what happened (requests with status, new alerts, errors and console errors, URL change, or "No effect seen"; with WEBSCOPE_LOG set, a status 0 or 5xx adds the last error lines of the backend log).
-  audit {selector?}: what the page shows about itself, no reference screen: unrendered text ({{x}}, undefined, null, NaN, [object Object]), controls covered by another element, fields with no label, repeated labels, buttons with no name. A hint to look at, not a verdict; selector limits it to a part of the screen.
+  audit {selector?}: what the page shows about itself, no reference screen: unrendered text ({{x}}, undefined, null, NaN, [object Object]), controls covered by another element, controls cut off by a container with overflow hidden/clip (clipped), boxes that hold more than they show and pages wider than the window (overflow), fields with no label, repeated labels, buttons with no name. A hint to look at, not a verdict; selector limits it to a part of the screen.
+  frame {width, run?, selector?, keep?}: the current address in a frame of the same origin at width px (200-2000), and state or audit (run, audit by default) inside it, so the layout answers for that width as a phone would: the page cannot resize the real window. The frame goes away after the run (keep:true leaves it, {close:true} removes it). An app that refuses to be framed (X-Frame-Options, frame-ancestors) fails with a Next: resize the window by hand.
   shape {name, selector?}: saves what the screen, or only the part a CSS selector names, offers under a name (field labels and kinds, buttons, table columns, tabs, headings; no values) for parity.
   simulate {match, status, times?, method?, body?}: the next requests whose URL contains match answer HTTP status 400-599 without reaching the app, with body (a text or an object, 2000 characters at most) or a short default message; {clear:true} cancels.
 result {offset?}: javascript_tool shows only 1000 characters of what a snippet returns and blocks a text that has an = together with a ; or an & (a=1&b=2, a=1;b=2, id=a1 y; z). When an answer is longer, or has them, the snippet returns a short one that ends «page(result) gives all» (query values hidden, ; and & changed) and the helper keeps the whole answer: result gives it, in parts (answered here, no snippet).
 upload {path, field|ref|css?}: attaches a file to an <input type=file> and fires its input and change events (a file under the temp folder or WEBSCOPE_UPLOADS, 5 MB at most, never a hidden or .env file); field names the input by its label, name or id, ref by f<N> from find, css by a selector; with only one file input on the page none is needed. It does not press the save button.
 payloads {limit?, match?, body?, index?, after?}: the requests the page sent and their answers, each numbered #N with the milliseconds it took (answered here, no snippet); match is a regex over "METHOD address", body a regex over what was sent and got, and both together keep the requests that fit (limit applies to those); index N gives that one request with its sent and got up to 8000 bytes. The first line is "mark N", N the number of the last request; after N shows only the later ones and, with WEBSCOPE_LOG, the error lines the log wrote since that mark, so a click made with the browser's own tool can be read: payloads, click, payloads {after: N}.
 parity {a, b, kinds?}: compares two saved shapes (say the old and the new screen) and shows only what one has and the other lacks (a repeated name once, with ×N), and fields whose kind changed (answered here, no snippet); kinds "field,column" limits it, e.g. to leave out the step buttons of a wizard. parity {req_a, req_b, map?} compares instead the latest captured request that matches each ("POST save.php": the method, then a part of the address): status and the field names sent and received, never values; map {name in a: name in b} renames a's names first.
-download {arm:true} before a real click, then {wait:true, seconds?} after it, and {report:true} lists the files the session saw appear so the user can delete them (answered here, no snippet): waits for a new file in the downloads folder (WEBSCOPE_DOWNLOADS, else ~/Downloads) and gives its name, size, type by its first bytes and time, and for an xlsx, an HTML table or a text with tabs, semicolons or commas (what a legacy .xls often is) its header names and row count, never a value. No file in time is a failure: an export counts as downloaded only if this finds the file.
+download {arm:true} before a real click, then {wait:true, seconds?} after it, and {report:true} lists the files the session saw appear so the user can delete them (answered here, no snippet): waits for a new file in the downloads folder (WEBSCOPE_DOWNLOADS, else ~/Downloads) and gives its name, size, type by its first bytes and time, for an xlsx, an HTML table or a text with tabs, semicolons or commas (what a legacy .xls often is) its header names and row count, never a value, and for a PDF its pages, whether it has text and its title. No file in time is a failure: an export counts as downloaded only if this finds the file.
 verify {claim, evidence?}: adds a claim of the final report to a table and answers its state, which the server decides: OBSERVADO (evidence «capture METHOD address» of a request that was captured, «check METHOD address» of a check with no differences, or «download» of a file that download wait found), INFERIDO (that capture was seen after an interceptor was put on the page) or NO VERIFICADO (no evidence, or none the server can find). verify {report:true} prints the table, {clear:true} empties it; build the report from it (answered here, no snippet).
 Writes only with the user's approval, and rows prefixed ZZ_.`
 
@@ -143,15 +144,59 @@ func New(appURL string) *Tool {
 	return &Tool{appURL: appURL, token: hex.EncodeToString(b), Life: context.Background(), now: time.Now, SinkChars: 900}
 }
 
-// origins are the scheme://host of each address in WEBSCOPE_APP_URL (several are separated by commas): the only origins the listener answers.
+// wildcardOrigins are the only port wildcards WEBSCOPE_APP_URL accepts, written as is by the human: any port of the local machine, for an app
+// that starts on whatever port is free (a branch next to the main one). A wildcard for any other host is ignored: it would let any site in.
+var wildcardOrigins = []string{"http://localhost:*", "http://127.0.0.1:*"}
+
+// origins are the scheme://host of each address in WEBSCOPE_APP_URL (several are separated by commas), and the port wildcards above as written:
+// the only origins the listener answers.
 func (p *Tool) origins() []string {
 	var out []string
 	for _, a := range strings.Split(p.appURL, ",") {
-		if o := originOf(strings.TrimSpace(a)); o != "" && !slices.Contains(out, o) {
+		a = strings.TrimSuffix(strings.ToLower(strings.TrimSpace(a)), "/")
+		if strings.HasSuffix(a, ":*") {
+			if slices.Contains(wildcardOrigins, a) && !slices.Contains(out, a) {
+				out = append(out, a)
+			}
+			continue
+		}
+		if o := originOf(a); o != "" && !slices.Contains(out, o) {
 			out = append(out, o)
 		}
 	}
 	return out
+}
+
+// allows says whether origin, as the browser writes the Origin header, is one of origins(): equal, or the wildcard's host with a port of 1 to 5 digits (or none).
+func (p *Tool) allows(origin string) bool {
+	for _, o := range p.origins() {
+		if o == origin {
+			return true
+		}
+		if host, ok := strings.CutSuffix(o, ":*"); ok {
+			if origin == host {
+				return true
+			}
+			if port, ok := strings.CutPrefix(origin, host+":"); ok && validPort(port) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func validPort(s string) bool {
+	if s == "" || len(s) > 5 {
+		return false
+	}
+	n := 0
+	for _, c := range s {
+		if c < '0' || c > '9' {
+			return false
+		}
+		n = n*10 + int(c-'0')
+	}
+	return n >= 1 && n <= 65535
 }
 
 // originOf is the origin of one address, as the browser writes it, or "" if it is not an address.
@@ -180,7 +225,7 @@ func snippet(action string, args map[string]any) (string, error) {
 // With boot (the address of the helper script) a page that lost the helper, after a reload or a navigation, loads it first and then runs the action.
 func snippetBoot(action string, args map[string]any, boot string) (string, error) {
 	if !slices.Contains(snippetActions, action) {
-		return "", fmt.Errorf("unknown action %q (load, state, read, fill, click, press, upload, payloads, result, simulate, audit, shape, open, options, batch, parity, download, verify or help)", action)
+		return "", fmt.Errorf("unknown action %q (load, state, read, fill, click, press, upload, payloads, result, simulate, audit, frame, shape, open, options, batch, parity, download, verify or help)", action)
 	}
 	if args == nil {
 		args = map[string]any{}
@@ -325,7 +370,7 @@ func (p *Tool) guard(next http.HandlerFunc) http.HandlerFunc {
 			return
 		}
 		if o := r.Header.Get("Origin"); o != "" {
-			if !slices.Contains(p.origins(), o) {
+			if !p.allows(o) {
 				p.mu.Lock()
 				p.refused = true
 				p.mu.Unlock()
@@ -631,7 +676,7 @@ func (p *Tool) Captures() []Capture {
 
 // eventActions and eventNotes are the only words an /event line may carry: the helper names an action and what kind of answer it gave, never a value of the page.
 var (
-	eventActions = []string{"state", "find", "read", "fill", "click", "press", "upload", "simulate", "open", "options", "audit", "shape", "batch"}
+	eventActions = []string{"state", "find", "read", "fill", "click", "press", "upload", "simulate", "open", "options", "audit", "frame", "shape", "batch"}
 	eventNotes   = []string{"ok", "failed", "no_effect", "nothing_to_click", "not_found", "click_on_disabled", "repeated_confirmation", "form_disabled", "interceptor", "fetch_wrapper", "still_pending", "new_alerts", "new_errors", "cut"}
 )
 

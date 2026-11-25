@@ -16,6 +16,57 @@ How it was checked: two new tests in real Chrome (`TestStateRecognizesAShortErro
 
 Not checked: other apps' 404 texts in languages other than Spanish and English; a table inside a shadow root.
 
+## 0.7.23 — 2026-11-24
+
+**`page(frame, {width})`: `audit` or `state` at a phone width, inside a same-origin frame.**
+
+What was seen that made it necessary: in the invoices E2E there was no way to see the screen at 360 px; `resize_window` did not change `innerWidth`, and the check was done by hand with an iframe.
+
+Now: `frame {width, run?, selector?, keep?}` mounts the current address in an iframe of the same origin at `width` px (200 to 2000), loads the helper inside it, waits until its text has stayed still for 600 ms (15 s at most to load, 10 s to draw), and runs `audit` (or `state`) there. The first line says the width and the size of the window inside; the rest is the action's answer. The frame is removed after the run unless `keep: true`; `{close: true}` removes a kept one. It runs in a sandbox without `allow-top-navigation`, so a page that tries to leave its frame cannot take the tab with it. An app that refuses to be framed (`X-Frame-Options`, `frame-ancestors`) or answers from another origin fails with `Failed: … Next: resize the browser window to N px by hand and run audit there.` No new tool and no change to `tools/list`: `frame` is an action of `page`, listed in `page(help)` (whose text now also names the PDF summary of 0.7.22). A batch can run it.
+
+How it was checked: `frame_test.go`, in a real Chrome, on a page whose layout breaks below 550 px. Failed first (`frame is not a function`). Then: in a wide window `audit` says no findings; `frame {width:360}` finds `clipped (2)` and `overflow (1)`; `frame {width:500}` gives exactly what a Chrome window opened at 500 px gives (Chrome does not open a window narrower than about 500 px, so 500 is the narrowest comparison possible, not 360); a page served with `X-Frame-Options: DENY` fails with `Next:`; a width of 50 fails with `Next:`; `keep` leaves a frame of the width asked and `close` removes it. 4 runs in a row, same result.
+
+Not checked: a real app (Vue, Vuetify, a router, a login) inside a frame; an app whose `Content-Security-Policy` forbids the helper script inside the frame (it fails with `Next:`, by code, not seen); a frame taller than the window; media queries on height.
+
+## 0.7.22 — 2026-11-24
+
+**`page(download)` describes a PDF: pages, whether it has text, and its title.**
+
+What was seen that made it necessary: in the invoices E2E the downloaded PDF had to be intercepted by hand to know what it held; `download` said only «type pdf».
+
+Now (changed output of `download {wait:true}` for a PDF): an extra line `pages: 2, text: yes, title: <title>`. Pages count `/Type /Page` and not `/Type /Pages`; `text` looks for a text operator in the page content; the title is the `/Title` of the document (an outline entry, which has a `/Parent`, is skipped), decoded from a literal, hexadecimal or UTF-16 string and cut at 80 characters. Standard library only: the Flate streams (page content, object streams of PDF 1.5) are inflated, within limits (4 MiB a stream, 32 MiB and 3000 streams a file, 16 MiB a file). What sits in a stream that cannot be decoded (another filter, encryption) is said as `pages: not read`, `at least N`, `text: not read` or `title not read`, never as zero or «no title».
+
+How it was checked: `pdf_test.go` with built fixtures (2 pages with a `/Pages` node and `/Type/Page` without spaces, a title with escaped parentheses; an image-only page with no title; a hex UTF-16 title; a zlib content stream; a zlib object stream; a PDF 1.5 object stream under ASCII85+Flate that is not decoded; an encrypted one) and the download flow end to end. Also two PDFs that Chrome itself printed (2 pages, accents in the title; one image-only page): `pages: 2, text: yes, title: Factura número 7 ñandú` and `pages: 1, text: no, title: Solo imagen`. `tools/list` unchanged.
+
+Not checked: PDFs from other producers (Word, wkhtmltopdf, Dompdf, which the invoices app may use), scanned PDFs with an invisible text layer, and a file over 16 MiB.
+
+## 0.7.21 — 2026-11-24
+
+**`WEBSCOPE_APP_URL` accepts a port wildcard for the local machine: `http://localhost:*` and `http://127.0.0.1:*`.**
+
+What was seen that made it necessary: in the invoices E2E the app of the branch ran on port 5180, and `payloads` and `simulate` were refused because the variable named another port; the fix was to edit the variable and restart the server each time.
+
+Now: those two exact strings, written by the human in the variable, let the listener answer a tab of any port of that host (1 to 65535, or none) and stop the helper from warning about it. Any other wildcard (`http://other.example:*`, `https://localhost:*`, `http://*`, `*`) is ignored, as is any host that only looks like localhost (`localhost.evil.com`, `evil.localhost.example`). The agent still cannot add origins at run time. Changed output: none (the refusal message lists the wildcard as written).
+
+How it was checked: `origins_test.go`. 6 origins accepted and 18 refused (the three attacks above, other scheme, other host, junk ports, userinfo, other wildcards); the HTTP listener answers 503 to `http://localhost:5180` and 403 to the look-alikes; in a real Chrome a 127.0.0.1 tab under `http://127.0.0.1:*` gets no warning and under `http://localhost:*` it does. `tools/list` unchanged.
+
+Not checked: Claude in Chrome with a real branch app on 5180; IPv6 `[::1]` (not accepted).
+
+## 0.7.20 — 2026-11-24
+
+**`page(audit)` reports controls cut off by a container (`clipped`) and content wider than its box or the window (`overflow`).**
+
+What was seen that made it necessary: in an invoices E2E at 360 px, `audit` said nothing about four buttons cut off in a dialog nor about a 516 px document inside a 354 px frame with `overflow: hidden`. The cause: `covered` dropped any control outside the box of a container with `overflow` other than `visible` as «scrolled out of view», and width was never measured.
+
+Now (changed output of `audit`, and its «No findings» line names the new checks):
+- `clipped (N)`: a control that less than half shows through an ancestor with `overflow: hidden` or `clip`, so nobody can reach it. `auto` and `scroll` containers are reachable and still not reported. Skipped: `aria-hidden` and `inert` parts, `visibility: hidden`, containers closed to zero size (accordions), controls moved by a transform on a box between them and the container (carousels), and absolutely placed boxes the container does not hold.
+- `overflow (N)`: a `hidden`/`clip` box whose `scrollWidth` is more than `clientWidth + 1` (outermost box only), a same-origin iframe whose document is wider than its frame and does not scroll, and the page when it is wider than `innerWidth`. Skipped: `text-overflow: ellipsis`, form controls, boxes whose class or `aria-roledescription` says carousel/slider/swiper/slick/marquee/ticker, and boxes with a transformed child.
+- Docs: `leftovers` already takes `prefix` (`"ZZ"`), now in `docs/usage.md`; `docs/patterns.md` gets the new finding and says that webscope's answers must not use key names like `token`, `secret` or `password` (Claude in Chrome blocks them).
+
+How it was checked: `auditclip_test.go`, in a real Chrome. Failed first: a 360 px dialog with four cut buttons, a 516 px document in a 354 px div and in a 354 px iframe, and a page of 2000 px gave «No findings». Healthy cases that must stay clean: a scrolling container with buttons beyond its edge, an `aria-hidden` carousel, a carousel with a transformed track, an ellipsis box, a box that fits and a collapsed box. `tools/list` 1653 bytes (unchanged, old handshake, whole line).
+
+Not checked: the real invoices screen at 360 px (no access to that app); a real Vuetify dialog or carousel; the absolute-position rule and iframes of another origin (the latter are skipped, by design).
+
 ## 0.7.19 — 2026-11-12
 
 **webscope installs as a Claude Code plugin, has a conformance test per MCP revision, and its tools carry a title and `openWorldHint`.**
