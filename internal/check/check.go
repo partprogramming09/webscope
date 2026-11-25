@@ -312,6 +312,7 @@ func (c *Tool) compare(ctx context.Context, in checkArgs) (string, error) {
 		return "", err
 	}
 	var read map[string]any
+	var readCut string // the mark of a read that was cut when it was captured: it was not compared
 	if in.After != "" {
 		rd, _, err := c.find(caps, in.After, at)
 		if err != nil {
@@ -321,7 +322,11 @@ func (c *Tool) compare(ctx context.Context, in checkArgs) (string, error) {
 			return "", fmt.Errorf("the read %s answered %d: it shows nothing to compare", in.After, rd.S)
 		}
 		if read, err = object(rd.Res, in.At, "answer that was read"); err != nil {
-			return "", err
+			if !cutMark.MatchString(rd.Res) {
+				return "", err
+			}
+			// A cut read cannot be compared whole, but sent against stored still can: say what was not verified instead of refusing everything.
+			readCut, read = rd.Res[strings.LastIndex(rd.Res, "…"):], nil
 		}
 	}
 	fields := slices.Sorted(maps.Keys(in.Map))
@@ -345,6 +350,9 @@ func (c *Tool) compare(ctx context.Context, in checkArgs) (string, error) {
 	head := fmt.Sprintf("check %s -> %s[%s]", in.Sent, in.Table, strings.Join(picked, " "))
 	if read != nil {
 		head += " and " + in.After
+	}
+	if readCut != "" {
+		head += " (read NOT VERIFIED: sent against stored only)"
 	}
 	rows := ""
 	for _, f := range fields {
@@ -452,8 +460,15 @@ func (c *Tool) compare(ctx context.Context, in checkArgs) (string, error) {
 	if soft > 0 {
 		b.WriteString("\nempty~ (null, empty text or NULL, not the same): " + strings.Join(emptied, ", "))
 	}
+	if readCut != "" {
+		fmt.Fprintf(&b, "\nread NOT VERIFIED: the answer of %s was cut when it was captured (%s), so what the screen read back was not compared; the counts above are sent against stored only.", in.After, readCut)
+	}
 	if n, ok := c.Page.(Noter); ok {
-		n.NoteCheck(in.Sent, len(fields), differ, soft+spaces)
+		unsure := soft + spaces
+		if readCut != "" {
+			unsure++ // the read-back was not compared: not a full pass
+		}
+		n.NoteCheck(in.Sent, len(fields), differ, unsure)
 	}
 	return b.String(), nil
 }

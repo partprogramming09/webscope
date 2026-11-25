@@ -51,7 +51,7 @@ func readUpload(path string) (*upload, error) {
 		}
 	}
 	if !ok {
-		return nil, fmt.Errorf("%s is not under an allowed folder (WEBSCOPE_UPLOADS, else the temp folder). Next: put the file there or set WEBSCOPE_UPLOADS", path)
+		return nil, fmt.Errorf("%s is not under an allowed folder (%s). Next: put the file in one of them or set WEBSCOPE_UPLOADS", path, strings.Join(uploadRoots(), ", "))
 	}
 	base := filepath.Base(real)
 	if strings.HasPrefix(base, ".") {
@@ -103,6 +103,50 @@ func (p *Tool) prepareUpload(args map[string]any) (map[string]any, error) {
 		if v, ok := args[k]; ok {
 			out[k] = v
 		}
+	}
+	return out, nil
+}
+
+// prepareBatchUploads prepares the file of each upload step of a batch, as prepareUpload does for a single upload, and returns a copy of the arguments whose upload steps carry the id of the file instead of the path. A step that fails is named by its number.
+func (p *Tool) prepareBatchUploads(args map[string]any) (map[string]any, error) {
+	steps, _ := args["steps"].([]any)
+	out := make(map[string]any, len(args))
+	for k, v := range args {
+		out[k] = v
+	}
+	prepared := make([]any, len(steps))
+	var ids []string
+	release := func() { // a step failed: the files already prepared for this batch will never be fetched
+		p.mu.Lock()
+		for _, id := range ids {
+			delete(p.uploads, id)
+		}
+		p.mu.Unlock()
+	}
+	for i, s := range steps {
+		prepared[i] = s
+		step, _ := s.(map[string]any)
+		if name, _ := step["action"].(string); name != "upload" {
+			continue
+		}
+		sa, _ := step["args"].(map[string]any)
+		sa, err := p.prepareUpload(sa)
+		if err != nil {
+			release()
+			return nil, fmt.Errorf("batch step %d: %w", i+1, err)
+		}
+		if id, _ := sa["id"].(string); id != "" {
+			ids = append(ids, id)
+		}
+		cp := make(map[string]any, len(step))
+		for k, v := range step {
+			cp[k] = v
+		}
+		cp["args"] = sa
+		prepared[i] = cp
+	}
+	if len(steps) > 0 {
+		out["steps"] = prepared
 	}
 	return out, nil
 }

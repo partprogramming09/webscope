@@ -29,7 +29,7 @@ The contract of each tool: when to use it, what it guarantees, what it cannot do
 
 ### `page(action, args?)`
 
-Run `page(help)` first. The order of a session:
+Run `page(help)` first: it is an index of four topics (`screen`, `network`, `audit`, `proof`); `page(help, {topic})` gives the arguments of that group. The order of a session:
 
 1. `page(load)` and run the snippet. Run it again after every navigation, reload or `/mcp`: the helper is lost and the port changes.
 2. `state` to see the screen (a first line says when it looks like a 404; the URL shows the names of its query parameters, never the values), then `fill`, `click` or `press`. `click` and `press` report the requests (method, path, status), new alerts, field errors and console errors, or `No effect seen`; if a request had not answered after about 2.5 s they say `Still pending` and the effect may be incomplete (look at `payloads` later). `payloads` has a `Problems:` line, right after its `mark N` and count lines, when any captured request (with `after`, any request after the mark) was a 4xx, a 5xx or had no answer.
@@ -42,19 +42,22 @@ Run `page(help)` first. The order of a session:
 
 7. To build the final report: `verify {claim, evidence}` for each thing it will say, with `evidence` as `capture METHOD address`, `check METHOD address` (the last `check` of that request) or `download`; then `verify {report:true}` and write the report from that table. The server gives the state (OBSERVADO, INFERIDO if an interceptor was seen, NO VERIFICADO without a reference it can find).
 
-Not covered: `v-combobox`, date pickers, menus of other libraries, file uploads, pages whose Content-Security-Policy blocks the helper. If the screen shows the login, stop and ask the user for the session; never type credentials. Use one Chrome agent at a time.
+`upload` also runs as a step of `batch` (fill, upload, click in one call). When the helper cannot load, the answer says why: the page's Content-Security-Policy (with its directive; `page(load)` would fail the same way) or no answer from the listener (the port changes after a restart).
+
+Not covered: `v-combobox`, date pickers, menus of other libraries, pages whose Content-Security-Policy blocks the helper. If the screen shows the login, stop and ask the user for the session; never type credentials. Use one Chrome agent at a time.
 
 ### `check(sent, table, where, map, after?, at?, tenant?)`
 
 - `sent` is a request `page` captured (`POST /api/quotes`); `where` picks one row; `map` says which column holds each sent field.
 - `after` and `at` add what the screen read back (a later `GET` and the path of the object in its answer).
 - The answer is counts plus one line per field that differs. `empty~`, `unread~` and `space~` are equivalent or unknown, not equal and not different.
-- A body cut when captured is refused, not compared.
+- A sent body cut when captured is refused. A read (`after`) cut when captured is not compared: the answer says `read NOT VERIFIED` and compares sent against stored only.
 
 ### `code(action, args?)`
 
 | Action | Answers | Stack |
 |---|---|---|
+| `doctor` | The setup in one call: each `WEBSCOPE_` variable (set, and what it points at), the database with `SELECT 1`, the folders, the tenants it knows, and one `Next:` listing what to fix; never a password | Any |
 | `fields {table, tenant?}` | Per column: type, null, default, rows with a value, PHP files that read and write it | Any database; PHP files for the usage counts |
 | `consumers {table, column}` or `{column_only}` | Each read and write of a column, `file:line` | PHP backend |
 | `map {module, walkthrough?}` | Routes, HTTP calls, composables, stores; with `walkthrough`, what can be clicked | Vue modules (`src/modules`) |
@@ -107,3 +110,8 @@ What webscope already marks: when `fetch`, `XMLHttpRequest.send` or the anchor `
 ## Setup
 
 Set the variables once, as in [reference.md](reference.md#environment-variables): `WEBSCOPE_DB_URL` (required), `WEBSCOPE_APP_URL` (`page`, exact origin of the tab; several origins separated by commas when the old and the new app answer on different addresses), `WEBSCOPE_BACKEND` and `WEBSCOPE_FRONT` (`code`), `WEBSCOPE_LEGACY` (`code legacy`, the folder of the legacy PHP), `WEBSCOPE_TENANT_QUERY` (a tenant lookup other than Hyn Tenancy's), `WEBSCOPE_DOWNLOADS` (where Chrome saves files, for `page download`), `WEBSCOPE_LOG` (the backend log: `click`, `press` and `payloads` add the error lines written since the click or key began, when a request ends with status 0 or 5xx). A missing variable fails with `<NAME> is not set` and does not guess; `fields` without `WEBSCOPE_BACKEND` still answers, but without readers and writers.
+
+## Measuring a session
+
+Set `WEBSCOPE_ACTIONLOG` to a file: each call adds `webscope: call <tool> <action> ok|failed <n>ms bytes=<n>`, and a failed one ends with `err=<slug>` (`db_env`, `db_conn`, `db_perm`, `tenant_missing`, `body_cut`, `bad_action`, `upload_path`, `env` or `other`). It never holds an argument, a value or the text of an answer.
+`python3 -I scripts/score.py <log>` prints the success rate, the failures by cause, the share that a setup or a wrong call causes, the average size of an ok answer and the calls to `help`. A helper that cannot load fails in the browser, so the log does not show it.

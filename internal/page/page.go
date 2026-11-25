@@ -47,8 +47,8 @@ const (
 // snippetActions are the actions answered with a JavaScript snippet for javascript_tool. Anything else is answered here.
 var snippetActions = []string{"state", "find", "read", "fill", "click", "press", "simulate", "open", "options", "audit", "frame", "shape", "batch", "upload"}
 
-// stepActions are the snippet actions that a batch can run, one after the other, in the same snippet.
-var stepActions = slices.DeleteFunc(slices.Clone(snippetActions), func(a string) bool { return a == "batch" || a == "upload" })
+// stepActions are the snippet actions that a batch can run, one after the other, in the same snippet. An upload step is prepared in Go first (prepareBatchUploads).
+var stepActions = slices.DeleteFunc(slices.Clone(snippetActions), func(a string) bool { return a == "batch" })
 
 // checkBatch refuses the steps of a batch that no snippet can run: none, a step that is not an object, an action the server answers by itself, or a nested batch.
 func checkBatch(args map[string]any) error {
@@ -66,10 +66,19 @@ func checkBatch(args map[string]any) error {
 	return nil
 }
 
-const helpText = `page(action, args?) tests a screen in the user's Chrome through Claude in Chrome.
+// The help is an index, and each topic holds the lines of its actions: a session that calls help many times pays for the index, not for every action.
+const helpIndex = `page(action, args?) tests a screen in the user's Chrome through Claude in Chrome.
 Needs a tab of the app (WEBSCOPE_APP_URL) with the session already started: open one with tabs_create_mcp and navigate to a screen; if it shows the login, stop and ask the user for the session (never type credentials).
-load: one line of JavaScript; run it with javascript_tool after /mcp (the port changes). After a reload or navigation any other action loads the helper itself (needs WEBSCOPE_APP_URL).
-state|find|read|fill|click|press|simulate|open|options|audit|frame|shape|batch: return a snippet; run it with javascript_tool, its value is the answer.
+load: one line of JavaScript; run it with javascript_tool after /mcp (the port changes); the other actions load the helper themselves (WEBSCOPE_APP_URL must be set).
+Actions by topic (help {topic} gives the arguments of each):
+  screen: state, find, read, fill, click, press, options, open, batch, upload, result. help {topic: "screen"}
+  network: payloads, simulate. help {topic: "network"}
+  audit: audit, frame, shape, parity. help {topic: "audit"}
+  proof: download, verify. help {topic: "proof"}
+Writes only with the user's approval, and rows prefixed ZZ_.`
+
+var helpTopics = map[string]string{
+	"screen": `state|find|read|fill|click|press|simulate|open|options|audit|frame|shape|batch: return a snippet; run it with javascript_tool, its value is the answer.
   batch {steps:[{action, args?}, …], keepGoing?}: several of those actions in ONE snippet (one call instead of two per action); the answers come back numbered, a failed step stops the rest unless keepGoing, and no step starts after 38 s (javascript_tool gives about 45 s). payloads, parity, download and verify are answered by the server: call them apart.
   options {field, match?, max?, fresh?}: the choices of a select or Vuetify menu, without choosing one: all of a native select, and of a menu the rows seen while it scrolls (an autocomplete is searched with match); only those that contain match, up to max (30). A menu read to its end is remembered 2 minutes (the answer says how old it is): fresh:true reads it again.
   open {path}: goes to a router path from code map (/pricing/sales-tariffs) through the app's own router, which adds the tenant prefix; a path that no route owns is refused with the similar ones, and a redirect (login) is told. It waits for the screen to draw (the requests it sent answered and its text still), so the next step finds the data. Never type the URL of a screen by hand.
@@ -78,17 +87,20 @@ state|find|read|fill|click|press|simulate|open|options|audit|frame|shape|batch: 
   read {selector?, max?}: max is characters. Text of the first match, or of the page.
   fill {fields:{label:value}} or {label:value}: by label, name, placeholder or id (a name that fits several fields fills the first, a dialog's before the page's, and the answer warns and lists the others: use an id, or the name with #2 for the second, #3…; a ref from find such as f3; or "css:" and a selector, such as "css:[data-variacion=3]", for fields with no label or id); true/false for checkboxes; select by option text; Vuetify menus too (long lists are scrolled); a rich-text editor (contenteditable) by its aria-label or id, or as "editor" when it has neither.
   click {text}, {selector} or {ref} (a text that belongs to no button is found as a plain element); press {key, selector?}: both then say what happened (requests with status, new alerts, errors and console errors, URL change, or "No effect seen"; with WEBSCOPE_LOG set, a status 0 or 5xx adds the last error lines of the backend log).
-  audit {selector?}: what the page shows about itself, no reference screen: unrendered text ({{x}}, undefined, null, NaN, [object Object]), controls covered by another element, controls cut off by a container with overflow hidden/clip (clipped), boxes that hold more than they show and pages wider than the window (overflow), fields with no label, repeated labels, buttons with no name. A hint to look at, not a verdict; selector limits it to a part of the screen.
+upload {path, field|ref|css?}: attaches a file to an <input type=file> and fires its input and change events (a file under the temp folder or WEBSCOPE_UPLOADS, 5 MB at most, never a hidden or .env file); field names the input by its label, name or id, ref by f<N> from find, css by a selector; with only one file input on the page none is needed. It does not press the save button.
+result {offset?}: javascript_tool shows only 1000 characters of what a snippet returns and blocks a text that has an = together with a ; or an & (a=1&b=2, a=1;b=2, id=a1 y; z). When an answer is longer, or has them, the snippet returns a short one that ends «page(result) gives all» (query values hidden, ; and & changed) and the helper keeps the whole answer: result gives it, in parts (answered here, no snippet).`,
+	"network": `  simulate {match, status, times?, method?, body?}: the next requests whose URL contains match answer HTTP status 400-599 without reaching the app, with body (a text or an object, 2000 characters at most) or a short default message; {clear:true} cancels.
+payloads {limit?, match?, body?, index?, after?}: the requests the page sent and their answers, each numbered #N with the milliseconds it took (answered here, no snippet); match is a regex over "METHOD address", body a regex over what was sent and got, and both together keep the requests that fit (limit applies to those); index N gives that one request with its sent and got up to 8000 bytes. The first line is "mark N", N the number of the last request; after N shows only the later ones and, with WEBSCOPE_LOG, the error lines the log wrote since that mark, so a click made with the browser's own tool can be read: payloads, click, payloads {after: N}.`,
+	"audit": `  audit {selector?}: what the page shows about itself, no reference screen: unrendered text ({{x}}, undefined, null, NaN, [object Object]), controls covered by another element, controls cut off by a container with overflow hidden/clip (clipped), boxes that hold more than they show and pages wider than the window (overflow), fields with no label, repeated labels, buttons with no name. A hint to look at, not a verdict; selector limits it to a part of the screen.
   frame {width, run?, selector?, keep?}: the current address in a frame of the same origin at width px (200-2000), and state or audit (run, audit by default) inside it, so the layout answers for that width as a phone would: the page cannot resize the real window. The frame goes away after the run (keep:true leaves it, {close:true} removes it). An app that refuses to be framed (X-Frame-Options, frame-ancestors) fails with a Next: resize the window by hand.
   shape {name, selector?}: saves what the screen, or only the part a CSS selector names, offers under a name (field labels and kinds, buttons, table columns, tabs, headings; no values) for parity.
-  simulate {match, status, times?, method?, body?}: the next requests whose URL contains match answer HTTP status 400-599 without reaching the app, with body (a text or an object, 2000 characters at most) or a short default message; {clear:true} cancels.
-result {offset?}: javascript_tool shows only 1000 characters of what a snippet returns and blocks a text that has an = together with a ; or an & (a=1&b=2, a=1;b=2, id=a1 y; z). When an answer is longer, or has them, the snippet returns a short one that ends «page(result) gives all» (query values hidden, ; and & changed) and the helper keeps the whole answer: result gives it, in parts (answered here, no snippet).
-upload {path, field|ref|css?}: attaches a file to an <input type=file> and fires its input and change events (a file under the temp folder or WEBSCOPE_UPLOADS, 5 MB at most, never a hidden or .env file); field names the input by its label, name or id, ref by f<N> from find, css by a selector; with only one file input on the page none is needed. It does not press the save button.
-payloads {limit?, match?, body?, index?, after?}: the requests the page sent and their answers, each numbered #N with the milliseconds it took (answered here, no snippet); match is a regex over "METHOD address", body a regex over what was sent and got, and both together keep the requests that fit (limit applies to those); index N gives that one request with its sent and got up to 8000 bytes. The first line is "mark N", N the number of the last request; after N shows only the later ones and, with WEBSCOPE_LOG, the error lines the log wrote since that mark, so a click made with the browser's own tool can be read: payloads, click, payloads {after: N}.
-parity {a, b, kinds?}: compares two saved shapes (say the old and the new screen) and shows only what one has and the other lacks (a repeated name once, with ×N), and fields whose kind changed (answered here, no snippet); kinds "field,column" limits it, e.g. to leave out the step buttons of a wizard. parity {req_a, req_b, map?} compares instead the latest captured request that matches each ("POST save.php": the method, then a part of the address): status and the field names sent and received, never values; map {name in a: name in b} renames a's names first.
-download {arm:true} before a real click, then {wait:true, seconds?} after it, and {report:true} lists the files the session saw appear so the user can delete them (answered here, no snippet): waits for a new file in the downloads folder (WEBSCOPE_DOWNLOADS, else ~/Downloads) and gives its name, size, type by its first bytes and time, for an xlsx, an HTML table or a text with tabs, semicolons or commas (what a legacy .xls often is) its header names and row count, never a value, and for a PDF its pages, whether it has text and its title. No file in time is a failure: an export counts as downloaded only if this finds the file.
-verify {claim, evidence?}: adds a claim of the final report to a table and answers its state, which the server decides: OBSERVADO (evidence «capture METHOD address» of a request that was captured, «check METHOD address» of a check with no differences, or «download» of a file that download wait found), INFERIDO (that capture was seen after an interceptor was put on the page) or NO VERIFICADO (no evidence, or none the server can find). verify {report:true} prints the table, {clear:true} empties it; build the report from it (answered here, no snippet).
-Writes only with the user's approval, and rows prefixed ZZ_.`
+parity {a, b, kinds?}: compares two saved shapes (say the old and the new screen) and shows only what one has and the other lacks (a repeated name once, with ×N), and fields whose kind changed (answered here, no snippet); kinds "field,column" limits it, e.g. to leave out the step buttons of a wizard. parity {req_a, req_b, map?} compares instead the latest captured request that matches each ("POST save.php": the method, then a part of the address): status and the field names sent and received, never values; map {name in a: name in b} renames a's names first.`,
+	"proof": `download {arm:true} before a real click, then {wait:true, seconds?} after it, and {report:true} lists the files the session saw appear so the user can delete them (answered here, no snippet): waits for a new file in the downloads folder (WEBSCOPE_DOWNLOADS, else ~/Downloads) and gives its name, size, type by its first bytes and time, and for an xlsx, an HTML table or a text with tabs, semicolons or commas (what a legacy .xls often is) its header names and row count, never a value. No file in time is a failure: an export counts as downloaded only if this finds the file.
+verify {claim, evidence?}: adds a claim of the final report to a table and answers its state, which the server decides: OBSERVADO (evidence «capture METHOD address» of a request that was captured, «check METHOD address» of a check with no differences, or «download» of a file that download wait found), INFERIDO (that capture was seen after an interceptor was put on the page) or NO VERIFICADO (no evidence, or none the server can find). verify {report:true} prints the table, {clear:true} empties it; build the report from it (answered here, no snippet).`,
+}
+
+// helpTopicNames are the topics in the order the index lists them.
+var helpTopicNames = []string{"screen", "network", "audit", "proof"}
 
 // Capture is one request the page sent, as reported by page.js.
 type Capture struct {
@@ -221,6 +233,13 @@ func snippet(action string, args map[string]any) (string, error) {
 	return snippetBoot(action, args, "")
 }
 
+// What a page that cannot load the helper answers, by cause. Neither says page(load) for a policy: it loads the same script and fails the same way.
+const (
+	bootNoListener = "Failed: the helper script did not arrive and no page policy blocked it, so the webscope listener did not answer: the server may have restarted (the port changes) or the tab's address is not in WEBSCOPE_APP_URL. Next: run page(load) and run its line with javascript_tool for the new address; if it repeats, call code(doctor)."
+	bootPolicyA    = "Failed: the page's security policy (CSP, "
+	bootPolicyB    = ") blocked the helper script from the webscope listener. Next: do not repeat page(load); drive this screen with the Claude in Chrome tools (read_page, find, form_input, computer), or ask the app's team for a development policy that allows 127.0.0.1 in script-src and connect-src."
+)
+
 // snippetBoot is the JavaScript for action. The arguments enter as JSON (json.Marshal escapes <, > and line separators), never as text.
 // With boot (the address of the helper script) a page that lost the helper, after a reload or a navigation, loads it first and then runs the action.
 func snippetBoot(action string, args map[string]any, boot string) (string, error) {
@@ -240,7 +259,9 @@ func snippetBoot(action string, args map[string]any, boot string) (string, error
 		return "", err
 	}
 	if boot != "" {
-		return fmt.Sprintf(`await((window.__ws||await new Promise(r=>{var s=document.createElement("script");s.src=%q;s.onload=s.onerror=()=>r(window.__ws);document.head.appendChild(s)}))?.%s(%s)??"Failed: the helper could not load in this page (its security policy or the listener). Next: page(load) and run it.")`, boot, action, raw), nil
+		// The helper is loaded as a script tag. A policy that blocks it fires securitypolicyviolation (before or just after the tag's error; a violation of another kind, such as an image, does not count, and a short wait covers the late event), so the two causes read differently:
+		// a policy (page(load) would fail the same way) or no answer from the listener (the server restarted, so the port changed: page(load) gives the new address).
+		return fmt.Sprintf(`await((async()=>{if(window.__ws)return window.__ws;var v="",h=e=>{var d=e.effectiveDirective||e.violatedDirective||"";if(/^script-src/.test(d))v=d};document.addEventListener("securitypolicyviolation",h);await new Promise(r=>{var s=document.createElement("script");s.src=%q;s.onload=s.onerror=r;document.head.appendChild(s)});if(!window.__ws&&!v)await new Promise(r=>setTimeout(r,60));document.removeEventListener("securitypolicyviolation",h);return window.__ws||v||"none"})().then(w=>typeof w==="object"?w.%s(%s):w==="none"?%q:%q+w+%q))`, boot, action, raw, bootNoListener, bootPolicyA, bootPolicyB), nil
 	}
 	return fmt.Sprintf(`await (window.__ws?window.__ws.%s(%s):"Failed: webscope is not loaded in this page. Next: page(load) and run it.")`, action, raw), nil // await: fill waits for menus
 }
@@ -248,7 +269,14 @@ func snippetBoot(action string, args map[string]any, boot string) (string, error
 func (p *Tool) answer(in input.Args) (string, error) {
 	switch in.Action {
 	case "help":
-		return helpText, nil
+		topic := input.Str(in.Args, "topic")
+		if topic == "" {
+			return helpIndex, nil
+		}
+		if text, ok := helpTopics[topic]; ok {
+			return text, nil
+		}
+		return "", fmt.Errorf("no topic %q: the topics are %s. Next: page(help) lists them", input.Show(topic), strings.Join(helpTopicNames, ", "))
 	case "payloads":
 		return p.payloads(in.Args), nil
 	case "download":
@@ -272,6 +300,12 @@ func (p *Tool) answer(in input.Args) (string, error) {
 		return p.result(in.Args), nil
 	}
 	args := in.Args
+	if in.Action == "batch" {
+		var err error
+		if args, err = p.prepareBatchUploads(args); err != nil {
+			return "", err
+		}
+	}
 	if in.Action == "upload" {
 		var err error
 		if args, err = p.prepareUpload(args); err != nil {
@@ -340,6 +374,9 @@ func (p *Tool) Handle(_ context.Context, _ *mcp.CallToolRequest, in input.Args) 
 	text, err := p.answer(in)
 	if err != nil {
 		text = "Failed: " + strings.TrimRight(err.Error(), ". ") + ". Next: page(help) lists the actions and their arguments."
+		if msg := err.Error(); strings.Contains(msg, ". Next: ") { // the error already says what to do: do not add a second Next
+			text = "Failed: " + msg
+		}
 	}
 	return &mcp.CallToolResult{IsError: err != nil, Content: []mcp.Content{&mcp.TextContent{Text: text}}}, nil, nil
 }

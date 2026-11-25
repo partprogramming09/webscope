@@ -63,6 +63,18 @@ func (s *Source) conn(database string) (*sql.DB, string, error) {
 	return db, driver, nil
 }
 
+// Ping runs SELECT 1 on the URL's database: nil when it answers, else the error as the driver gave it (it may carry the password: redact before showing).
+func (s *Source) Ping(ctx context.Context) error {
+	conn, _, err := s.conn("")
+	if err != nil {
+		return err
+	}
+	ctx, cancel := context.WithTimeout(ctx, QueryTimeout)
+	defer cancel()
+	var one int
+	return conn.QueryRowContext(ctx, "SELECT 1").Scan(&one)
+}
+
 // Open is the connection to the URL's database, or to the database of tenant (an fqdn) found in the central one.
 func (s *Source) Open(ctx context.Context, tenant string) (*sql.DB, string, error) {
 	db, driver, err := s.conn("")
@@ -502,10 +514,29 @@ func cell(v any) string {
 
 var writeVerb = regexp.MustCompile(`(?i)must start with .* not "(insert|update|delete|replace|create|alter|drop|truncate|merge|call|grant|revoke)"`)
 
+// ConnKind sorts a failure of the connection into db_env (the URL is missing or malformed), db_conn (nothing answers at the address) or db_perm (the user was refused); "" when the message is none of them.
+func ConnKind(msg string) string {
+	switch {
+	case strings.Contains(msg, "WEBSCOPE_DB_URL is not"):
+		return "db_env"
+	case strings.Contains(msg, "connection refused") || strings.Contains(msg, "no such host") || (strings.Contains(msg, "dial tcp") && strings.Contains(msg, "i/o timeout")):
+		return "db_conn" // a read that timed out (no "dial tcp") is a slow query, not a host that does not answer
+	case strings.Contains(msg, "Error 1045"):
+		return "db_perm" // 1044 is access denied to one database (a tenant's), not a wrong user or password
+	}
+	return ""
+}
+
 // Failure is the text of a failed call: what happened and what to do next. tenant is the one the call named, if any.
 func Failure(err error, tenant string) string {
 	next := "fix the statement or the connection (WEBSCOPE_DB_URL) and call again."
 	switch msg := err.Error(); {
+	case ConnKind(msg) == "db_env":
+		next = "set WEBSCOPE_DB_URL to a valid URL of the read-only database (mysql://user:password@host:3306/db) and restart the server; code(doctor) checks the whole setup in one call."
+	case ConnKind(msg) == "db_conn":
+		next = "the database is not reachable at that address: start it or open its tunnel, check the host and port in WEBSCOPE_DB_URL; code(doctor) checks the setup in one call."
+	case ConnKind(msg) == "db_perm":
+		next = "the read-only user or its password was refused: check the user and password in WEBSCOPE_DB_URL and that the user may SELECT from this database; code(doctor) checks the setup in one call."
 	case writeVerb.MatchString(msg) || strings.Contains(msg, " is a write"):
 		next = "webscope never writes to the database: make the change through the screen (test rows start with ZZ_) and read the result with query."
 	case strings.Contains(msg, "Error 1054") || strings.Contains(msg, "no such column"):

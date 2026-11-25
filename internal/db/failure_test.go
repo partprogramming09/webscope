@@ -61,3 +61,30 @@ func TestFailureOfAWriteSaysTheServerNeverWritesAndToUseTheScreen(t *testing.T) 
 		t.Errorf("a typo is not a write: %q", got)
 	}
 }
+
+func TestFailureNamesTheConnectionProblemAndPointsToDoctor(t *testing.T) {
+	for _, tc := range []struct{ err, want string }{
+		{"WEBSCOPE_DB_URL is not set", "set WEBSCOPE_DB_URL"},
+		{"WEBSCOPE_DB_URL is not a valid URL", "a valid URL"},
+		{"dial tcp 127.0.0.1:3306: connect: connection refused", "not reachable"},
+		{"Error 1045 (28000): Access denied for user 'ro'@'172.19.0.1' (using password: YES)", "read-only user"},
+	} {
+		got := Failure(errors.New(tc.err), "")
+		if !strings.Contains(got, tc.want) || !strings.Contains(got, "code(doctor)") || strings.Contains(got, "fix the statement") {
+			t.Errorf("%s: %q lacks %q or code(doctor), or blames the statement", tc.err, got, tc.want)
+		}
+	}
+}
+
+func TestFailureOfADatabaseTheUserMayNotOpenIsNotAWrongPasswordAndASlowReadIsNotAnUnreachableHost(t *testing.T) {
+	got := Failure(errors.New("Error 1044 (42000): Access denied for user 'ro'@'%' to database 'tenant_x'"), "")
+	if strings.Contains(got, "password") {
+		t.Errorf("a refused database is not a wrong password: %q", got)
+	}
+	if got := Failure(errors.New("read tcp 127.0.0.1:5000->127.0.0.1:3306: i/o timeout"), ""); strings.Contains(got, "not reachable") {
+		t.Errorf("a read that timed out is not an unreachable host: %q", got)
+	}
+	if got := Failure(errors.New("dial tcp 10.0.0.9:3306: i/o timeout"), ""); !strings.Contains(got, "not reachable") {
+		t.Errorf("a dial that timed out is: %q", got)
+	}
+}
