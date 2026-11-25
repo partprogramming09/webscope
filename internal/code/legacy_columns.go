@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"path/filepath"
 	"regexp"
-	"sort"
+	"slices"
 	"strings"
 
 	"github.com/partprogramming09/webscope/internal/fsx"
@@ -156,7 +156,7 @@ func columnLines(shared []string, written map[string][]string, pick func(string)
 		if len(miss) == 0 {
 			continue
 		}
-		sort.Strings(miss)
+		slices.Sort(miss)
 		l := t + ": " + strings.Join(miss[:min(40, len(miss))], ", ")
 		if len(miss) > 40 {
 			l += fmt.Sprintf(" (+%d more)", len(miss)-40)

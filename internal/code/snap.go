@@ -10,7 +10,6 @@ import (
 	"github.com/partprogramming09/webscope/internal/input"
 	"regexp"
 	"slices"
-	"sort"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -230,7 +229,7 @@ func (c *Tool) snapDiff(ctx context.Context, args map[string]any) (string, error
 	}
 	c.snapMu.Unlock()
 	if !ok {
-		sort.Strings(known)
+		slices.Sort(known)
 		return "", fmt.Errorf("no snapshot named %q (kept: %s)", name, strings.Join(known, ", "))
 	}
 	cols, rows, err := c.readAll(ctx, s.sql, s.tenant)

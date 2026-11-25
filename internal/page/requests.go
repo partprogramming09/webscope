@@ -7,7 +7,6 @@ import (
 	"net/url"
 	"regexp"
 	"slices"
-	"sort"
 	"strings"
 )
 
@@ -98,8 +97,8 @@ func side(a, b map[string]bool, rename map[string]string) (onlyA, onlyB []string
 			onlyB = append(onlyB, k)
 		}
 	}
-	sort.Strings(onlyA)
-	sort.Strings(onlyB)
+	slices.Sort(onlyA)
+	slices.Sort(onlyB)
 	return
 }
 
