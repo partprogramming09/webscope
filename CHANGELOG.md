@@ -2,6 +2,14 @@
 
 One entry per version, newest first. Tool names are `query`, `page`, `check` and `code`. Each change says what it is, what was seen that made it necessary, how it was checked and what was not checked. A change in what a tool prints is listed as a change, because a client may read it.
 
+## 0.7.23 — 2026-11-26
+
+**`migration-parity` says how to find the legacy folder of a module.** No tool prints anything different.
+
+- **Seen:** running the steps on a real module, the first `code legacy` call failed because the folder guessed was not the legacy one; the answer listed the folders and the right one was found by searching for the table name.
+- **Changed:** step 2 of `skills/migration-parity/SKILL.md` says the `path` is relative to `WEBSCOPE_LEGACY` and how to find the folder.
+- **Checked:** `go test` on the root package. **Not checked:** that Claude now finds the folder faster.
+
 ## 0.7.22 — 2026-11-26
 
 **The four skills share one rules file and stop overlapping.** No tool prints anything different.
