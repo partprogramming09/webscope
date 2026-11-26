@@ -2,6 +2,15 @@
 
 One entry per version, newest first. Tool names are `query`, `page`, `check` and `code`. Each change says what it is, what was seen that made it necessary, how it was checked and what was not checked. A change in what a tool prints is listed as a change, because a client may read it.
 
+## 0.7.22 — 2026-11-26
+
+**The four skills share one rules file and stop overlapping.** No tool prints anything different.
+
+- **Seen:** `module-flows`, `screen-audit` and `migration-parity` each repeated the same rules (read only, `ZZ_` rows, no row values, one agent drives Chrome, `page(load)` after each navigation); `migration-parity` steps 3 and 4 repeated `screen-audit`; the descriptions of `screen-audit` and `migration-parity` both claimed "compare old and new screen"; one `screen-audit` bullet nested parentheses three deep.
+- **Changed:** the shared rules live in `skills/common-rules.md` and the skills link to it; `migration-parity` step 3 now loads `screen-audit`; each description says when not to use the skill; the `shape`/`parity` bullet became three numbered steps.
+- **Checked:** `go test` on the root package (plugin version equals `main.go`), line counts (all skills under 50 lines) and a selection test: a Haiku agent saw only the four descriptions and 12 requests written by us; 11 of 12 went to the expected skill, and the miss (compare the JSON two forms send) led to the `screen-audit` description naming the fields one action sends.
+- **Not checked:** real use. The test is a proxy (descriptions only, our own prompts, one run, not repeated after the fix); whether Claude picks the right skill in a real session was not measured.
+
 ## 0.7.21 — 2026-11-25
 
 **One release that merges two lines of work: the audit and frame line (`clipped`, `overflow`, port wildcard, PDF download, `page(frame)`) and the measuring line (clear failures, `code(doctor)`, batch upload, `help` as an index, `WEBSCOPE_ACTIONLOG` and `scripts/score.py`).** They were developed apart as 0.7.20 to 0.7.23 and 0.7.21 to 0.7.22, with clashing numbers; none was released, so they ship together as 0.7.21 on top of 0.7.20 (the table-and-short-404 fix).

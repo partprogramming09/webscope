@@ -1,6 +1,6 @@
 ---
 name: module-flows
-description: Find the flows and user stories of a module or project from its code, with evidence, and have a person confirm them. Use with the webscope tools (code, page, query) when asked what a module does, for its user stories or flows, before migrating a module from a legacy system, or before writing test cases for it.
+description: Find the flows and user stories of one module from its code, with evidence, and have a person confirm them. Use when asked what a module does, for its user stories or flows, or before migrating or testing it. Not for comparing two versions of a screen (screen-audit) or a whole migration (migration-parity).
 ---
 
 # Module flows
@@ -18,6 +18,6 @@ description: Find the flows and user stories of a module or project from its cod
 
 ## Rules
 
-- Read only. Never save, delete or submit without the user's approval; test rows are prefixed `ZZ_`.
+Follow `../common-rules.md`. Besides:
+
 - Every line the answer gives is an estimate by text, not proof. Say which stories you confirmed in the screen and which not.
-- Do not name a customer or show row values; `fields` gives counts only.

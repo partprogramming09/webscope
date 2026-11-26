@@ -1,6 +1,6 @@
 ---
 name: parity-tests
-description: Turn what a legacy-to-new comparison found into a plan for unit tests of the new code, so the new module is held to what the legacy did. Use after migration-parity, module-flows or code cases, when asked to write or plan unit tests from the legacy behaviour, to contrast functionality between the old and the new version, or to hand a tester what to test.
+description: Turn confirmed findings of a legacy-to-new comparison into a plan for unit tests of the new code, so it is held to what the legacy did. Use after migration-parity or module-flows, or when asked to plan unit tests from legacy behaviour or to hand a tester what to test. It does not run the comparison itself (migration-parity).
 ---
 
 # Parity tests

@@ -1,7 +1,7 @@
 {
   "name": "webscope",
   "displayName": "webscope",
-  "version": "0.7.21",
+  "version": "0.7.22",
   "description": "Test a web app with few tokens: read-only SQL, screen tests in Chrome, sent-vs-saved checks and code maps.",
   "author": {
     "name": "partprogramming09"
