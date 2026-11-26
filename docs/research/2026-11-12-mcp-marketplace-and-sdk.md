@@ -54,3 +54,16 @@ Consulted on 2026-11-12. Confidence: **A** read verbatim or run here; **B** summ
 - Whether `source: "./"` (the repo root as the plugin) passes `claude plugin validate`; the local CLI (2.1.322) will say.
 - Windsurf config path.
 - Whether `userConfig` fields can be optional, so that an empty `WEBSCOPE_DB_URL` leaves only `query` off.
+
+## 5. What MCP and Anthropic ask of a server's README (consulted 2026-11-12)
+
+| Fact | Source | Conf. |
+|---|---|---|
+| MCP publishes no README template. The only README rule is an ownership marker: `mcp-name: <server name>` in the package README for PyPI and NuGet (may be an HTML comment, must be followed by whitespace, a tag or `-->`) and for Cargo (visible text: crates.io strips comments). npm uses `mcpName` in `package.json`, OCI a Docker label, MCPB nothing. | https://modelcontextprotocol.io/registry/package-types | A |
+| `server.json` fields people see: `description` (at most 100 characters), `title` (optional, at most 100), `repository` ("recommended for transparency and security inspection"), `websiteUrl` ("homepage, documentation, or project website"). Which ones a client displays was not verified. | registry `server.schema.json` (draft) | A |
+| The `modelcontextprotocol/servers` repo says nothing about how third-party servers document themselves; new servers go to the Registry. | its README and CONTRIBUTING.md | A |
+| MCP Inspector docs: "Always read a server's own README first, since every server requires different commands and arguments." | https://modelcontextprotocol.io/docs/tools/inspector | A |
+| Anthropic connectors directory: "provide clear setup and usage instructions" (no contents specified); the listing asks for a documentation URL, a privacy policy URL, a support contact and an icon; public documentation is required by the publish date ("a blog post or help-center article is sufficient"). | https://claude.com/docs/connectors/building/submission.md and `review-criteria.md` | A |
+| Review criteria for tools: each has a `title` and a `readOnlyHint` or `destructiveHint` annotation; each description says precisely what it does and when to invoke it. | https://claude.com/docs/connectors/building/review-criteria.md | A |
+| A "Privacy Policy" section in `README.md` is required only for local connectors packaged as MCPB, a path the directory says it no longer accepts. | https://claude.com/docs/directory/publish.md | A |
+| A plugin listed in the directory needs a public GitHub repository. | same page | A |
