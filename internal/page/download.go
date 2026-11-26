@@ -12,7 +12,6 @@ import (
 	"path/filepath"
 	"regexp"
 	"slices"
-	"sort"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -109,7 +108,7 @@ func (p *Tool) download(args map[string]any) (string, error) {
 					names = append(names, n)
 				}
 			}
-			sort.Slice(names, func(i, j int) bool { return now[names[i]].mod.After(now[names[j]].mod) })
+			slices.SortFunc(names, func(a, b string) int { return now[b].mod.Compare(now[a].mod) })
 			if len(names) > 0 {
 				cand = names[0]
 				if now[cand] == prev {

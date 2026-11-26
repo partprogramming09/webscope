@@ -1,6 +1,7 @@
 package code
 
 import (
+	"cmp"
 	"context"
 	"database/sql"
 	"errors"
@@ -8,7 +9,6 @@ import (
 	"path/filepath"
 	"regexp"
 	"slices"
-	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -229,11 +229,11 @@ func (c *Tool) consumers(args map[string]any) (string, error) {
 	for f := range per {
 		names = append(names, f)
 	}
-	sort.Slice(names, func(i, j int) bool {
-		if len(per[names[i]]) != len(per[names[j]]) {
-			return len(per[names[i]]) > len(per[names[j]])
+	slices.SortFunc(names, func(a, b string) int {
+		if la, lb := len(per[a]), len(per[b]); la != lb {
+			return cmp.Compare(lb, la)
 		}
-		return names[i] < names[j]
+		return strings.Compare(a, b)
 	})
 	fmt.Fprintf(&b, "BACKEND  %d uses in %d files (an estimate: text search, READS or WRITES by the line of each use: an assignment, or a key of an array next to a write call; not a flow analysis)\n", len(hits), len(per))
 	for i, f := range names {
